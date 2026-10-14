@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ol-cad script-tag example</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.11.0/ol.css" />
+    <link rel="stylesheet" href="../../dist/ui.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      #app {
+        height: 100%;
+      }
+      #map {
+        height: 100%;
+      }
+      olcad-panel[name='layers'],
+      olcad-panel[name='attributes'] {
+        width: 240px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <olcad-dock>
+        <olcad-toolbar name="main" dock="top"></olcad-toolbar>
+        <olcad-straightedge name="straightedge" dock="top"></olcad-straightedge>
+        <olcad-snap-settings name="snap" dock="top"></olcad-snap-settings>
+        <olcad-panel name="layers" heading="Layers" dock="right">
+          <olcad-layer-list></olcad-layer-list>
+        </olcad-panel>
+        <olcad-panel name="attributes" heading="Attributes" dock="right">
+          <olcad-attribute-form></olcad-attribute-form>
+        </olcad-panel>
+        <div id="map"></div>
+      </olcad-dock>
+      <olcad-attribute-form popup></olcad-attribute-form>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/ol@10.11.0/dist/ol.js"></script>
+    <script src="../../dist/ol-cad.umd.js"></script>
+    <script>
+      olcad.defineElements();
+      var editor = olcad.createEditor({
+        target: 'map',
+        view: { center: [935100, 6276400], zoom: 16 },
+        basemaps: [
+          { id: 'osm', type: 'osm', title: 'OpenStreetMap' },
+          {
+            id: 'opentopomap',
+            type: 'xyz',
+            title: 'OpenTopoMap',
+            url: 'https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png',
+            attribution:
+              'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Map style &copy; <a href="https://opentopomap.org/">OpenTopoMap</a> (CC-BY-SA)',
+            maxZoom: 17,
+          },
+        ],
+      });
+      document.querySelector('olcad-layer-list').editor = editor;
+      document.querySelector('olcad-toolbar').editor = editor;
+      document.querySelector('olcad-straightedge').editor = editor;
+      document.querySelector('olcad-snap-settings').editor = editor;
+      for (const form of document.querySelectorAll('olcad-attribute-form')) form.editor = editor;
+    </script>
+  </body>
+</html>

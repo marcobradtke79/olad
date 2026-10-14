@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Hydrants</name>
+    <Placemark id="h-1"><name>H 1</name><ExtendedData><Data name="id"><value>1</value></Data><Data name="pressure"><value>6</value></Data></ExtendedData><Point><coordinates>8.4000,49.0086,0</coordinates></Point></Placemark>
+    <Placemark id="h-2"><name>H 2</name><ExtendedData><Data name="id"><value>2</value></Data><Data name="pressure"><value>4</value></Data></ExtendedData><Point><coordinates>8.4025,49.0108,0</coordinates></Point></Placemark>
+  </Document>
+</kml>

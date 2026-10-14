@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ol-cad test page</title>
+    <link rel="stylesheet" href="/vendor/ol.css" />
+    <link rel="stylesheet" href="/dist/ui.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: system-ui, sans-serif;
+        font-size: 14px;
+        color: var(--olcad-color-fg);
+        background: var(--olcad-color-bg);
+      }
+      #app {
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        height: 100%;
+      }
+      #map {
+        height: 100%;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      pre {
+        background: var(--olcad-color-surface-raised);
+        padding: 8px;
+        overflow: auto;
+        max-height: 60vh;
+        margin: 0;
+        font-size: 12px;
+      }
+      #changes-dialog {
+        font-family: system-ui, sans-serif;
+        font-size: 14px;
+        min-width: 360px;
+        max-width: 90vw;
+        padding: 12px;
+        color: var(--olcad-color-fg);
+        background: var(--olcad-color-surface);
+        border: 1px solid var(--olcad-color-border);
+        border-radius: 4px;
+        box-shadow: var(--olcad-panel-shadow);
+      }
+      #changes-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.5);
+      }
+      #changes-dialog .row {
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <olcad-menubar>
+        <olcad-menu label="File">
+          <button id="save" type="button">Save</button>
+          <button id="discard" type="button">Discard</button>
+          <button id="show-changes" type="button">Show change set…</button>
+          <button id="import" type="button">Import…</button>
+          <button id="export" type="button">Export…</button>
+          <label><input id="fail" type="checkbox" /> Simulate server failure</label>
+          <hr />
+          <button id="reset" type="button">Reset server</button>
+        </olcad-menu>
+        <!-- Commands without a tool: drive the pipeline directly, handy for API testing. -->
+        <olcad-menu label="Commands">
+          <button id="cmd-insert" type="button" title="Insert a feature into the active layer">
+            Insert
+          </button>
+          <button id="cmd-move" type="button" title="Move the first feature of the active layer">
+            Move first
+          </button>
+          <button
+            id="cmd-rename"
+            type="button"
+            title="Rename the first feature of the active layer"
+          >
+            Rename first
+          </button>
+          <button
+            id="cmd-delete"
+            type="button"
+            title="Delete the first feature of the active layer"
+          >
+            Delete first
+          </button>
+          <hr />
+          <button id="add-loader-layer" type="button">Add loader layer</button>
+        </olcad-menu>
+        <!-- The View menu also gets Show all / Hide all and a checkbox per toolbar and panel
+             (bindPanelMenu below). -->
+        <olcad-menu label="View">
+          <button id="layer-styles" type="button">Layer styles…</button>
+          <button id="reset-layout" type="button">Reset layout</button>
+          <label><input id="light-theme" type="checkbox" /> Light theme</label>
+          <label
+            ><input id="light-straightedge" type="checkbox" checked /> Light straightedge</label
+          >
+        </olcad-menu>
+      </olcad-menubar>
+      <olcad-dock storage-key="olcad-test-layout">
+        <!-- Four toolbars share the editor: the main one (edit mode, undo / redo, select,
+             delete, zoom), one for new objects, one for modifying objects and one to trim and
+             extend lines. -->
+        <olcad-toolbar name="main" heading="Main" dock="top" tools="select delete">
+          <button id="zoom-in" type="button" aria-label="Zoom in" data-tooltip="Zoom in"></button>
+          <button
+            id="zoom-out"
+            type="button"
+            aria-label="Zoom out"
+            data-tooltip="Zoom out"
+          ></button>
+        </olcad-toolbar>
+        <olcad-toolbar
+          name="draw"
+          heading="Draw"
+          dock="top"
+          controls=""
+          tools="draw rectangle circle ellipse regular-polygon curve parallel text"
+        ></olcad-toolbar>
+        <olcad-toolbar
+          name="modify"
+          heading="Modify"
+          dock="top"
+          controls=""
+          tools="modify move rotate scale offset mirror template-copy"
+        ></olcad-toolbar>
+        <olcad-toolbar
+          name="trim"
+          heading="Trim / Extend"
+          dock="top"
+          controls=""
+          tools="trim extend"
+        ></olcad-toolbar>
+        <olcad-toolbar
+          name="measure"
+          heading="Measure"
+          dock="top"
+          controls=""
+          tools="measure-distance measure-area measure-angle measure-clear"
+        ></olcad-toolbar>
+        <olcad-straightedge name="straightedge" dock="top"></olcad-straightedge>
+        <olcad-snap-settings name="snap" dock="top"></olcad-snap-settings>
+        <olcad-grid-settings name="grid" dock="top"></olcad-grid-settings>
+        <olcad-angle-lock name="angle" dock="top"></olcad-angle-lock>
+        <olcad-panel name="layers" heading="Layers" dock="right" flyout>
+          <olcad-layer-list reveal></olcad-layer-list>
+        </olcad-panel>
+        <olcad-panel name="templates" heading="Templates" dock="right" flyout>
+          <olcad-template-list></olcad-template-list>
+        </olcad-panel>
+        <olcad-panel name="measurements" heading="Measure" dock="right" flyout>
+          <olcad-measure-results></olcad-measure-results>
+        </olcad-panel>
+        <olcad-panel name="attributes" heading="Attributes" dock="right" flyout>
+          <!-- reveal: a click selection outside edit mode opens this flyout. -->
+          <olcad-attribute-form reveal></olcad-attribute-form>
+        </olcad-panel>
+        <!-- Opened by the Table buttons of the layer list; above the command line. -->
+        <olcad-panel name="table" heading="Table" dock="bottom" hidden no-toggle>
+          <olcad-feature-table></olcad-feature-table>
+        </olcad-panel>
+        <olcad-input-bar name="input" dock="bottom"></olcad-input-bar>
+        <olcad-panel name="crs" heading="CRS" dock="bottom" compact>
+          <olcad-projection-select></olcad-projection-select>
+          <!-- Default length unit: Auto follows the CRS; typed units always win (5 ft). -->
+          <olcad-unit-select></olcad-unit-select>
+        </olcad-panel>
+        <div id="map"></div>
+      </olcad-dock>
+      <!-- File → Export…: layers, format and CRS; downloads one file. -->
+      <olcad-export-dialog></olcad-export-dialog>
+      <!-- View → Layer styles…: drawing order, colours, labels, zoom range. -->
+      <olcad-layer-style-dialog></olcad-layer-style-dialog>
+      <!-- File → Import…: reads a file, then into new local layers or existing ones. -->
+      <olcad-import-dialog></olcad-import-dialog>
+      <!-- Pops up after every inserted object to capture its attributes. -->
+      <olcad-attribute-form popup></olcad-attribute-form>
+      <!-- The live change set, opened from File → Show change set… -->
+      <dialog id="changes-dialog" aria-labelledby="changes-title">
+        <div class="row">
+          <strong id="changes-title">Change set</strong>
+          <button id="changes-close" type="button">Close</button>
+        </div>
+        <pre id="changes">{}</pre>
+      </dialog>
+    </div>
+    <script src="/vendor/proj4.js"></script>
+    <!-- The OpenLayers full build expects a global GeoTIFF for geotiff basemaps. -->
+    <script src="/vendor/geotiff.js"></script>
+    <script src="/vendor/ol.js"></script>
+    <script src="/dist/ol-cad.umd.js"></script>
+    <script>
+      // Reference host-side integration. The library ships no transport: the host
+      // sends the change set with fetch and calls editor.changes.accept() on success.
+      // Status messages go to the input bar's output line.
+      const setStatus = (text, kind) => {
+        const bar = document.querySelector('olcad-input-bar');
+        if (bar && typeof bar.show === 'function')
+          bar.show(text, kind === 'error' ? 'error' : 'info');
+        else console.error(text);
+      };
+
+      fetch('/config')
+        .then((r) => r.json())
+        .then((config) => {
+          olcad.defineElements();
+          olcad.bindPanelMenu(
+            document.querySelector('olcad-menu[label="View"]'),
+            document.querySelector('olcad-dock'),
+          );
+          const editor = olcad.createEditor({ ...config, target: 'map' });
+          window.editor = editor; // for Playwright and console use
+          document.querySelector('olcad-layer-list').editor = editor;
+          document.querySelector('olcad-feature-table').editor = editor;
+          document.querySelector('olcad-template-list').editor = editor;
+          document.querySelector('olcad-measure-results').editor = editor;
+          // The library keeps templates for the session only; the host persists them. This page
+          // uses localStorage (a server would do as well): restore at start, save on change.
+          const TEMPLATES_KEY = 'olcad-test-templates';
+          try {
+            const saved = localStorage.getItem(TEMPLATES_KEY);
+            if (saved) editor.templates.import(JSON.parse(saved));
+          } catch (error) {
+            console.warn('Stored templates ignored:', error);
+          }
+          editor.on('templatechange', () => {
+            try {
+              localStorage.setItem(TEMPLATES_KEY, JSON.stringify(editor.templates.export()));
+            } catch {
+              // Storage unavailable (private mode): templates stay for the session.
+            }
+          });
+          // Layers the user creates in the Layers panel (New layer) live in this browser only:
+          // persistLocalLayers restores them from IndexedDB and saves every change.
+          window.localLayerPersistence = olcad.persistLocalLayers(editor);
+          for (const toolbar of document.querySelectorAll('olcad-toolbar')) toolbar.editor = editor;
+          document.querySelector('olcad-straightedge').editor = editor;
+          document.querySelector('olcad-snap-settings').editor = editor;
+          document.querySelector('olcad-grid-settings').editor = editor;
+          document.querySelector('olcad-angle-lock').editor = editor;
+          document.querySelector('olcad-input-bar').editor = editor;
+          document.querySelector('olcad-projection-select').editor = editor;
+          document.querySelector('olcad-unit-select').editor = editor;
+          for (const form of document.querySelectorAll('olcad-attribute-form'))
+            form.editor = editor;
+          const zoomBy = (delta) =>
+            editor.map
+              .getView()
+              .animate({ zoom: editor.map.getView().getZoom() + delta, duration: 200 });
+          document.getElementById('zoom-in').append(olcad.icon('zoomIn'));
+          document.getElementById('zoom-out').append(olcad.icon('zoomOut'));
+          document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1));
+          document.getElementById('zoom-out').addEventListener('click', () => zoomBy(-1));
+          document.getElementById('reset-layout').addEventListener('click', () => {
+            document.querySelector('olcad-dock').resetLayout();
+            setStatus('Layout reset.');
+          });
+          // The theme is dark by default; the View menu switches the light variant on.
+          document.getElementById('light-theme').addEventListener('change', (event) => {
+            if (event.target.checked) document.documentElement.setAttribute('olcad-theme', 'light');
+            else document.documentElement.removeAttribute('olcad-theme');
+          });
+          // The test configuration starts with a light straightedge (cursor.color) for the dark
+          // basemap; the switch falls back to the library's dark default.
+          const lightStraightedge = editor.straightedge.getColor();
+          document.getElementById('light-straightedge').addEventListener('change', (event) => {
+            editor.straightedge.setColor(event.target.checked ? lightStraightedge : '#1f2933');
+            setStatus(event.target.checked ? 'Straightedge light.' : 'Straightedge dark.');
+          });
+          editor.on('layererror', ({ id, error }) =>
+            setStatus('Layer ' + id + ' failed: ' + error.message, 'error'),
+          );
+          editor.on('basemaperror', ({ id, error }) =>
+            setStatus('Basemap ' + id + ' failed: ' + error.message, 'error'),
+          );
+
+          editor.on('projectionchange', ({ to }) => setStatus('Projection: ' + to));
+
+          // Host-supplied loader: the only source kind that cannot be expressed in JSON.
+          document.getElementById('add-loader-layer').addEventListener('click', () => {
+            if (editor.layers.list().some((l) => l.id === 'points')) return;
+            editor.layers.add({
+              id: 'points',
+              title: 'Points (loader)',
+              geometryType: 'Point',
+              editable: true,
+              source: {
+                format: 'geojson',
+                strategy: 'all',
+                loader: ({ projection }) => fetch('/data/points.geojson').then((r) => r.json()),
+              },
+            });
+          });
+
+          const changesView = document.getElementById('changes');
+          const renderChanges = () => {
+            changesView.textContent = JSON.stringify(editor.changes.get(), null, 2);
+            const idle = !editor.changes.hasChanges();
+            document.getElementById('save').disabled = idle;
+            document.getElementById('discard').disabled = idle;
+          };
+          renderChanges();
+          editor.on('change', renderChanges);
+          // The user's layer styles and order are kept in this browser.
+          olcad.persistLayerStyles(editor);
+          const styleDialog = document.querySelector('olcad-layer-style-dialog');
+          styleDialog.editor = editor;
+          document
+            .getElementById('layer-styles')
+            .addEventListener('click', () => styleDialog.open());
+          const exportDialog = document.querySelector('olcad-export-dialog');
+          exportDialog.editor = editor;
+          document.getElementById('export').addEventListener('click', () => exportDialog.open());
+          exportDialog.addEventListener('olcad-export', ({ detail }) =>
+            setStatus(
+              'Exported ' +
+                detail.featureCount +
+                ' objects to ' +
+                detail.filename +
+                (detail.skipped ? ' (' + detail.skipped + ' skipped)' : ''),
+            ),
+          );
+          const importDialog = document.querySelector('olcad-import-dialog');
+          importDialog.editor = editor;
+          document.getElementById('import').addEventListener('click', () => importDialog.open());
+          importDialog.addEventListener('olcad-import', ({ detail }) =>
+            setStatus(
+              'Imported ' +
+                detail.inserted +
+                ' objects' +
+                (detail.created.length
+                  ? ' into ' + detail.created.length + ' new local layers'
+                  : '') +
+                (detail.skipped ? ', ' + detail.skipped + ' skipped' : ''),
+            ),
+          );
+          const changesDialog = document.getElementById('changes-dialog');
+          document
+            .getElementById('show-changes')
+            .addEventListener('click', () => changesDialog.showModal());
+          document
+            .getElementById('changes-close')
+            .addEventListener('click', () => changesDialog.close());
+          editor.on('validationerror', ({ code, message }) =>
+            setStatus('Rejected (' + code + '): ' + message, 'error'),
+          );
+
+          // Commands without tools (tools arrive with milestone 4): build geometries around the
+          // view centre for the active layer's geometry type and hand them to editor.execute.
+          const activeLayer = () => {
+            const id = editor.layers.getActive();
+            if (!id) setStatus('Select a layer with its Insert button first.', 'error');
+            return id;
+          };
+          const firstFeature = (id) => {
+            const feature = editor.layers.getFeatures(id)[0];
+            if (!feature) setStatus('Layer ' + id + ' has no features.', 'error');
+            return feature;
+          };
+          let counter = 0;
+          const sampleGeometry = (type) => {
+            const [x, y] = editor.map.getView().getCenter();
+            const d = 30 * (1 + (counter % 5)); // spread repeated inserts a little
+            const ring = [
+              [x - d, y - d],
+              [x + d, y - d],
+              [x + d, y + d],
+              [x - d, y + d],
+              [x - d, y - d],
+            ];
+            switch (type) {
+              case 'Point':
+                return new ol.geom.Point([x + d, y]);
+              case 'MultiPoint':
+                return new ol.geom.MultiPoint([
+                  [x + d, y],
+                  [x, y + d],
+                ]);
+              case 'LineString':
+                return new ol.geom.LineString([
+                  [x - d, y],
+                  [x + d, y + d],
+                ]);
+              case 'MultiLineString':
+                return new ol.geom.MultiLineString([
+                  [
+                    [x - d, y],
+                    [x + d, y + d],
+                  ],
+                ]);
+              case 'Polygon':
+                return new ol.geom.Polygon([ring]);
+              case 'MultiPolygon':
+                return new ol.geom.MultiPolygon([[ring]]);
+              case 'Any': // the draft layer takes anything
+                return new ol.geom.Point([x + d, y]);
+            }
+          };
+          document.getElementById('cmd-insert').addEventListener('click', () => {
+            // Without an active layer the insert goes to the draft layer, like the draw tool.
+            const id = editor.layers.getActive() ?? editor.layers.getDraft();
+            if (!id) {
+              setStatus('Select a layer with its Insert button first.', 'error');
+              return;
+            }
+            counter++;
+            const feature = new ol.Feature({
+              geometry: sampleGeometry(editor.layers.get(id).geometryType),
+              name: 'New ' + counter,
+            });
+            if (editor.execute(olcad.insertFeature(id, feature))) setStatus('Inserted into ' + id);
+          });
+          document.getElementById('cmd-move').addEventListener('click', () => {
+            const id = activeLayer();
+            const feature = id && firstFeature(id);
+            if (!feature) return;
+            const geometry = feature.getGeometry().clone();
+            geometry.translate(20, 20);
+            if (editor.execute(olcad.updateGeometry(feature, geometry)))
+              setStatus('Moved ' + feature.getId());
+          });
+          document.getElementById('cmd-rename').addEventListener('click', () => {
+            const id = activeLayer();
+            const feature = id && firstFeature(id);
+            if (!feature) return;
+            counter++;
+            if (editor.execute(olcad.updateProperties(feature, { name: 'Renamed ' + counter })))
+              setStatus('Renamed ' + feature.getId());
+          });
+          document.getElementById('cmd-delete').addEventListener('click', () => {
+            const id = activeLayer();
+            const feature = id && firstFeature(id);
+            if (!feature) return;
+            if (editor.execute(olcad.deleteFeature(feature)))
+              setStatus('Deleted ' + feature.getId());
+          });
+
+          document.getElementById('save').addEventListener('click', async () => {
+            const fail = document.getElementById('fail').checked ? '?fail=1' : '';
+            setStatus('Saving…');
+            try {
+              const response = await fetch('/changes' + fail, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(editor.changes.get()),
+              });
+              if (!response.ok)
+                throw new Error((await response.json()).error || response.statusText);
+              const { idMap } = await response.json();
+              editor.changes.accept({ idMap });
+              setStatus('Saved. Baseline reset.', 'ok');
+            } catch (error) {
+              // Keep the local changes so the user can retry.
+              setStatus('Save failed: ' + error.message + ' (changes kept)', 'error');
+            }
+          });
+          document.getElementById('discard').addEventListener('click', () => {
+            editor.changes.discard();
+            setStatus('Changes discarded.');
+          });
+          document.getElementById('reset').addEventListener('click', async () => {
+            await fetch('/reset', { method: 'POST' });
+            setStatus('Server data reset to seed.');
+          });
+        })
+        .catch((error) => setStatus('Failed to start: ' + error.message, 'error'));
+    </script>
+  </body>
+</html>

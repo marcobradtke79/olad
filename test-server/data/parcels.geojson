@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 1,
+      "properties": { "id": 1, "owner": "Municipality", "usage": "residential" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[8.3990, 49.0090], [8.4010, 49.0090], [8.4010, 49.0105], [8.3990, 49.0105], [8.3990, 49.0090]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 2,
+      "properties": { "id": 2, "owner": "A. Example", "usage": "commercial" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[8.4012, 49.0090], [8.4030, 49.0090], [8.4030, 49.0102], [8.4012, 49.0102], [8.4012, 49.0090]]]
+      }
+    }
+  ]
+}

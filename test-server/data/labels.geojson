@@ -1,0 +1,39 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 901,
+      "properties": {
+        "id": 901,
+        "text": "Main Street",
+        "textHeight": 6,
+        "textRotation": 0
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3985,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 902,
+      "properties": {
+        "id": 902,
+        "text": "Parcel 1",
+        "textHeight": 4,
+        "textRotation": 15
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4002,
+          49.0083
+        ]
+      }
+    }
+  ]
+}

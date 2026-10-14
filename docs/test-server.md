@@ -1,0 +1,56 @@
+# Test server
+
+A small `node:http` server for trying the full edit-and-save cycle without an external backend. Node 22.6 or newer runs the TypeScript file directly.
+
+```sh
+pnpm build        # the test page loads dist/ol-cad.umd.js
+pnpm serve:test   # http://localhost:8787/   (PORT env overrides)
+```
+
+Or in one step with `scripts/start-test-system.sh` (also `pnpm start:test`), which installs dependencies when `node_modules` is missing, builds and starts the server:
+
+```sh
+scripts/start-test-system.sh            # build + serve
+scripts/start-test-system.sh --check    # lint, typecheck and unit tests first
+scripts/start-test-system.sh --e2e      # build + run the Playwright suite instead of serving
+```
+
+## Endpoints
+
+| Method | Path                                         | Description                                                                                                                                                 |
+| ------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/config`                                    | The test configuration: `test-server/config/test-config.json` with the `layers` array from `test-server/config/layers.json` merged in.                      |
+| GET    | `/data/:layer`                               | Current GeoJSON of a layer (`parcels`, `roads`, `points`).                                                                                                  |
+| POST   | `/changes`                                   | Accepts a change set, validates its shape, applies it to the in-memory data, answers `{ idMap }` mapping `tempId` to new ids. Validation errors answer 400. |
+| POST   | `/changes?fail=1`                            | Answers 500 so the failed-save path can be tested. The test page has a checkbox for this.                                                                   |
+| GET    | `/changes/log`                               | Every change set received since start or reset.                                                                                                             |
+| POST   | `/reset`                                     | Restores the seed data from `test-server/data/` and clears the log.                                                                                         |
+| GET    | `/`                                          | The test page (`test-server/public/index.html`).                                                                                                            |
+| GET    | `/dist/*`, `/vendor/ol.js`, `/vendor/ol.css` | The built library and the OpenLayers full build from `node_modules`.                                                                                        |
+
+Responses carry CORS headers so the Vite dev server examples can talk to it as well.
+
+## Test page
+
+`test-server/public/index.html` is the reference host integration: it fetches `/config`, creates the editor, binds the UI elements, and implements save with `fetch`. On success it calls `editor.changes.accept({ idMap })`; on failure it keeps the changes. Until milestone 3 the save and discard buttons report that change tracking is not available yet. The page exposes `window.editor` for Playwright and the console.
+
+## Test configuration
+
+`test-config.json` (everything but layers) and `layers.json` (the `layers` array: source, editability per operation, attribute schema per layer) together must use every documented option. The server merges them for `GET /config`. Currently:
+
+- `view` with every field and a second projection `EPSG:25832` under `projections`.
+- Basemaps of every type, none of which needs an API key: `osm`, `xyz` (OpenTopoMap), tiled and single-image `wms` (terrestris), `wmts` (BKG TopPlusOpen), `vector-tile` (VersaTiles, styled dark with a rule-based flat style and visible at start so the canvas matches the dark theme) and `geotiff` (a Sentinel-2 true-colour COG from the public `sentinel-cogs` bucket, covering the Red Sea coast rather than the test area, so pan there to see it). All need network access to render; they never block the editor.
+- Layers for every geometry type and format: `parcels` (GeoJSON Polygon, insert and update only, full schema), `roads` (GeoJSON LineString, fully editable), `hydrants` (KML Point, insert only), `tracks` (GPX MultiLineString, read-only, not snappable), `buildings` (TopoJSON MultiPolygon, update and delete), `survey-points` (inline WKT MultiPoint in EPSG:25832), `trees` (GML 3 Point in EPSG:25832, read-only), `lamps` (WFS emulation with `bbox` strategy), `labels` (GeoJSON Point text layer, `layers[].text` with every option, schema `text` / `textHeight` / `textRotation`; seed `data/labels.geojson` with two labels).
+- The `loader` source kind cannot be expressed in JSON; the test page's "Add loader layer" button adds one through `editor.layers.add`.
+- The CRS panel at the bottom of the test page (`<olcad-projection-select>`) calls `editor.setProjection`; the input bar next to it (`<olcad-input-bar>`) takes numeric input such as `935000,6270000`, `@100,0` or `@50<90` while drawing.
+- `changes: { precision: 7 }`, `locale: 'en'` and an empty `messages` override.
+
+## Tools and commands on the test page
+
+The **File** menu in the menu bar holds Save, Discard, "Show change set…" (the live change set in a popup), the "Simulate server failure" switch and Reset server (Save and Discard are disabled while there is nothing to save). The **View** menu has "Reset layout" (`dock.resetLayout()`: every panel back to its position in the markup, the stored layout overwritten) a "Light theme" switch that sets `olcad-theme="light"` on `<html>` (the page is dark by default) and a "Light straightedge" switch (`editor.straightedge.setColor`) that turns the crosshair light for the dark basemap. The toolboxes in the top zone are compact icon strips: hover an icon (or focus it) for its name and description. The toolbar offers the tools of [tools.md](tools.md): switch on edit mode, press Edit on a layer and a draw button (for Hydrants every click then places a hydrant and the Attributes panel shows its `pressure` field), or select features and move, edit or delete them. Layers, Templates and Attributes are flyout panels on the right edge: click a tab to open the panel over the map, click it again or press Escape to close it. With edit mode off, clicking an object on the map selects it and opens the Attributes flyout read-only (`selection.inspect`, `<olcad-attribute-form reveal>`). The Attributes panel (`<olcad-attribute-form>`) edits the attributes of the selected feature, and a popup form (`<olcad-attribute-form popup>`) opens after every inserted object. The Snap panel toggles snapping, its radius and modes; with it on, the crosshair jumps to road vertices and midpoints while drawing. The **Commands** menu drives the pipeline directly without a tool, which is handy for API testing: **Insert** builds a geometry of the active layer's type around the view centre and executes `insertFeature`, **Move first**, **Rename first** and **Delete first** act on the first feature of the active layer through `updateGeometry`, `updateProperties` and `deleteFeature`, and **Add loader layer** adds a layer with a host-supplied loader function. Select the active layer with the Edit button in the layer list (it switches edit mode on). **Copy to template** (Modify toolbar or the Templates panel) stores selected objects under a name with a base point; the Templates panel inserts copies of them, renames and removes them. The page persists the templates in `localStorage` (key `olcad-test-templates`) through `editor.templates.export()` / `import()`, as a host would on its server. Status messages of the page (command results, save outcome, rejected commands with their `validationerror` message) appear in the input bar's output line at the bottom. Undo and Redo are in the toolbar; the change-set popup updates on every `change` event.
+
+`POST /changes` reprojects each change's geometry from its `crs` into the storage projection (EPSG:4326) before applying it, so a change exported in EPSG:25832 lands correctly.
+
+## Playwright
+
+`pnpm test:e2e` builds the library, starts this server and the Vite dev server for the examples, and runs `tests/e2e/` against both. The script-tag example loads OpenLayers from a CDN, so that test needs network access.

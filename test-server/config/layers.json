@@ -1,0 +1,240 @@
+{
+  "layers": [
+    {
+      "id": "parcels",
+      "title": "Parcels",
+      "visible": true,
+      "source": {
+        "format": "geojson",
+        "url": "/data/parcels.geojson",
+        "dataProjection": "EPSG:4326",
+        "strategy": "all"
+      },
+      "geometryType": "Polygon",
+      "idProperty": "id",
+      "editable": {
+        "insert": true,
+        "update": true,
+        "delete": false
+      },
+      "snappable": true,
+      "style": {
+        "stroke-color": "#b45309",
+        "stroke-width": 2,
+        "fill-color": "rgba(245, 158, 11, 0.2)"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "owner",
+            "type": "string",
+            "label": "Owner",
+            "required": true,
+            "pattern": "^[A-Za-z .'-]+$"
+          },
+          {
+            "name": "usage",
+            "type": "enum",
+            "values": ["residential", "commercial", "public"],
+            "default": "residential"
+          },
+          {
+            "name": "area_m2",
+            "type": "number",
+            "readOnly": true,
+            "min": 0
+          },
+          {
+            "name": "floors",
+            "type": "integer",
+            "min": 0,
+            "max": 50,
+            "default": 1
+          },
+          {
+            "name": "protected",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "surveyed",
+            "type": "date",
+            "label": "Surveyed on"
+          }
+        ]
+      },
+      "minZoom": 8,
+      "maxZoom": 24
+    },
+    {
+      "id": "roads",
+      "title": "Roads",
+      "source": {
+        "format": "geojson",
+        "url": "/data/roads.geojson"
+      },
+      "geometryType": "LineString",
+      "idProperty": "id",
+      "editable": true,
+      "schema": {
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "lanes",
+            "type": "integer",
+            "min": 1,
+            "max": 8,
+            "default": 2
+          }
+        ]
+      }
+    },
+    {
+      "id": "hydrants",
+      "title": "Hydrants (KML)",
+      "source": {
+        "format": "kml",
+        "url": "/data/hydrants.kml"
+      },
+      "geometryType": "Point",
+      "idProperty": "id",
+      "editable": {
+        "insert": true
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "pressure",
+            "type": "number",
+            "min": 0,
+            "max": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "tracks",
+      "title": "Tracks (GPX, read-only)",
+      "source": {
+        "format": "gpx",
+        "url": "/data/tracks.gpx"
+      },
+      "geometryType": "MultiLineString",
+      "editable": false,
+      "snappable": false
+    },
+    {
+      "id": "buildings",
+      "title": "Buildings (TopoJSON)",
+      "source": {
+        "format": "topojson",
+        "url": "/data/buildings.topojson"
+      },
+      "geometryType": "MultiPolygon",
+      "editable": {
+        "update": true,
+        "delete": true
+      },
+      "style": {
+        "stroke-color": "#4b5563",
+        "stroke-width": 1,
+        "fill-color": "rgba(75, 85, 99, 0.35)"
+      }
+    },
+    {
+      "id": "survey-points",
+      "title": "Survey points (WKT, EPSG:25832)",
+      "source": {
+        "format": "wkt",
+        "data": "MULTIPOINT((456094.22 5428752.20),(456189.55 5428784.79))",
+        "dataProjection": "EPSG:25832"
+      },
+      "geometryType": "MultiPoint",
+      "editable": {
+        "update": true
+      }
+    },
+    {
+      "id": "trees",
+      "title": "Trees (GML 3, EPSG:25832)",
+      "source": {
+        "format": "gml",
+        "url": "/data/trees.gml",
+        "gmlVersion": "3"
+      },
+      "geometryType": "Point",
+      "idProperty": "id",
+      "editable": false,
+      "style": {
+        "circle-radius": 6,
+        "circle-fill-color": "#15803d"
+      }
+    },
+    {
+      "id": "lamps",
+      "title": "Lamps (WFS)",
+      "source": {
+        "format": "wfs",
+        "url": "/wfs",
+        "typeName": "lamps",
+        "version": "1.1.0",
+        "outputFormat": "application/json",
+        "strategy": "bbox"
+      },
+      "geometryType": "Point",
+      "idProperty": "id",
+      "editable": true,
+      "style": {
+        "circle-radius": 5,
+        "circle-fill-color": "#facc15",
+        "circle-stroke-color": "#713f12",
+        "circle-stroke-width": 1
+      }
+    },
+    {
+      "id": "labels",
+      "title": "Labels",
+      "source": {
+        "format": "geojson",
+        "url": "/data/labels.geojson"
+      },
+      "geometryType": "Point",
+      "idProperty": "id",
+      "editable": true,
+      "text": {
+        "height": 5,
+        "color": "#fef3c7",
+        "haloColor": "rgba(17, 24, 39, 0.85)",
+        "font": "system-ui, sans-serif",
+        "property": "text",
+        "heightProperty": "textHeight",
+        "rotationProperty": "textRotation"
+      },
+      "schema": {
+        "fields": [
+          {
+            "name": "text",
+            "type": "string",
+            "required": true,
+            "label": "Text"
+          },
+          {
+            "name": "textHeight",
+            "type": "number",
+            "min": 0.1,
+            "label": "Height (m)"
+          },
+          {
+            "name": "textRotation",
+            "type": "number",
+            "label": "Rotation (\u00b0)"
+          }
+        ]
+      }
+    }
+  ]
+}

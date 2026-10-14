@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="ol-cad test server">
+  <trk><name>Walk A</name><trkseg>
+    <trkpt lat="49.0080" lon="8.3975"/><trkpt lat="49.0095" lon="8.3990"/><trkpt lat="49.0112" lon="8.4005"/>
+  </trkseg><trkseg>
+    <trkpt lat="49.0112" lon="8.4020"/><trkpt lat="49.0100" lon="8.4040"/>
+  </trkseg></trk>
+</gpx>

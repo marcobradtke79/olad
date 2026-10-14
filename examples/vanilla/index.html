@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ol-cad vanilla example</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      #app {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100%;
+      }
+      #map {
+        height: 100%;
+      }
+      olcad-panel[name='layers'],
+      olcad-panel[name='templates'],
+      olcad-panel[name='measurements'],
+      olcad-panel[name='attributes'] {
+        width: 240px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <olcad-menubar aria-label="Main menu">
+        <olcad-menu label="View">
+          <button id="layer-styles" type="button">Layer styles…</button>
+          <button id="reset-layout" type="button">Reset layout</button>
+        </olcad-menu>
+      </olcad-menubar>
+      <olcad-dock storage-key="olcad-example-layout">
+        <olcad-panel name="file" heading="File" dock="top" compact>
+          <button id="import" type="button" class="olcad-toolbar__button">Import…</button>
+          <button id="export" type="button" class="olcad-toolbar__button">Export…</button>
+        </olcad-panel>
+        <olcad-toolbar name="main" heading="Main" dock="top" tools="select delete"></olcad-toolbar>
+        <olcad-toolbar
+          name="draw"
+          heading="Draw"
+          dock="top"
+          controls=""
+          tools="draw rectangle circle ellipse regular-polygon curve parallel text"
+        ></olcad-toolbar>
+        <olcad-toolbar
+          name="modify"
+          heading="Modify"
+          dock="top"
+          controls=""
+          tools="modify move rotate scale offset mirror template-copy"
+        ></olcad-toolbar>
+        <olcad-toolbar
+          name="trim"
+          heading="Trim / Extend"
+          dock="top"
+          controls=""
+          tools="trim extend"
+        ></olcad-toolbar>
+        <olcad-toolbar
+          name="measure"
+          heading="Measure"
+          dock="top"
+          controls=""
+          tools="measure-distance measure-area measure-angle measure-clear"
+        ></olcad-toolbar>
+        <olcad-straightedge name="straightedge" dock="top"></olcad-straightedge>
+        <olcad-snap-settings name="snap" dock="top"></olcad-snap-settings>
+        <olcad-panel name="layers" heading="Layers" dock="right">
+          <olcad-layer-list></olcad-layer-list>
+        </olcad-panel>
+        <olcad-panel name="templates" heading="Templates" dock="right">
+          <olcad-template-list></olcad-template-list>
+        </olcad-panel>
+        <olcad-panel name="measurements" heading="Measure" dock="right">
+          <olcad-measure-results></olcad-measure-results>
+        </olcad-panel>
+        <olcad-panel name="attributes" heading="Attributes" dock="right">
+          <olcad-attribute-form></olcad-attribute-form>
+        </olcad-panel>
+        <olcad-panel name="units" heading="Units" dock="bottom" compact>
+          <olcad-unit-select></olcad-unit-select>
+        </olcad-panel>
+        <olcad-panel name="table" heading="Table" dock="bottom" hidden no-toggle>
+          <olcad-feature-table></olcad-feature-table>
+        </olcad-panel>
+        <div id="map"></div>
+      </olcad-dock>
+      <olcad-attribute-form popup></olcad-attribute-form>
+      <olcad-export-dialog></olcad-export-dialog>
+      <olcad-layer-style-dialog></olcad-layer-style-dialog>
+      <olcad-import-dialog></olcad-import-dialog>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

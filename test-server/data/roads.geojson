@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 815,
+      "properties": { "id": 815, "name": "Main Street", "lanes": 2 },
+      "geometry": { "type": "LineString", "coordinates": [[8.3980, 49.0088], [8.4040, 49.0088]] }
+    },
+    {
+      "type": "Feature",
+      "id": 816,
+      "properties": { "id": 816, "name": "Side Street", "lanes": 1 },
+      "geometry": { "type": "LineString", "coordinates": [[8.4011, 49.0088], [8.4011, 49.0110]] }
+    }
+  ]
+}

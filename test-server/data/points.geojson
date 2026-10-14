@@ -1,0 +1,11 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 100,
+      "properties": { "id": 100, "kind": "hydrant" },
+      "geometry": { "type": "Point", "coordinates": [8.4000, 49.0086] }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 501,
+      "properties": {
+        "id": 501,
+        "watt": 50
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.399700000000001,
+          49.0089
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 502,
+      "properties": {
+        "id": 502,
+        "watt": 60
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4009,
+          49.0089
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 503,
+      "properties": {
+        "id": 503,
+        "watt": 70
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4021,
+          49.0089
+        ]
+      }
+    }
+  ]
+}
