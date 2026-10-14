@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-14
+
+First public release on npm.
+
+### Added
+
+- `docs/frameworks.md`: framework integration rules and an Angular guide (styles, bundle budget, a standalone component with setup and teardown). The README documents installing the development version, the toolbar's `tools` attribute, the page-wide theme and local layer persistence; `docs/api.md` explains the temporary ids of new objects.
+
+### Fixed
+
+- The ESM build and its type declarations import `ol` subpaths and their own modules with full file extensions (`ol/Feature.js`, `./core/Editor.js`), so the package resolves in Node, webpack 5 and TypeScript with `moduleResolution: node16 / nodenext`, not only in Vite.
+
 ### Added
 
 - Layer styles: View → Layer styles… (`<olcad-layer-style-dialog>`) lets users reorder the layers (drag and drop, up / down) and change their look live — line colour / width / pattern, fill colour and opacity, point radius / fill / outline, a label from an attribute (size, colour, halo), text colours of text layers, layer opacity and zoom range — with Reset layer / Reset all; `persistLayerStyles` keeps it in the browser. Core: `editor.layers.getStyle`, `setStyle`, `resetStyle`, `isStyleCustomized`, `hasExpressionStyle`, `setOrder`, `moveLayer`, `resetOrder`, `isOrderCustomized`, `exportStyles`, `importStyles`, `resetStyles`; `layerchange` types `style` and `order`; `list()` follows the drawing order and vector layers get `zIndex` from it (`LAYER_Z_INDEX_BASE`). Exported `LayerStyle`, `StrokeDash`, `LayerStylesJson`, `LayerChangeType`, `styleFromFlat`, `flatFromStyle`, `validateStyle`, `styleSections`, `parseColor`, `rgba`, `StyleError`, `OlcadLayerStyleDialog`, `persistLayerStyles`; icons `arrowUp`, `arrowDown`, `palette`.
@@ -142,3 +154,6 @@ All notable changes to this project are documented here. The format follows
 - Examples `examples/vanilla` (ESM) and `examples/script-tag` (UMD).
 - Local test server (`pnpm serve:test`) with `/config`, `/data/:layer`, `/changes` (with `?fail=1`), `/changes/log`, `/reset` and a reference test page.
 - Test that fails when `docs/configuration.md` and the `EditorConfig` type disagree.
+
+[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/marcobradtke79/olad/releases/tag/v0.1.0

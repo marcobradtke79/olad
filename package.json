@@ -1,10 +1,29 @@
 {
   "name": "ol-cad",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "CAD-style drawing and editing tools for OpenLayers, framework-agnostic",
   "type": "module",
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "Apache-2.0",
+  "author": "Marco Bradtke",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcobradtke79/olad.git"
+  },
+  "homepage": "https://github.com/marcobradtke79/olad#readme",
+  "bugs": {
+    "url": "https://github.com/marcobradtke79/olad/issues"
+  },
+  "keywords": [
+    "openlayers",
+    "ol",
+    "cad",
+    "editing",
+    "drawing",
+    "snapping",
+    "gis",
+    "map",
+    "web-components"
+  ],
   "engines": {
     "node": ">=22.6",
     "pnpm": ">=9"
@@ -35,6 +54,9 @@
   "sideEffects": [
     "*.css"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite --open /examples/",
     "serve:test": "node test-server/server.ts",
@@ -47,8 +69,10 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "wiki:images": "playwright test -c playwright.wiki.config.ts",
     "lint": "eslint . && prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "peerDependencies": {
     "ol": ">=9 <11",

@@ -200,7 +200,7 @@ A `<select>` (`.olcad-projection-select__select`, `aria-label="Projection"`) tha
 Two sections:
 
 - **Basemaps** as a radio group (`role="radiogroup"`, buttons with `role="radio"` and `aria-checked`). Clicking calls `editor.basemaps.setActive(id)`.
-- **New layer** (`.olcad-layer-list__new`, `data-action="new-layer"`, icon `addLayer`) beside the Layers heading (`.olcad-layer-list__heading-row`): opens the [`<olcad-layer-editor>`](#olcad-layer-editor) dialog for a local layer kept in this browser. The list creates the dialog as its own child on first use and keeps it across re-renders.
+- **New layer** (`.olcad-layer-list__new`, `data-action="new-layer"`, icon `addLayer`) beside the Layers heading (`.olcad-layer-list__heading-row`): opens the [`<olcad-layer-editor>`](#olcad-layer-editor) dialog for a local layer. Local layers are kept in memory and lost on reload unless the page calls [`persistLocalLayers(editor)`](#persistlocallayerseditor-storage-options), which keeps them in this browser. The list creates the dialog as its own child on first use and keeps it across re-renders.
 - **Layers** as rows (`.olcad-layer-list__layer[data-layer-id]`): the layer name (`.olcad-layer-list__title`) and five or six icon buttons (`data-action`, name as `aria-label`, description as tooltip):
   - **Visibility** (`.olcad-layer-list__visible`, "Visible: {title}", `aria-pressed`): icon `eye`, or `eyeOff` while hidden; calls `editor.layers.setVisible`. Hidden rows carry `olcad-layer-list__layer--hidden` (dimmed title).
   - **Highlight** (`.olcad-layer-list__highlight`, "Highlight {title}", `aria-pressed`): calls `editor.layers.setHighlighted`, which draws every object of the layer in the `layerHighlight` style ([configuration.md](configuration.md#layerhighlight)); works for read-only layers too.
@@ -348,6 +348,8 @@ Exported from `ol-cad/ui`: binds the editor's keyboard shortcuts (Escape, Enter,
 ## Theme
 
 `ol-cad/ui.css` is a dark CAD theme by default. The attribute `olcad-theme` on `<html>` or any ancestor selects a variant: `light` for the light palette, `auto` to follow the operating system (`prefers-color-scheme`), `dark` to force dark inside a light region. The theme sets `color-scheme` accordingly, so native form controls and dialog backdrops follow. All colours and sizes are custom properties on `:root` (dark values) and on `[olcad-theme='light']`; override them on `:root` or on any ancestor.
+
+**The theme applies to the whole page, not only to the ol-cad elements.** `color-scheme: dark` is set on `:root`, so the browser's defaults for the entire document turn dark: text colour, form controls, scroll bars and the canvas background. On a light host page this can leave your own buttons with light text on a light background. Set `olcad-theme="light"` on `<html>` when the page is light, or on the element that wraps the editor to keep the dark look only there (for example `<div olcad-theme="dark">` around `<olcad-dock>` inside a light page with `<html olcad-theme="light">`).
 
 | Property                        | Dark (default)                                                                                          | Light                          |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------ |
