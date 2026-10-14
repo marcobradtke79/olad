@@ -8,11 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.0] - 2026-10-14
 
-First public release on npm.
+First public release, on GitHub (package file attached to the release; not on npm).
 
 ### Added
 
-- `docs/frameworks.md`: framework integration rules and an Angular guide (styles, bundle budget, a standalone component with setup and teardown). The README documents installing the development version, the toolbar's `tools` attribute, the page-wide theme and local layer persistence; `docs/api.md` explains the temporary ids of new objects.
+- `docs/frameworks.md`: framework integration rules and an Angular guide (styles, bundle budget, a standalone component with setup and teardown). The README documents installing from the GitHub release (package file by URL; `ol-cad.umd.js` and `ui.css` for script tags) and the development version, the toolbar's `tools` attribute, the page-wide theme and local layer persistence; `docs/api.md` explains the temporary ids of new objects.
 
 ### Fixed
 
