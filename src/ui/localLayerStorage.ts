@@ -74,6 +74,28 @@ export interface LocalLayerPersistence {
   stop(): Promise<void>;
 }
 
+/** Running `persistLocalLayers` calls per editor, so the UI can say where local layers are kept. */
+const persisted = new Map<Editor, number>();
+const persistenceListeners = new Set<() => void>();
+
+/** Whether `persistLocalLayers` is keeping this editor's local layers in browser storage. */
+export function isLocalLayerPersisted(editor: Editor): boolean {
+  return (persisted.get(editor) ?? 0) > 0;
+}
+
+/** Called whenever `persistLocalLayers` starts or stops for any editor. Returns an unsubscribe. */
+export function onLocalLayerPersistenceChange(listener: () => void): () => void {
+  persistenceListeners.add(listener);
+  return () => persistenceListeners.delete(listener);
+}
+
+function countPersistence(editor: Editor, delta: 1 | -1): void {
+  const count = (persisted.get(editor) ?? 0) + delta;
+  if (count > 0) persisted.set(editor, count);
+  else persisted.delete(editor);
+  for (const listener of persistenceListeners) listener();
+}
+
 /**
  * Keep `editor.localLayers` in browser storage (IndexedDB by default): import the stored layers
  * once, then save `export()` shortly after every local layer change and every command, undo and
@@ -93,6 +115,7 @@ export function persistLocalLayers(
   /** Whether the stored state may differ from the editor (something changed since the last save). */
   let dirty = false;
   const offs: (() => void)[] = [];
+  countPersistence(editor, 1);
 
   const save = async () => {
     if (timer) clearTimeout(timer);
@@ -144,6 +167,7 @@ export function persistLocalLayers(
     if (stopped) return;
     stopped = true;
     for (const off of offs) off();
+    countPersistence(editor, -1);
     await save();
   };
   return { ready, flush: save, stop };

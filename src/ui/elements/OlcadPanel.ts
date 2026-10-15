@@ -98,6 +98,11 @@ export class OlcadPanel extends HTMLElement {
     return this.getAttribute('name') ?? '';
   }
 
+  /** Reflects to the attribute, so frameworks that set properties (React 19, Vue) work. */
+  set name(value: string) {
+    this.setAttribute('name', value);
+  }
+
   get heading(): string {
     return this.getAttribute('heading') ?? this.defaultHeading;
   }

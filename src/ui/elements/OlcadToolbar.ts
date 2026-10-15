@@ -726,6 +726,7 @@ export class OlcadToolbar extends OlcadPanel {
     const editor = this.boundEditor;
     const active = editor?.layers.list().find((layer) => layer.active);
     this.activeLayer.textContent = active ? `Layer: ${active.title}` : 'No layer selected';
+    this.activeLayer.title = this.activeLayer.textContent; // full name when it is cut off
     this.activeLayer.hidden = !editor;
     this.renderTools();
   }

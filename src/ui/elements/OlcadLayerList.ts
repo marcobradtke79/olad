@@ -3,6 +3,7 @@ import type { Editor } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
 import { setIconButton } from './controls';
 import { featureTablesOf, onFeatureTableChange } from './OlcadFeatureTable';
+import { isLocalLayerPersisted, onLocalLayerPersistenceChange } from '../localLayerStorage';
 import type { OlcadLayerEditor } from './OlcadLayerEditor';
 
 /** What a row control does; with the layer id it identifies the control across re-renders. */
@@ -33,6 +34,10 @@ export class OlcadLayerList extends HTMLElement {
     return this.hasAttribute('reveal');
   }
 
+  set reveal(value: boolean) {
+    this.toggleAttribute('reveal', Boolean(value));
+  }
+
   get editor(): Editor | null {
     return this.boundEditor;
   }
@@ -51,6 +56,7 @@ export class OlcadLayerList extends HTMLElement {
         editor.on('editmodechange', rerender),
         editor.on('locallayerchange', rerender),
         onFeatureTableChange(rerender), // a table was bound, opened, switched or closed
+        onLocalLayerPersistenceChange(rerender), // local layers kept in storage or in memory
         editor.on('selectionchange', ({ features }) => {
           this.render(); // the move buttons follow the selected drafts
           if (this.reveal && features.some((f) => isDraft(editor, f))) this.revealPanel();
@@ -149,7 +155,7 @@ export class OlcadLayerList extends HTMLElement {
     add.type = 'button';
     add.className = 'olcad-layer-list__new';
     add.dataset.action = 'new-layer';
-    setIconButton(add, 'addLayer', 'New layer', 'Create a layer in this browser');
+    setIconButton(add, 'addLayer', 'New layer', 'Create a local layer');
     add.addEventListener('click', () => this.openLayerEditor(editor, null));
     // The button sits beside the heading, not in it: the heading labels the group.
     const headingRow = document.createElement('div');
@@ -231,7 +237,10 @@ export class OlcadLayerList extends HTMLElement {
     });
 
     // Edit: switches edit mode on and makes the layer the active one; no tool is started.
+    // Pressed only while the layer is active in edit mode: with edit mode off, a press on the
+    // active layer resumes editing it instead of clearing it.
     const ops = (['insert', 'update', 'delete'] as const).filter((op) => layer.editable[op]);
+    const editing = layer.active && editor.isEditMode();
     const edit = button('edit', 'edit');
     setIconButton(
       edit,
@@ -239,21 +248,21 @@ export class OlcadLayerList extends HTMLElement {
       `Edit ${layer.title}`,
       ops.length === 0
         ? 'Read-only layer'
-        : layer.active
+        : editing
           ? 'Stop editing this layer'
           : editor.isEditMode()
             ? 'Edit this layer'
             : 'Switch on edit mode and edit this layer',
     );
-    edit.setAttribute('aria-pressed', String(layer.active));
+    edit.setAttribute('aria-pressed', String(editing));
     edit.disabled = ops.length === 0 && !layer.active;
     edit.addEventListener('click', () => {
-      if (layer.active) {
+      if (editing) {
         editor.layers.setActive(null);
         return;
       }
       if (!editor.isEditMode()) editor.setEditMode(true);
-      editor.layers.setActive(layer.id);
+      if (!layer.active) editor.layers.setActive(layer.id);
     });
 
     const open = this.expanded.has(layer.id);
@@ -294,7 +303,9 @@ export class OlcadLayerList extends HTMLElement {
     detail('snappable', 'Snap target', layer.snappable ? 'yes' : 'no');
     detail('projection', 'Data projection', layer.dataProjection);
     detail('id', 'Id', layer.id);
-    if (layer.local) detail('storage', 'Storage', 'this browser');
+    const kept = isLocalLayerPersisted(editor);
+    if (layer.local)
+      detail('storage', 'Storage', kept ? 'this browser' : 'memory (lost on reload)');
 
     // Move: the selected draft objects this layer takes.
     const fitting = drafts.filter((f) => editor.layers.draftTargets(f).includes(layer.id));
@@ -320,7 +331,7 @@ export class OlcadLayerList extends HTMLElement {
     let settings: HTMLButtonElement | null = null;
     if (layer.local) {
       row.classList.add('olcad-layer-list__layer--local');
-      title.title = 'Local layer, kept in this browser';
+      title.title = kept ? 'Local layer, kept in this browser' : 'Local layer, lost on reload';
       settings = button('settings', 'settings');
       setIconButton(
         settings,

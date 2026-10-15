@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor, EditorEvents } from '../core/Editor';
 import { Emitter } from '../core/events';
 import type { LocalLayersJson } from '../core/layers/local';
-import { indexedDbStorage, persistLocalLayers, type LocalLayerStorage } from './localLayerStorage';
+import {
+  indexedDbStorage,
+  isLocalLayerPersisted,
+  onLocalLayerPersistenceChange,
+  persistLocalLayers,
+  type LocalLayerStorage,
+} from './localLayerStorage';
 
 const stored: LocalLayersJson = { version: 1, layers: [] };
 
@@ -66,6 +72,19 @@ describe('persistLocalLayers', () => {
     editor.emit('change', { version: 1, changes: [] });
     await vi.advanceTimersByTimeAsync(200);
     expect(storage.saved).toHaveLength(2);
+  });
+
+  it('registers the editor while it persists', async () => {
+    const editor = fakeEditor();
+    const listener = vi.fn();
+    const off = onLocalLayerPersistenceChange(listener);
+    expect(isLocalLayerPersisted(editor)).toBe(false);
+    const persistence = persistLocalLayers(editor, memory());
+    expect(isLocalLayerPersisted(editor)).toBe(true);
+    await persistence.stop();
+    expect(isLocalLayerPersisted(editor)).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+    off();
   });
 
   it('reports load errors and keeps working', async () => {

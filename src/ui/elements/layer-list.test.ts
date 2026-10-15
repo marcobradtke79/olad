@@ -5,6 +5,7 @@ import type { Editor, EditorEvents } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
 import { Emitter } from '../../core/events';
 import { defineElements, type OlcadFeatureTable, type OlcadLayerList } from '../index';
+import { persistLocalLayers } from '../localLayerStorage';
 
 beforeAll(() => defineElements());
 beforeEach(() => {
@@ -74,7 +75,11 @@ function fakeEditor(editMode = false) {
       getConfig: (id: string) => ({ id }),
     },
     changes: { get: () => ({ version: 1, changes: [] }) },
+    map: { getTargetElement: () => document.body },
     localLayers: {
+      list: () => infos.filter((info) => info.local),
+      export: () => ({ version: 1, layers: [] }),
+      import: vi.fn(),
       has: (id: string) => find(id)?.local ?? false,
       get: (id: string) => ({
         id,
@@ -238,6 +243,42 @@ describe('<olcad-layer-list> rows', () => {
     expect(editor.layers.setActive).toHaveBeenLastCalledWith(null);
     expect(editor.setEditMode).toHaveBeenCalledTimes(1);
     expect(control(el, 'a', 'edit').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('edit on the active layer resumes editing while edit mode is off', () => {
+    const editor = fakeEditor(true);
+    const el = mount(editor);
+    control(el, 'a', 'edit').click();
+    expect(control(el, 'a', 'edit').getAttribute('aria-pressed')).toBe('true');
+    // Edit mode switched off with the toolbar: the layer stays active, the button is not pressed.
+    editor.setEditMode(false);
+    expect(control(el, 'a', 'edit').getAttribute('aria-pressed')).toBe('false');
+    expect(control(el, 'a', 'edit').dataset.tooltip).toMatch(/Switch on edit mode/);
+    vi.mocked(editor.layers.setActive).mockClear();
+    control(el, 'a', 'edit').click();
+    expect(editor.isEditMode()).toBe(true);
+    expect(editor.layers.setActive).not.toHaveBeenCalled();
+    expect(control(el, 'a', 'edit').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('says whether local layers are kept in this browser or lost on reload', async () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    editor.makeLocal();
+    control(el, 'b', 'info').click();
+    const storage = () =>
+      el.querySelector('[data-layer-id="b"] [data-detail="storage"] dd')!.textContent;
+    expect(storage()).toBe('memory (lost on reload)');
+    expect(el.querySelector<HTMLButtonElement>('.olcad-layer-list__new')!.dataset.tooltip).toBe(
+      'Create a local layer',
+    );
+    const persistence = persistLocalLayers(editor, {
+      load: async () => undefined,
+      save: async () => undefined,
+    });
+    expect(storage()).toBe('this browser');
+    await persistence.stop();
+    expect(storage()).toBe('memory (lost on reload)');
   });
 
   it('disables edit for read-only layers', () => {

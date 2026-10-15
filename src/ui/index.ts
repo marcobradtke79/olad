@@ -16,6 +16,8 @@ import { downloadFile } from './download';
 import { bindPanelMenu } from './panelMenu';
 import {
   indexedDbStorage,
+  isLocalLayerPersisted,
+  onLocalLayerPersistenceChange,
   persistLocalLayers,
   type IndexedDbStorageOptions,
   type LocalLayerPersistence,
@@ -73,6 +75,8 @@ export {
   bindPanelMenu,
   indexedDbStorage,
   persistLocalLayers,
+  isLocalLayerPersisted,
+  onLocalLayerPersistenceChange,
   OlcadFeatureTable,
   featureTablesOf,
   onFeatureTableChange,
@@ -142,6 +146,36 @@ const ELEMENTS: [string, CustomElementConstructor][] = [
   ['olcad-attribute-form', OlcadAttributeForm],
   ['olcad-dock', OlcadDock],
 ];
+
+/**
+ * Tag names to element classes, so `document.querySelector('olcad-toolbar')` and
+ * `document.createElement('olcad-dock')` are typed in any host (types only).
+ */
+declare global {
+  interface HTMLElementTagNameMap {
+    'olcad-panel': OlcadPanel;
+    'olcad-toolbar': OlcadToolbar;
+    'olcad-straightedge': OlcadStraightedge;
+    'olcad-snap-settings': OlcadSnapSettings;
+    'olcad-grid-settings': OlcadGridSettings;
+    'olcad-angle-lock': OlcadAngleLock;
+    'olcad-input-bar': OlcadInputBar;
+    'olcad-projection-select': OlcadProjectionSelect;
+    'olcad-unit-select': OlcadUnitSelect;
+    'olcad-menu': OlcadMenu;
+    'olcad-menubar': OlcadMenubar;
+    'olcad-layer-list': OlcadLayerList;
+    'olcad-layer-editor': OlcadLayerEditor;
+    'olcad-layer-style-dialog': OlcadLayerStyleDialog;
+    'olcad-export-dialog': OlcadExportDialog;
+    'olcad-import-dialog': OlcadImportDialog;
+    'olcad-feature-table': OlcadFeatureTable;
+    'olcad-template-list': OlcadTemplateList;
+    'olcad-measure-results': OlcadMeasureResults;
+    'olcad-attribute-form': OlcadAttributeForm;
+    'olcad-dock': OlcadDock;
+  }
+}
 
 /** Register every `<olcad-*>` custom element. Safe to call more than once. */
 export function defineElements(): void {

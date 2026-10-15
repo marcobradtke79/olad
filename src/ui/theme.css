@@ -33,6 +33,7 @@
   --olcad-dock-drop-bg: rgba(61, 139, 255, 0.2);
   --olcad-dock-zone-padding: 0px;
   --olcad-toolbar-button-size: 28px;
+  --olcad-toolbar-layer-width: 12em;
   --olcad-flyout-width: 320px;
 }
 
@@ -54,6 +55,14 @@
   --olcad-panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   --olcad-panel-header-bg: #e5e7eb;
   --olcad-dock-drop-bg: rgba(37, 99, 235, 0.15);
+}
+
+/*
+ * The map keeps its own colours: under `color-scheme: dark` the browser renders the map canvas
+ * darker, so basemaps looked dimmed (or not loaded) in the dark theme.
+ */
+.ol-viewport canvas {
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: light) {
@@ -727,6 +736,16 @@
   white-space: nowrap;
   font-size: 0.92em;
   padding: 0 calc(var(--olcad-spacing) / 2);
+  /* Fixed width, so the buttons after it do not move when the active layer changes. */
+  box-sizing: border-box;
+  width: var(--olcad-toolbar-layer-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.olcad-toolbar[orientation='vertical'] .olcad-toolbar__active-layer {
+  width: auto;
+  max-width: var(--olcad-toolbar-layer-width);
 }
 
 /* Straightedge toolbox: angle input plus reset and pick buttons. */

@@ -28,12 +28,20 @@ export class OlcadAttributeForm extends HTMLElement {
     return this.hasAttribute('popup');
   }
 
+  set popup(value: boolean) {
+    this.toggleAttribute('popup', Boolean(value));
+  }
+
   /**
    * `reveal`: a single selection outside edit mode, or a move of draft objects into a layer
    * (`draftmove`), opens the flyout panel the form sits in.
    */
   get reveal(): boolean {
     return this.hasAttribute('reveal');
+  }
+
+  set reveal(value: boolean) {
+    this.toggleAttribute('reveal', Boolean(value));
   }
 
   get editor(): Editor | null {
