@@ -1,4 +1,5 @@
 import type { Editor, InputResult } from '../../core/Editor';
+import { lengthUnitInfo } from '../../core/units';
 import { OlcadPanel, type DockPosition } from './OlcadPanel';
 
 export type InputBarMessageKind = 'prompt' | 'info' | 'error';
@@ -46,6 +47,8 @@ export class OlcadInputBar extends OlcadPanel {
   private controlsBuilt = false;
   /** What the active tool's step expects typed, as last applied. */
   private awaiting: 'text' | 'value' | null = null;
+  /** The dimension the prompt currently offers to edit (`editor.dimensions.inputTarget`). */
+  private dimensionTarget: unknown = null;
 
   protected override get defaultDock(): DockPosition {
     return 'bottom';
@@ -71,6 +74,12 @@ export class OlcadInputBar extends OlcadPanel {
         editor.on('toolchange', () => this.showPrompt()),
         editor.on('toolprompt', () => this.showPrompt()),
         editor.on('editmodechange', () => this.showPrompt()),
+        // One selected dimension and no tool: the command line edits its field value. Only a
+        // change of that state renews the prompt, so other messages (an echo) stay.
+        editor.on('selectionchange', () => {
+          const target = editor.tools.getActive() ? null : editor.dimensions.inputTarget();
+          if (target !== this.dimensionTarget) this.showPrompt();
+        }),
         editor.on('input', (result) => this.showResult(result)),
         editor.on('validationerror', ({ message }) => this.show(message, 'error')),
         editor.on('projectionchange', ({ to }) => this.show(`Projection: ${to}`, 'info')),
@@ -159,7 +168,12 @@ export class OlcadInputBar extends OlcadPanel {
     const tool = editor.tools.getActive();
     // A multi-step tool publishes its own prompt (`Tool.getPrompt`); otherwise the default.
     const own = tool ? editor.tools.getPrompt() : null;
-    this.show(own ?? (tool ? (PROMPTS[tool] ?? `Tool: ${tool}`) : NO_TOOL_PROMPT), 'prompt');
+    const dimension = tool ? null : editor.dimensions.inputTarget();
+    this.dimensionTarget = dimension;
+    const idle = dimension
+      ? `Field value of the selected dimension in ${lengthUnitInfo(editor.units.getLength()).symbol}; - clears it`
+      : NO_TOOL_PROMPT;
+    this.show(own ?? (tool ? (PROMPTS[tool] ?? `Tool: ${tool}`) : idle), 'prompt');
     this.applyInputRequest(tool ? (editor.tools.getInputRequest?.() ?? null) : null);
   }
 
@@ -206,6 +220,16 @@ export class OlcadInputBar extends OlcadPanel {
       return;
     }
     const editor = this.boundEditor;
+    if ('fieldValue' in result) {
+      const value = result.fieldValue;
+      this.show(
+        value === null
+          ? 'Field value cleared'
+          : `Field value ${editor ? editor.units.formatLength(value) : `${value} m`}`,
+        'info',
+      );
+      return;
+    }
     if ('length' in result) {
       const length = editor ? editor.units.formatLength(result.length) : `${result.length} m`;
       this.show(`${result.text} → ${length}`, 'info');

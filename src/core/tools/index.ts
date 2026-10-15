@@ -34,6 +34,17 @@ export {
   type RectangleTarget,
 } from './rectangle';
 export {
+  DimensionLinearTool,
+  DIMENSION_LINEAR_METHODS,
+  DIMENSION_LINEAR_PROMPTS,
+  DEFAULT_DIMENSION_LINEAR_METHOD,
+  dimensionLinearMethod,
+  dimensionTarget,
+  type DimensionLinearMethod,
+  type DimensionLinearStep,
+  type DimensionTarget,
+} from './dimension';
+export {
   CircleTool,
   CIRCLE_METHODS,
   CIRCLE_PROMPTS,

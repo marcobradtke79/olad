@@ -261,20 +261,9 @@
       "schema": {
         "fields": [
           {
-            "name": "fieldValue",
-            "type": "number",
-            "min": 0,
-            "label": "Field value (m)"
-          },
-          {
             "name": "offset",
             "type": "number",
             "label": "Offset (m)"
-          },
-          {
-            "name": "text",
-            "type": "string",
-            "label": "Text"
           }
         ]
       }

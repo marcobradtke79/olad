@@ -36,7 +36,11 @@ export function validateDimensionFeature(
   if (!isNullish(field) && !(typeof field === 'number' && Number.isFinite(field) && field >= 0)) {
     return { code: 'dimension-value', params: { property: 'fieldValue' } };
   }
-  for (const name of ['offset', 'textPosition', 'gisValue']) {
+  const rotation = properties.rotation;
+  if (type === 'rotated' && !(typeof rotation === 'number' && Number.isFinite(rotation))) {
+    return { code: 'dimension-value', params: { property: 'rotation' } };
+  }
+  for (const name of ['offset', 'textPosition', 'gisValue', 'rotation']) {
     const value = properties[name];
     if (!isNullish(value) && !(typeof value === 'number' && Number.isFinite(value))) {
       return { code: 'dimension-value', params: { property: name } };

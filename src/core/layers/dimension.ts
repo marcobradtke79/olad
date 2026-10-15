@@ -67,36 +67,40 @@ export function dimensionStyleFunction(
     const [p1, p2] = values.points as [Coordinate, Coordinate];
     const dx = p2[0]! - p1[0]!;
     const dy = p2[1]! - p1[1]!;
-    const length = Math.hypot(dx, dy);
-    if (!(length > 0)) return undefined;
-    const u: Coordinate = [dx / length, dy / length];
-    const n: Coordinate = [-u[1]!, u[0]!]; // left of p1 → p2
+    // The measured direction: p1 → p2 (aligned) or the rotation (rotated).
+    const u = values.direction;
+    const n: Coordinate = [-u[1]!, u[0]!]; // left of the direction
+    /** Signed length of the dimension line along u (the projected distance). */
+    const length = dx * u[0]! + dy * u[1]!;
+    if (!(Math.abs(length) > 0)) return undefined;
     const mid: Coordinate = [(p1[0]! + p2[0]!) / 2, (p1[1]! + p2[1]!) / 2];
     const perMetre = unitsPerMetre(projection, mid);
     /** Paper millimetres → map units. */
     const paper = (mm: number) => (mm / 1000) * config.referenceScale * perMetre;
     const offset = (Number(feature.get('offset')) || 0) * perMetre;
-    const side = offset < 0 ? -1 : 1;
     const d1 = add(p1, n, offset);
-    const d2 = add(p2, n, offset);
+    const d2 = add(d1, u, length);
     const color = values.status === 'deviates' ? config.deviationColor : config.color;
     const stroke = new Stroke({ color, width: LINE_WIDTH });
     const fill = new Fill({ color });
     const styles: Style[] = [new Style({ geometry: new LineString([d1, d2]), stroke })];
 
-    // Extension lines, only when the dimension line stands off the measured points.
+    // Extension lines from each point to its foot on the dimension line, only where the line
+    // stands off the point; a rotated dimension's two extension lines differ in length.
     const gap = paper(DIMENSION_PAPER_MM.extensionGap);
-    if (Math.abs(offset) > gap) {
-      const overrun = paper(DIMENSION_PAPER_MM.extensionOverrun) * side;
-      styles.push(
-        new Style({
-          geometry: new MultiLineString([
-            [add(p1, n, gap * side), add(d1, n, overrun)],
-            [add(p2, n, gap * side), add(d2, n, overrun)],
-          ]),
-          stroke,
-        }),
-      );
+    const overrun = paper(DIMENSION_PAPER_MM.extensionOverrun);
+    const extensions: Coordinate[][] = [];
+    for (const [point, foot] of [
+      [p1, d1],
+      [p2, d2],
+    ] as [Coordinate, Coordinate][]) {
+      const across = (foot[0]! - point[0]!) * n[0]! + (foot[1]! - point[1]!) * n[1]!;
+      if (Math.abs(across) <= gap) continue;
+      const side = Math.sign(across);
+      extensions.push([add(point, n, gap * side), add(foot, n, overrun * side)]);
+    }
+    if (extensions.length > 0) {
+      styles.push(new Style({ geometry: new MultiLineString(extensions), stroke }));
     }
 
     // Terminators.
@@ -116,7 +120,12 @@ export function dimensionStyleFunction(
         const back = add(tip, u, along * inward);
         return [[tip, add(back, n, across), add(back, n, -across), tip]];
       };
-      styles.push(new Style({ geometry: new MultiPolygon([head(d1, 1), head(d2, -1)]), fill }));
+      styles.push(
+        new Style({
+          geometry: new MultiPolygon([head(d1, Math.sign(length)), head(d2, -Math.sign(length))]),
+          fill,
+        }),
+      );
     } else if (config.terminator === 'dot') {
       const radius = paper(DIMENSION_PAPER_MM.dotRadius) / resolution;
       styles.push(

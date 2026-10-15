@@ -38,6 +38,8 @@ export {
   dimensionValues,
   fieldValueOf,
   validateDimensionFeature,
+  DIMENSION_FORM_FIELDS,
+  layerFormFields,
 } from './core/dimensions';
 export type {
   DimensionType,
@@ -101,6 +103,7 @@ export type {
   TemplatesApi,
   MeasurementsApi,
   LocalLayersApi,
+  DimensionsApi,
   ImportApi,
   UnitsApi,
   InputResult,

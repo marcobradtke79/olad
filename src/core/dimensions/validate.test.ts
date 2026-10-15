@@ -51,3 +51,15 @@ describe('validateDimensionFeature', () => {
     expect(validateDimensionFeature(line, { text: 5 })?.params.property).toBe('text');
   });
 });
+
+describe('validateDimensionFeature: rotated', () => {
+  it('needs a finite rotation', () => {
+    expect(validateDimensionFeature(line, { dimType: 'rotated', rotation: 30 })).toBeNull();
+    expect(validateDimensionFeature(line, { dimType: 'rotated' })?.params).toEqual({
+      property: 'rotation',
+    });
+    expect(validateDimensionFeature(line, { dimType: 'aligned', rotation: 'x' })?.code).toBe(
+      'dimension-value',
+    );
+  });
+});

@@ -61,6 +61,7 @@ test.describe('tools', () => {
       'curve',
       'parallel',
       'text',
+      'dimension-linear',
       'modify',
       'move',
       'rotate',

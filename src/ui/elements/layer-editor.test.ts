@@ -61,6 +61,25 @@ const submit = (el: Element) =>
   q<HTMLFormElement>(el, 'form').dispatchEvent(new Event('submit', { cancelable: true }));
 
 describe('<olcad-layer-editor>', () => {
+  it('creates a dimension layer with a drawing standard', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    el.open();
+    const standard = q<HTMLSelectElement>(el, '[name="preset"]');
+    expect(standard.closest('label')!.hidden).toBe(true);
+    setValue(q(el, '[name="title"]'), 'Site dimensions');
+    setValue(q(el, '[name="geometryType"]'), 'dimension');
+    expect(standard.closest('label')!.hidden).toBe(false);
+    setValue(standard, 'architecture');
+    submit(el);
+    expect(editor.localLayers.create).toHaveBeenCalledWith({
+      title: 'Site dimensions',
+      geometryType: 'LineString',
+      fields: [],
+      dimension: { preset: 'architecture' },
+    });
+  });
+
   it('creates a layer with a geometry type and attributes', () => {
     const editor = fakeEditor();
     const el = mount(editor);

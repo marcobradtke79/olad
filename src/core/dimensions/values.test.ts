@@ -75,3 +75,21 @@ describe('dimensionValues', () => {
     ).toBeNull();
   });
 });
+
+describe('dimensionValues: rotated', () => {
+  it('measures the distance projected onto the rotation', () => {
+    const at = [457000, 5428000];
+    const feature = (rotation: unknown) =>
+      new Feature({
+        geometry: new LineString([at, [at[0]! + 8, at[1]! + 6]]),
+        dimType: 'rotated',
+        rotation,
+      });
+    expect(dimensionValues(feature(0), config, 'EPSG:25832')!.gis).toBeCloseTo(8, 6);
+    expect(dimensionValues(feature(90), config, 'EPSG:25832')!.gis).toBeCloseTo(6, 6);
+    const values = dimensionValues(feature(90), config, 'EPSG:25832')!;
+    expect(values.direction[0]).toBeCloseTo(0);
+    expect(values.direction[1]).toBeCloseTo(1);
+    expect(dimensionValues(feature(undefined), config, 'EPSG:25832')).toBeNull();
+  });
+});

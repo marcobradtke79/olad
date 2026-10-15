@@ -1,4 +1,5 @@
 import type Feature from 'ol/Feature';
+import { layerFormFields } from '../../core/dimensions/form';
 import { updateProperties } from '../../core/changes/commands';
 import type { FieldConfig } from '../../core/config/types';
 import type { Editor } from '../../core/Editor';
@@ -77,7 +78,9 @@ export class OlcadAttributeForm extends HTMLElement {
           // Copies from a template and imported objects carry their attributes: no popup.
           if (!this.popup || template !== undefined || imported) return;
           // Nothing to capture on a layer without attributes (the draft layer): no dialog.
-          if ((editor.layers.getConfig(layer).schema?.fields ?? []).length === 0) return;
+          // Dimension tools ask for the field value themselves.
+          const config = editor.layers.getConfig(layer);
+          if (config.dimension || (config.schema?.fields ?? []).length === 0) return;
           if (this.popupQueue.includes(feature)) return;
           this.popupQueue.push(feature);
           this.popupTotal++;
@@ -236,7 +239,7 @@ export class OlcadAttributeForm extends HTMLElement {
       );
       return;
     }
-    const fields = config.schema?.fields ?? [];
+    const fields = layerFormFields(config);
     if (fields.length === 0) {
       target.append(hint(`No attributes configured for ${info.title}.`));
       if (this.popup) target.append(this.laterButton('Close'));

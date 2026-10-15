@@ -165,6 +165,30 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
       'Place a text into the active text layer, or the draft layer: click the insert point, type the height, then the text; it follows the straightedge angle',
     icon: 'drawText',
   },
+  'dimension-linear': {
+    label: 'Linear dimension',
+    title:
+      'Dimension a distance in the active dimension layer: two points, the dimension line, then the field value; the triangle opens the variants',
+    icon: 'dimensionAligned',
+    variants: [
+      {
+        id: 'aligned',
+        label: 'Aligned dimension',
+        title:
+          'Aligned dimension: the true distance between two points, the dimension line parallel to them',
+        icon: 'dimensionAligned',
+        options: { method: 'aligned' },
+      },
+      {
+        id: 'rotated',
+        label: 'Rotated dimension',
+        title:
+          'Rotated dimension: the distance along the straightedge angle (set it to 0° for horizontal, or align it to a building edge)',
+        icon: 'dimensionRotated',
+        options: { method: 'rotated' },
+      },
+    ],
+  },
   modify: {
     label: 'Vertices',
     title:

@@ -3,7 +3,7 @@
 Tools wrap OpenLayers interactions. Exactly one tool is active at a time, tools require edit mode (`editor.setEditMode(true)`), and every change a tool makes goes through `editor.execute` as a command, so validation, undo / redo and the change set see it (see [change-set.md](change-set.md)).
 
 ```ts
-editor.tools.list(); // ['select', 'draw', 'rectangle', 'circle', 'ellipse', 'regular-polygon', 'curve', 'parallel', 'text', 'modify', 'move', 'rotate', 'scale', 'offset', 'trim', 'extend', 'mirror', 'template-copy', 'template-insert', 'measure-distance', 'measure-area', 'measure-angle']
+editor.tools.list(); // ['select', 'draw', 'rectangle', 'circle', 'ellipse', 'regular-polygon', 'curve', 'parallel', 'text', 'dimension-linear', 'modify', 'move', 'rotate', 'scale', 'offset', 'trim', 'extend', 'mirror', 'template-copy', 'template-insert', 'measure-distance', 'measure-area', 'measure-angle']
 editor.tools.canActivate('draw'); // preconditions: edit mode, a layer to insert into ...
 editor.tools.activate('draw'); // into the active layer, or the draft layer when none is active
 editor.tools.activate('draw', { type: 'Polygon' }); // the type on a layer accepting any geometry
@@ -50,13 +50,13 @@ Precedence: a geometry snap within the snap radius wins over the lock (CAD's obj
 
 **Units.** A length without a unit is in the **default unit**: `units.length` ([configuration.md](configuration.md#units), `editor.units.setLength`, `<olcad-unit-select>`), which with `'auto'` is the unit of the view projection (`m`; `ft` / `us-ft` for foot-based CRS; metres for geographic CRS). A unit typed after the number always wins: `m`, `km`, `cm`, `mm`, `ft` (also `foot`, `feet`, `'`), `us-ft` (`usft`, `ftus`, `US ft`), `in` (`inch`, `"`), `yd`, `mi`, `nmi` (`nm`), case-insensitive, with or without a space. Absolute `x,y` coordinates are map units and take no unit. Prompts name the default unit, and lengths and areas are shown in its system (measurements, the feature table, the command line echo).
 
-Relative, polar and length input need a previous point and fail with `input-no-reference` while the first vertex is open; input without an active tool fails with `input-no-tool`, unparsable text (also a unit on `x,y` or an unknown unit) with `input-invalid`, a tool or step that does not take points (select, the selection step of move and rotate, the modify tool while no vertex is picked) with `input-not-accepted`, as does a value the step refuses (for example `2` sides). The result (`{ ok, text, coordinate }`, `{ ok, text, value }`, `{ ok, text, length }` or `{ ok: false, code, error }`) is returned and emitted as event `input`; messages follow `locale` and `messages`.
+Relative, polar and length input need a previous point and fail with `input-no-reference` while the first vertex is open; input without an active tool fails with `input-no-tool` (except a length or `-` while one dimension is selected: it sets or clears its field value, see [`dimension-linear`](#dimension-linear)), unparsable text (also a unit on `x,y` or an unknown unit) with `input-invalid`, a tool or step that does not take points (select, the selection step of move and rotate, the modify tool while no vertex is picked) with `input-not-accepted`, as does a value the step refuses (for example `2` sides). The result (`{ ok, text, coordinate }`, `{ ok, text, value }`, `{ ok, text, length }` or `{ ok: false, code, error }`) is returned and emitted as event `input`; messages follow `locale` and `messages`.
 
 Lengths are converted to metres, then to map units through the projection-aware helpers of the measure module (`offsetMetres`, `distanceMetres`, `unitsPerMetre`, exported): exact local scale in EPSG:3857 (1 / cos φ, so 100 m east at 49° N is about 152 map units), geodesic on the sphere in geographic projections, the projection's own point resolution elsewhere (about 1 in UTM). The scale is taken at the start point of an offset, so a very long typed segment in Web Mercator is off by the change of scale along it (a 10 km segment at 49° N by about 0.1 %).
 
 ## Keyboard
 
-Bound by `<olcad-toolbar>` (or `bindKeyboard(editor)` from `ol-cad/ui`): Escape cancels, Enter finishes, Backspace removes the last vertex while drawing, steps back in the rectangle, circle, ellipse, regular polygon, curve, parallel, text, measure, move, rotate, scale, offset, mirror, trim, extend and template tools and drops a picked vertex in the modify tool, otherwise deletes the selection; Delete removes the vertex under the pointer in the modify tool and otherwise deletes the selection; Ctrl / Cmd+Z undoes, Shift+Ctrl / Cmd+Z and Ctrl / Cmd+Y redo. Configurable shortcuts and numeric input arrive with milestone 5.
+Bound by `<olcad-toolbar>` (or `bindKeyboard(editor)` from `ol-cad/ui`): Escape cancels, Enter finishes, Backspace removes the last vertex while drawing, steps back in the rectangle, circle, ellipse, regular polygon, curve, parallel, text, linear dimension, measure, move, rotate, scale, offset, mirror, trim, extend and template tools and drops a picked vertex in the modify tool, otherwise deletes the selection; Delete removes the vertex under the pointer in the modify tool and otherwise deletes the selection; Ctrl / Cmd+Z undoes, Shift+Ctrl / Cmd+Z and Ctrl / Cmd+Y redo. Configurable shortcuts and numeric input arrive with milestone 5.
 
 ## `select`
 
@@ -179,6 +179,24 @@ Purpose: place a text on the map as a point object of a text layer (`layers[].te
 - The text is inserted as one `insertFeature`: a point (wrapped for `MultiPoint` layers) with the layer's schema defaults and the text properties `text`, `textHeight` (metres) and `textRotation` (the straightedge angle in degrees, counter-clockwise), or the names set in `layers[].text`. It is selected; `featureinsert` opens the attribute popup for a layer with schema fields. The tool returns to step 1 for the next text and follows the active layer.
 - Rendering: the text is drawn left-aligned on its baseline at the point, `textHeight` metres high (it scales with the zoom; texts below one pixel are hidden), rotated by `textRotation`, in `text.color` with a `text.haloColor` outline; clicks on its letters select it. Exported: `textStyleFunction(text, baseStyle, getProjection)`, `textStyle`, `featureText`, `TEXT_DEFAULTS`, `textTarget`.
 - Escape or Backspace steps back (text → height → point). Toolbar: Draw text (`.olcad-toolbar__tool--text`, icon `drawText`).
+
+## `dimension-linear`
+
+Purpose: draw a linear dimension into the active dimension layer ([`layers[].dimension`](configuration.md#layersdimension-object-form), configured or a local one). Precondition: the active layer is a dimension layer that allows `insert`; there is no draft fallback. One tool with two variants (`editor.tools.activate('dimension-linear', { method })`, default `aligned`):
+
+| `method`  | Measures                                                                                                                                                                            |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aligned` | The true distance between the two points; the dimension line runs parallel to them.                                                                                                 |
+| `rotated` | The distance projected onto the straightedge angle at the second point (stored as `rotation`); set the straightedge to 0° for horizontal, 90° for vertical, or align it to an edge. |
+
+1. **First point**: click (snapped to vertices, midpoints, perpendicular feet like every tool) or type `x,y`.
+2. **Second point**: click or type, also relative to the first (`@12.5<30`). A point equal to the first is ignored; a rotated dimension with nothing along the straightedge waits for another point.
+3. **Dimension line**: the dimension follows the pointer in the layer's style; a click fixes the line there, or type the offset (a length; it goes to the side the pointer is on).
+4. **Field value**: the prompt shows the GIS value in the layer's number format. **Enter** keeps it (no field value, shown in brackets), a **typed length** is the field value, `t <text>` sets a free text instead (`{value}` inserts the value).
+
+The dimension is inserted as one `insertFeature` command with `dimType`, `offset`, `gisValue` (metres, rounded to millimetres), `fieldValue`, `text`, `rotation` (rotated) and the layer's schema defaults, then selected; no attribute popup opens. The tool stays active for the next dimension and follows the active layer. Escape drops the dimension in progress, Backspace steps back one step. Toolbar: one flyout button with the two variants, see [ui.md](ui.md#olcad-toolbar).
+
+**Field value of an existing dimension**: select one dimension (edit mode on, no tool running) and type a length in the command line; `-` clears it. The attribute form of a dimension layer always offers **Field value** and **Text** ([ui.md](ui.md#olcad-attribute-form)); `editor.dimensions.setFieldValue` does the same headless ([api.md](api.md#editordimensions)).
 
 ## `modify` (vertex edit)
 

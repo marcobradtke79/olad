@@ -16,6 +16,8 @@ function fakeEditor(units = 'm') {
     tool: null as string | null,
     prompt: null as string | null,
     request: null as 'text' | 'value' | null,
+    /** The dimension the command line edits (`dimensions.inputTarget`). */
+    dimension: null as object | null,
   };
   const tools = {
     getActive: () => state.tool,
@@ -30,7 +32,11 @@ function fakeEditor(units = 'm') {
         ? { ok: false, text, code: 'input-invalid', error: 'Not a coordinate' }
         : text === '5'
           ? { ok: true, text, value: 5 }
-          : { ok: true, text, coordinate: [1.2345, 6.789] };
+          : text === '12.5'
+            ? { ok: true, text, fieldValue: 12.5 }
+            : text === '-'
+              ? { ok: true, text, fieldValue: null }
+              : { ok: true, text, coordinate: [1.2345, 6.789] };
     emitter.emit('input', result);
     return result;
   });
@@ -38,6 +44,8 @@ function fakeEditor(units = 'm') {
     tools,
     input,
     isEditMode: () => state.editMode,
+    dimensions: { inputTarget: () => state.dimension },
+    units: { getLength: () => 'm', formatLength: (m: number) => `${m.toFixed(2)} m` },
     layers: { get: (id: string) => ({ title: id === 'roads' ? 'Roads' : id }) },
     map: { getView: () => ({ getProjection: () => ({ getUnits: () => units }) }) },
     on: emitter.on.bind(emitter),
@@ -129,6 +137,28 @@ describe('<olcad-input-bar>', () => {
     expect(parts(el).output.textContent).toBe('8.4,49 → 1.234500, 6.789000');
     el.show('custom', 'error');
     expect(el.message).toBe('custom');
+  });
+});
+
+describe('<olcad-input-bar> selected dimension', () => {
+  it('asks for the field value of a selected dimension and echoes the result', () => {
+    const el = mount();
+    const { output, input } = parts(el);
+    const { editor } = fakeEditor();
+    el.editor = editor;
+    editor.state.editMode = true;
+    editor.state.dimension = {};
+    editor.emitter.emit('selectionchange', { features: [] });
+    expect(output.textContent).toBe('Field value of the selected dimension in m; - clears it');
+    input.value = '12.5';
+    key(input, 'Enter');
+    expect(output.textContent).toBe('Field value 12.50 m');
+    input.value = '-';
+    key(input, 'Enter');
+    expect(output.textContent).toBe('Field value cleared');
+    editor.state.dimension = null;
+    editor.emitter.emit('selectionchange', { features: [] });
+    expect(output.textContent).toContain('Switch on edit mode');
   });
 });
 

@@ -59,13 +59,13 @@ test.describe('toolbar and dock', () => {
     await expect(page.locator('#map')).not.toHaveClass(/olcad-edit-mode/);
   });
 
-  test('the buttons are grouped into main, draw, modify, trim and measure toolbars', async ({
+  test('the buttons are grouped into main, draw, modify, trim, dimension and measure toolbars', async ({
     page,
   }) => {
     await page.goto('/');
     await waitForEditor(page);
     const toolbars = page.locator('.olcad-dock__zone--top > olcad-toolbar');
-    await expect(toolbars).toHaveCount(5);
+    await expect(toolbars).toHaveCount(6);
     const tools = async (name: string) =>
       page
         .locator(`olcad-toolbar[name="${name}"] [data-tool]`)
@@ -98,6 +98,8 @@ test.describe('toolbar and dock', () => {
       'template-copy',
     ]);
     expect(await label('trim')).toBe('Trim / Extend');
+    expect(await label('dimension')).toBe('Dimension');
+    expect(await tools('dimension')).toEqual(['dimension-linear']);
     expect(await tools('trim')).toEqual(['trim', 'extend']);
     expect(await label('measure')).toBe('Measure');
     expect(await tools('measure')).toEqual([
@@ -198,7 +200,7 @@ test.describe('toolbar and dock', () => {
   test('panels start in their zones and the map fills the centre', async ({ page }) => {
     await page.goto('/');
     await waitForEditor(page);
-    await expect(page.locator('.olcad-dock__zone--top > olcad-toolbar')).toHaveCount(5);
+    await expect(page.locator('.olcad-dock__zone--top > olcad-toolbar')).toHaveCount(6);
     await expect(page.locator('.olcad-dock__zone--right > olcad-panel[name="layers"]')).toHaveCount(
       1,
     );
@@ -265,14 +267,14 @@ test.describe('toolbar and dock', () => {
     // View → Reset layout puts it back where the markup has it, and that persists too.
     await page.locator('olcad-menu[label="View"] .olcad-menu__button').click();
     await page.locator('#reset-layout').click();
-    await expect(page.locator('.olcad-dock__zone--top > olcad-toolbar')).toHaveCount(5);
+    await expect(page.locator('.olcad-dock__zone--top > olcad-toolbar')).toHaveCount(6);
     await expect(toolbar).toHaveAttribute('data-dock', 'top');
     await expect(page.locator('olcad-input-bar .olcad-input-bar__output')).toHaveText(
       'Layout reset.',
     );
     await page.reload();
     await waitForEditor(page);
-    await expect(page.locator('.olcad-dock__zone--top > olcad-toolbar')).toHaveCount(5);
+    await expect(page.locator('.olcad-dock__zone--top > olcad-toolbar')).toHaveCount(6);
   });
 
   test('the dock menu is keyboard operable', async ({ page }) => {
@@ -352,6 +354,7 @@ test.describe('View menu', () => {
       'Draw',
       'Modify',
       'Trim / Extend',
+      'Dimension',
       'Measure (toolbar)',
       'Straightedge',
       'Snap',
@@ -386,7 +389,7 @@ test.describe('View menu', () => {
 
     // Show all brings everything back; the table panel still opens only from the layer list.
     await view.locator('[data-panel-action="show-all"]').click();
-    await expect(page.locator('olcad-toolbar:visible')).toHaveCount(5);
+    await expect(page.locator('olcad-toolbar:visible')).toHaveCount(6);
     await expect(page.locator('olcad-input-bar')).toBeVisible();
     await expect(page.locator('olcad-panel[name="table"]')).toBeHidden();
 

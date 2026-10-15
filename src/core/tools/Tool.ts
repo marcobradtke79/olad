@@ -6,6 +6,7 @@ import type { LayerManager } from '../layers/LayerManager';
 import type { MeasurementStore } from '../measure/MeasurementStore';
 import type { Selection } from '../selection/Selection';
 import type { TemplateStore } from '../templates/TemplateStore';
+import type { Locale } from '../i18n';
 import type { LengthUnit } from '../units';
 
 /** What a tool step expects typed into the command line (`Tool.getInputRequest`). */
@@ -50,6 +51,8 @@ export interface ToolContext {
   getCurveTolerance(): number;
   /** The default length unit (`editor.units.getLength()`), for prompts. */
   getLengthUnit(): LengthUnit;
+  /** The editor's locale (`config.locale`), for number formats such as dimension values. */
+  getLocale(): Locale;
   /** A length in metres formatted in the default unit's system, for prompts. */
   formatLength(metres: number): string;
   /** The editor's template store (`editor.templates`). */

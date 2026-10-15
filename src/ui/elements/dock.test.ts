@@ -452,6 +452,7 @@ describe('<olcad-toolbar>', () => {
       'curve',
       'parallel',
       'text',
+      'dimension-linear',
       'modify',
       'move',
       'rotate',

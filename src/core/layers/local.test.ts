@@ -173,6 +173,32 @@ describe('LocalLayers', () => {
     expect(b.lm.getSource(id).getFeatures()).toHaveLength(1);
   });
 
+  it('creates dimension layers and keeps the setting through export and import', () => {
+    const { lm, local } = setup();
+    const id = local.create({
+      title: 'Dims',
+      geometryType: 'LineString',
+      fields: [],
+      dimension: { preset: 'architecture' },
+    });
+    expect(lm.getConfig(id).dimension).toMatchObject({
+      preset: 'architecture',
+      referenceScale: 100,
+    });
+    expect(local.get(id).dimension).toEqual({ preset: 'architecture' });
+    const json = local.export();
+    expect(json.layers[0]).toMatchObject({ id, dimension: { preset: 'architecture' } });
+    const other = setup().local;
+    other.import(json);
+    expect(other.get(id).dimension).toEqual({ preset: 'architecture' });
+    // Old files without the key stay plain layers; a dimension layer needs lines.
+    other.import({ ...json, layers: [{ ...json.layers[0]!, dimension: undefined }] });
+    expect(other.get(id).dimension).toBeUndefined();
+    expect(() =>
+      local.create({ title: 'Bad', geometryType: 'Point', fields: [], dimension: true }),
+    ).toThrow(/definition\.dimension/);
+  });
+
   it('rejects malformed imports without changing anything', () => {
     const { local } = setup();
     expect(() => local.import({ version: 2, layers: [] })).toThrow(LocalLayerImportError);

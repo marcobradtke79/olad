@@ -1,5 +1,5 @@
 import type { Editor } from '../../core/Editor';
-import type { FieldConfig, FieldType } from '../../core/config/types';
+import type { DimensionPreset, FieldConfig, FieldType } from '../../core/config/types';
 import { LOCAL_GEOMETRY_TYPES, type LocalGeometryType } from '../../core/layers/local';
 import { setIconButton } from './controls';
 
@@ -12,6 +12,14 @@ const GEOMETRY_LABELS: Record<LocalGeometryType, string> = {
   MultiPoint: 'Multi-point',
   MultiLineString: 'Multi-line',
   MultiPolygon: 'Multi-polygon',
+};
+
+/** The extra geometry choice that creates a dimension layer (line objects drawn as dimensions). */
+const DIMENSION_CHOICE = 'dimension';
+const PRESET_LABELS: Record<DimensionPreset, string> = {
+  architecture: 'Architecture (DIN 1356-1)',
+  surveying: 'Surveying',
+  landscape: 'Landscape',
 };
 
 /**
@@ -112,12 +120,39 @@ export class OlcadLayerEditor extends HTMLElement {
       option.textContent = GEOMETRY_LABELS[type];
       geometry.append(option);
     }
-    geometry.value = existing?.geometryType ?? 'Polygon';
+    const dimensionOption = document.createElement('option');
+    dimensionOption.value = DIMENSION_CHOICE;
+    dimensionOption.textContent = 'Dimensions';
+    geometry.append(dimensionOption);
+    geometry.value = existing?.dimension ? DIMENSION_CHOICE : (existing?.geometryType ?? 'Polygon');
     geometry.disabled = existing !== null;
+
+    // The drawing standard of a dimension layer, shown only for the Dimensions choice.
+    const preset = document.createElement('select');
+    preset.name = 'preset';
+    preset.className = 'olcad-layer-editor__control';
+    for (const [value, text] of Object.entries(PRESET_LABELS)) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = text;
+      preset.append(option);
+    }
+    const existingPreset =
+      existing?.dimension && typeof existing.dimension === 'object'
+        ? existing.dimension.preset
+        : undefined;
+    preset.value = existingPreset ?? 'surveying';
+    preset.disabled = existing !== null;
+    const presetLabel = labelled('Standard', preset);
+    const showPreset = () => {
+      presetLabel.hidden = geometry.value !== DIMENSION_CHOICE;
+    };
+    geometry.addEventListener('change', showPreset);
+    showPreset();
 
     const basics = document.createElement('div');
     basics.className = 'olcad-layer-editor__basics';
-    basics.append(labelled('Name', title), labelled('Geometry', geometry));
+    basics.append(labelled('Name', title), labelled('Geometry', geometry), presetLabel);
 
     const fieldset = document.createElement('fieldset');
     fieldset.className = 'olcad-layer-editor__fields';
@@ -192,10 +227,12 @@ export class OlcadLayerEditor extends HTMLElement {
           editor.localLayers.rename(existing.id, title.value);
           editor.localLayers.setFields(existing.id, fields, { renamed });
         } else {
+          const dimension = geometry.value === DIMENSION_CHOICE;
           editor.localLayers.create({
             title: title.value,
-            geometryType: geometry.value as LocalGeometryType,
+            geometryType: dimension ? 'LineString' : (geometry.value as LocalGeometryType),
             fields,
+            ...(dimension ? { dimension: { preset: preset.value as DimensionPreset } } : {}),
           });
         }
         this.close();

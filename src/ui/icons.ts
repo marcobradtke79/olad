@@ -122,6 +122,14 @@ export const ICONS = {
   moveToLayer: svg(
     '<path d="m12 13 8-4-8-4-8 4z"/><path d="m4 13 8 4 8-4"/><path d="m4 17 8 4 8-4"/><path d="M12 1v6M9.5 4.5 12 7l2.5-2.5"/>',
   ),
+  // Aligned dimension: oblique dimension line with ticks and extension lines.
+  dimensionAligned: svg(
+    '<path d="M4 15 15 4M6 19 19 6"/><path d="M4 15l2 4M15 4l4 2"/><path d="M8 18l-1.5-2.5M19.5 7.5 17 6"/>',
+  ),
+  // Rotated dimension: horizontal dimension line over an oblique edge, following the straightedge.
+  dimensionRotated: svg(
+    '<path d="M5 20 17 12"/><path d="M5 20V6M17 12V6"/><path d="M5 8h12"/><path d="m3.5 9.5 3-3M15.5 9.5l3-3"/>',
+  ),
   measureDistance: svg('<path d="M3 16 16 3l5 5L8 21z"/><path d="m7 12 2 2M10 9l2 2M13 6l2 2"/>'),
   measureArea: svg(
     '<path d="M4 6 13 3l7 7-4 10H6z" stroke-dasharray="2 2"/><path d="M9 10h6M9 14h6"/>',

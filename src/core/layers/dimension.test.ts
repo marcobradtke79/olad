@@ -98,6 +98,31 @@ describe('dimensionStyleFunction', () => {
     expect(drawn({ terminator: 'none' })).toHaveLength(2); // line and value only
   });
 
+  it('draws a rotated dimension along its direction with extension lines of their own length', () => {
+    // Horizontal dimension (rotation 0) between points 8 m apart east and 6 m apart north,
+    // its line 2 m north of the first point: the second point lies above the line.
+    const styles = draw(
+      { preset: 'architecture' },
+      dim([0, 0], [8, 6], { dimType: 'rotated', rotation: 0, offset: 2 }),
+    ) as Style[];
+    const { line, extensions, text } = parts(styles);
+    expect(line.getCoordinates().map(rel)).toEqual([
+      [0, 2],
+      [8, 2],
+    ]);
+    const [first, second] = extensions!.getCoordinates();
+    expect([rel(first![0]!), rel(first![1]!)]).toEqual([
+      [0, 0.1],
+      [0, 2.2],
+    ]);
+    // From the second point down to the line, gap and overrun on its own side.
+    expect([rel(second![0]!), rel(second![1]!)]).toEqual([
+      [8, 5.9],
+      [8, 1.8],
+    ]);
+    expect(text.getText()!.getText()).toBe('(8,00)');
+  });
+
   it('leaves out the value below one pixel and draws other features with the base style', () => {
     const tiny = draw({ preset: 'architecture' }, dim([0, 0], [10, 0]), 10) as Style[];
     expect(tiny.some((s) => s.getText())).toBe(false);

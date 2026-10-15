@@ -12,6 +12,11 @@ export interface DimensionValues {
   /** The definition points in the view projection. */
   points: Coordinate[];
   /**
+   * Unit vector of the measured direction in map units: from the first to the second point for
+   * `aligned`, the `rotation` angle for `rotated`.
+   */
+  direction: Coordinate;
+  /**
    * GIS value in metres, computed from the geometry as the measure tools do: the planar grid
    * distance in true-to-scale projected CRS (UTM), scale-corrected in Web Mercator.
    */
@@ -32,7 +37,8 @@ export function fieldValueOf(value: unknown): number | null {
 
 /**
  * The values of a dimension object, or `null` when the feature is not a dimension this version
- * draws (an `aligned` dimension: a two-point line, `dimType` `aligned` or unset).
+ * draws: a two-point line with `dimType` `aligned` (or unset) or `rotated` (with `rotation`).
+ * A rotated dimension measures the distance projected onto its direction.
  */
 export function dimensionValues(
   feature: Feature,
@@ -41,16 +47,34 @@ export function dimensionValues(
 ): DimensionValues | null {
   const geometry = feature.getGeometry();
   if (!(geometry instanceof LineString)) return null;
-  const type = feature.get('dimType') ?? 'aligned';
-  if (type !== 'aligned') return null;
+  const type = (feature.get('dimType') ?? 'aligned') as DimensionType;
+  if (type !== 'aligned' && type !== 'rotated') return null;
   const points = geometry.getCoordinates();
   if (points.length !== 2) return null;
-  const gis = measureLength(projection, points).total;
+  const [p1, p2] = points as [Coordinate, Coordinate];
+  const dx = p2[0]! - p1[0]!;
+  const dy = p2[1]! - p1[1]!;
+  let direction: Coordinate;
+  let measured: Coordinate[] = points;
+  if (type === 'rotated') {
+    const rotation = feature.get('rotation');
+    if (typeof rotation !== 'number' || !Number.isFinite(rotation)) return null;
+    const angle = (rotation * Math.PI) / 180;
+    direction = [Math.cos(angle), Math.sin(angle)];
+    const along = dx * direction[0]! + dy * direction[1]!;
+    measured = [p1, [p1[0]! + direction[0]! * along, p1[1]! + direction[1]! * along]];
+  } else {
+    const length = Math.hypot(dx, dy);
+    if (!(length > 0)) return null;
+    direction = [dx / length, dy / length];
+  }
+  const gis = measureLength(projection, measured).total;
   const field = fieldValueOf(feature.get('fieldValue'));
   const deviates = field !== null && Math.abs(field - gis) > config.tolerance;
   return {
     type,
     points,
+    direction,
     gis,
     field,
     value: field ?? gis,

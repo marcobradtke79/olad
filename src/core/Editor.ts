@@ -17,7 +17,8 @@ import type {
 } from './config/types';
 import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import { Editing, type HistoryState, type ValidationError } from './changes/Editing';
-import { composite, deleteFeature, type Command } from './changes/commands';
+import { composite, deleteFeature, updateProperties, type Command } from './changes/commands';
+import { dimensionValues, type DimensionValues } from './dimensions/values';
 import type { ChangeSet } from './changes/exportChangeSet';
 import { applyEditCursor, Crosshair } from './crosshair';
 import LineString from 'ol/geom/LineString';
@@ -90,6 +91,7 @@ import {
 import type Select from 'ol/interaction/Select';
 import {
   CircleTool,
+  DimensionLinearTool,
   EllipseTool,
   CurveTool,
   ParallelTool,
@@ -340,7 +342,7 @@ export interface ChangesApi {
 }
 
 export interface ToolsApi {
-  /** Registered tool ids: `select`, `draw`, `rectangle`, `circle`, `ellipse`, `regular-polygon`, `curve`, `parallel`, `text`, `modify`, `move`, `rotate`, `scale`, `offset`, `trim`, `extend`, `mirror`, `template-copy`, `template-insert`. */
+  /** Registered tool ids: `select`, `draw`, `rectangle`, `circle`, `ellipse`, `regular-polygon`, `curve`, `parallel`, `text`, `dimension-linear`, `modify`, `move`, `rotate`, `scale`, `offset`, `trim`, `extend`, `mirror`, `template-copy`, `template-insert`. */
   list(): string[];
   getActive(): string | null;
   /** The options the active tool works with, for example `{ type: 'LineString' }` for `draw`. */
@@ -413,6 +415,7 @@ const LAYER_BOUND_TOOLS = [
   'curve',
   'parallel',
   'text',
+  'dimension-linear',
 ];
 
 /**
@@ -481,6 +484,27 @@ export interface TemplatesApi {
  * each, fully editable, never in the change set. Kept in memory; `export` / `import` exchange
  * plain JSON for browser storage (`persistLocalLayers` in the UI package).
  */
+/**
+ * Dimensions in dimension layers (`layers[].dimension`): their values and the field value.
+ * Dimensions are drawn with the `dimension-linear` tool and are ordinary objects otherwise.
+ */
+export interface DimensionsApi {
+  /** Whether the feature is an object of a dimension layer. */
+  isDimension(feature: Feature): boolean;
+  /** GIS value, field value, shown value and status in the current view projection, or `null`. */
+  values(feature: Feature): DimensionValues | null;
+  /**
+   * Set the field value in metres, or clear it with `null`: one `updateProperties` command.
+   * `false` when the feature is not an editable dimension or validation rejects the value.
+   */
+  setFieldValue(feature: Feature, metres: number | null): boolean;
+  /**
+   * The dimension the command line edits: edit mode on, no tool running and exactly one
+   * selected, updatable dimension. `null` otherwise.
+   */
+  inputTarget(): Feature | null;
+}
+
 export interface LocalLayersApi {
   list(): LocalLayerInfo[];
   /** Throws for an unknown id. */
@@ -555,6 +579,8 @@ export type InputResult =
   | { ok: true; text: string; length: number }
   /** Text taken by the tool's current step (`Tool.handleText`), for example a template name. */
   | { ok: true; text: string; kind: 'text' }
+  /** The field value (metres, `null` = cleared) of the selected dimension (`dimensions.inputTarget`). */
+  | { ok: true; text: string; fieldValue: number | null }
   | { ok: false; text: string; code: string; error: string };
 
 /**
@@ -596,6 +622,7 @@ export interface Editor {
   readonly templates: TemplatesApi;
   readonly measurements: MeasurementsApi;
   readonly localLayers: LocalLayersApi;
+  readonly dimensions: DimensionsApi;
   readonly import: ImportApi;
   readonly units: UnitsApi;
   /**
@@ -656,6 +683,7 @@ class EditorImpl implements Editor {
   readonly templates: TemplatesApi;
   readonly measurements: MeasurementsApi;
   readonly localLayers: LocalLayersApi;
+  readonly dimensions: DimensionsApi;
   readonly import: ImportApi;
   readonly units: UnitsApi;
 
@@ -778,6 +806,7 @@ class EditorImpl implements Editor {
         getProjection: () => this.getProjection(),
         getCurveTolerance: () => this.config.curves.tolerance,
         getLengthUnit: () => this.lengthUnit(),
+        getLocale: () => config.locale,
         formatLength: (metres) => formatLengthIn(metres, this.lengthUnit()),
         templates: this.templateStore,
         done: () => this.toolManager.deactivate(),
@@ -795,6 +824,7 @@ class EditorImpl implements Editor {
       new CurveTool(),
       new ParallelTool(),
       new TextTool(),
+      new DimensionLinearTool(),
       new ModifyTool(),
       new MoveTool(),
       new RotateTool(),
@@ -1160,6 +1190,33 @@ class EditorImpl implements Editor {
       emit: (change) => this.emitter.emit('locallayerchange', change),
     });
     this.localLayerStore = local;
+    const isDimension = (feature: Feature): boolean => {
+      const layer = this.layerManager.layerOf(feature);
+      return layer !== undefined && Boolean(this.layerManager.getConfig(layer).dimension);
+    };
+    this.dimensions = {
+      isDimension,
+      values: (feature) => {
+        const layer = this.layerManager.layerOf(feature);
+        const config =
+          layer === undefined ? undefined : this.layerManager.getConfig(layer).dimension;
+        return config ? dimensionValues(feature, config, this.getProjection()) : null;
+      },
+      setFieldValue: (feature, metres) => {
+        if (!isDimension(feature) || !this.editing.canEdit('update', feature)) return false;
+        return this.editing.execute(
+          updateProperties(feature, { fieldValue: metres === null ? undefined : metres }),
+        );
+      },
+      inputTarget: () => {
+        if (!this.config.editMode || this.toolManager.getActive() !== null) return null;
+        const selected = this.selectionManager.get();
+        if (selected.length !== 1) return null;
+        const feature = selected[0]!;
+        return isDimension(feature) && this.editing.canEdit('update', feature) ? feature : null;
+      },
+    };
+
     this.localLayers = {
       list: () => local.list(),
       get: (id) => local.get(id),
@@ -1270,8 +1327,20 @@ class EditorImpl implements Editor {
     ) {
       return { ok: true, text, kind: 'text' };
     }
+    // No tool and one selected dimension: a length is its field value, `-` clears it.
+    const dimension = this.dimensions.inputTarget();
+    if (dimension && text.trim() === '-') {
+      return this.dimensions.setFieldValue(dimension, null)
+        ? { ok: true, text, fieldValue: null }
+        : fail('input-not-accepted');
+    }
     const parsed = parseInput(text, this.lengthUnit());
     if (!parsed) return fail('input-invalid');
+    if (dimension && parsed.kind === 'length') {
+      return this.dimensions.setFieldValue(dimension, parsed.distance)
+        ? { ok: true, text, fieldValue: parsed.distance }
+        : fail('input-not-accepted');
+    }
     if (!this.toolsRunnable() || this.toolManager.getActive() === null)
       return fail('input-no-tool');
     if (parsed.kind === 'length') {

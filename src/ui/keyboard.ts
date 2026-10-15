@@ -10,6 +10,7 @@ const STEPPING_TOOLS = [
   'curve',
   'parallel',
   'text',
+  'dimension-linear',
   'move',
   'modify',
   'rotate',

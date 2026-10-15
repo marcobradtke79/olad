@@ -2,7 +2,7 @@ import type Feature from 'ol/Feature';
 import GeoJSON from 'ol/format/GeoJSON';
 import type VectorSource from 'ol/source/Vector';
 import { ConfigError, validateLayerConfig } from '../config/validate';
-import type { FieldConfig, GeometryType, LayerConfig } from '../config/types';
+import type { DimensionConfig, FieldConfig, GeometryType, LayerConfig } from '../config/types';
 
 /** Geometry types a local layer may have. */
 export const LOCAL_GEOMETRY_TYPES = [
@@ -21,6 +21,11 @@ export interface LocalLayerDefinition {
   title: string;
   geometryType: LocalGeometryType;
   fields: FieldConfig[];
+  /**
+   * Makes it a dimension layer (`layers[].dimension`), for example `{ preset: 'architecture' }`.
+   * Needs `geometryType: 'LineString'`.
+   */
+  dimension?: boolean | DimensionConfig;
 }
 
 /** A local layer as listed: its definition plus id and object count. */
@@ -209,6 +214,7 @@ export class LocalLayers {
         title: layer.title,
         geometryType: layer.geometryType,
         fields: layer.fields,
+        ...(layer.dimension ? { dimension: layer.dimension } : {}),
       });
       const features = format.readFeatures(layer.features, {
         dataProjection: 'EPSG:4326',
@@ -236,6 +242,7 @@ export class LocalLayers {
       editable: true,
       snappable: true,
       schema: { fields: structuredClone(def.fields) },
+      ...(def.dimension ? { dimension: structuredClone(def.dimension) } : {}),
     });
     this.ctx.setLocal(id, true);
     this.definitions.set(id, def);
@@ -289,17 +296,25 @@ function normalize(definition: LocalLayerDefinition, path: string): LocalLayerDe
     }
     return copy;
   });
-  // Field types, enum values, uniqueness: the same rules as a configured layer.
+  const dimension = definition.dimension ? structuredClone(definition.dimension) : undefined;
+  // Field types, enum values, uniqueness, dimension settings: the same rules as a configured
+  // layer (a dimension layer needs a line geometry type).
   validateLayerConfig(
     {
       id: 'local',
       geometryType: definition.geometryType,
       source: { features: [] },
       schema: { fields },
+      ...(dimension ? { dimension } : {}),
     },
     path,
   );
-  return { title, geometryType: definition.geometryType, fields };
+  return {
+    title,
+    geometryType: definition.geometryType,
+    fields,
+    ...(dimension ? { dimension } : {}),
+  };
 }
 
 function parse(json: unknown): (LocalLayerDefinition & {

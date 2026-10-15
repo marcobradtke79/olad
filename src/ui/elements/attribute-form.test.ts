@@ -39,6 +39,16 @@ const bare = resolveLayer({
   source: { features: [] },
 });
 
+const dims = resolveLayer({
+  id: 'dims',
+  title: 'Dimensions',
+  geometryType: 'LineString',
+  editable: true,
+  source: { features: [] },
+  dimension: true,
+  schema: { fields: [{ name: 'note', type: 'string' }] },
+});
+
 const draft = resolveLayer({
   id: 'draft',
   title: 'Draft',
@@ -51,7 +61,7 @@ function fakeEditor(editMode = true) {
   const emitter = new Emitter<EditorEvents>();
   let selected: Feature[] = [];
   const layerOf = new Map<Feature, string>();
-  const configs = { hydrants, bare, draft };
+  const configs = { hydrants, bare, draft, dims };
   const editor = {
     isEditMode: () => editMode,
     canEdit: (_op: string, f: Feature) =>
@@ -167,6 +177,24 @@ describe('<olcad-attribute-form>', () => {
     // Nothing changed: no command.
     el.querySelector('form')!.requestSubmit();
     expect(editor.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the field value and the free text for dimension layers', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    const feature = editor.place('dims', { fieldValue: 12.47, note: 'x' });
+    editor.selection.set([feature]);
+    expect(
+      Array.from(el.querySelectorAll<HTMLElement>('[data-field]'), (f) => f.dataset.field),
+    ).toEqual(['fieldValue', 'text', 'note']);
+    expect((control(el, 'fieldValue') as HTMLInputElement).value).toBe('12.47');
+    (control(el, 'fieldValue') as HTMLInputElement).value = '';
+    (control(el, 'text') as HTMLInputElement).value = '{value} lt. Bestand';
+    el.querySelector('form')!.requestSubmit();
+    expect(editor.execute.mock.calls[0]![0]).toMatchObject({
+      type: 'updateProperties',
+      properties: { fieldValue: undefined, text: '{value} lt. Bestand' },
+    });
   });
 
   it('blocks submit on native validation errors and shows core rejections', () => {
