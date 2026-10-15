@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-15
+
+### Added
+
+- `ol-cad/ui` adds every `<olcad-*>` tag to TypeScript's `HTMLElementTagNameMap`, so `querySelector('olcad-toolbar')` and `createElement('olcad-dock')` return the element classes.
+- `isLocalLayerPersisted(editor)` and `onLocalLayerPersistenceChange(listener)` tell whether `persistLocalLayers` keeps an editor's local layers in browser storage.
+- CSS custom property `--olcad-toolbar-layer-width` (default `12em`), the width of the toolbar's "Layer: …" label.
+- `docs/frameworks.md`: React and Vue sections (components, JSX typings, `shallowRef`, bundle size); the Angular example uses a column layout, a basemap title and explains what the change counter counts. `docs/change-set.md` states that local layers and the draft layer are not part of the change set; `docs/ui.md` says how to size `<olcad-dock>`.
+
+### Fixed
+
+- React 19 crashed with "Cannot set property name … which has only a getter", and Vue warned and dropped the attribute, for `<olcad-panel name>` / `<olcad-toolbar name>`: `name`, `reveal` (`<olcad-layer-list>`, `<olcad-attribute-form>`) and `popup` (`<olcad-attribute-form>`) are now properties with setters that reflect to the attribute.
+- The basemap was drawn dimmed in the dark theme, because the browser darkens the map canvas under `color-scheme: dark`; the theme keeps `color-scheme: light` on `.ol-viewport canvas`.
+- `<olcad-layer-list>`: the Edit button of the active layer cleared the layer while edit mode was off; it now switches edit mode back on, and it shows as pressed only while edit mode is on. The storage detail and tooltips of local layers said "this browser" although the layers were in memory; they now say `memory (lost on reload)` unless `persistLocalLayers` runs. The New layer tooltip says "Create a local layer".
+- `<olcad-toolbar>`: the buttons after the "Layer: …" label moved when the active layer changed; the label has a fixed width, cuts long names off with an ellipsis and shows them in full as a tooltip.
+
 ## [0.1.0] - 2026-10-14
 
 First public release, on GitHub (package file attached to the release; not on npm).
@@ -155,5 +171,6 @@ First public release, on GitHub (package file attached to the release; not on np
 - Local test server (`pnpm serve:test`) with `/config`, `/data/:layer`, `/changes` (with `?fail=1`), `/changes/log`, `/reset` and a reference test page.
 - Test that fails when `docs/configuration.md` and the `EditorConfig` type disagree.
 
-[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/marcobradtke79/olad/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/marcobradtke79/olad/releases/tag/v0.1.0
