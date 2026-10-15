@@ -340,6 +340,11 @@ export interface DimensionConfig {
   angleUnit?: DimensionAngleUnit;
   /** Largest difference between field and GIS angle, in `angleUnit`, before it deviates. Default `0.1`. */
   angleTolerance?: number;
+  /**
+   * Associative dimensions: when a referenced object changes, the dimension follows it in the
+   * same command (one undo step) instead of turning stale. Default `false`.
+   */
+  associative?: boolean;
 }
 
 export type ResolvedDimensionConfig = Required<DimensionConfig>;

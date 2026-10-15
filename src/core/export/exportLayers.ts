@@ -45,6 +45,11 @@ export interface ExportOptions {
   projection?: string;
   /** Coordinate decimals. Default 7 for degrees, 3 for metric CRS. */
   decimals?: number;
+  /**
+   * Write the objects of dimension layers as drawn (`editor.exportLayers` only): their lines,
+   * arrow heads, marks and text points (`drawnDimensions`) instead of their definition lines.
+   */
+  dimensionsAsDrawn?: boolean;
 }
 
 export interface ExportResult {

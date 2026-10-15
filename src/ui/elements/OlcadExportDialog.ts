@@ -140,7 +140,17 @@ export class OlcadExportDialog extends HTMLElement {
     crsLabel.append('Coordinate system ', crs);
     const note = document.createElement('p');
     note.className = 'olcad-export-dialog__note';
-    formatSet.append(formats, crsLabel, note);
+    // Dimension layers: their dimensions as drawn (lines, arrow heads, texts) for CAD or print.
+    const drawn = document.createElement('input');
+    drawn.type = 'checkbox';
+    drawn.name = 'drawn';
+    const drawnLabel = document.createElement('label');
+    drawnLabel.className = 'olcad-export-dialog__drawn';
+    drawnLabel.append(drawn, ' Dimensions as drawn (lines and texts)');
+    drawnLabel.hidden = !editor.layers
+      .list()
+      .some((layer) => editor.layers.getConfig(layer.id).dimension);
+    formatSet.append(formats, crsLabel, drawnLabel, note);
 
     const error = document.createElement('p');
     error.className = 'olcad-export-dialog__error';
@@ -203,6 +213,7 @@ export class OlcadExportDialog extends HTMLElement {
         result = editor.exportLayers(ids, {
           format: this.format,
           ...(crs.disabled ? {} : { projection: crs.value }),
+          ...(drawn.checked ? { dimensionsAsDrawn: true } : {}),
         });
       } catch (e) {
         error.textContent = e instanceof Error ? e.message : String(e);

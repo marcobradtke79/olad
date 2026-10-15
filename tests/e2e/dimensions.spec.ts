@@ -719,3 +719,143 @@ test.describe('survey dimensions', () => {
     await expect(page.locator('olcad-feature-table tbody')).toContainText('+112.45');
   });
 });
+
+test.describe('dimension grips, associative mode and drawn export', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await request.post('/reset');
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('dimensions').featureCount))
+      .toBe(4);
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('parcels').featureCount))
+      .toBe(2);
+    await page.evaluate(() => window.editor.setEditMode(true));
+  });
+
+  test('an associative layer follows a moved corner in the same undo step', async ({ page }) => {
+    const ring = await parcelRing(page, 1);
+    await page.evaluate(
+      ([a, b]) => {
+        const e = window.editor;
+        e.layers.add({
+          id: 'assoc',
+          title: 'Associative',
+          geometryType: 'LineString',
+          source: { features: [] },
+          editable: true,
+          dimension: { associative: true },
+        });
+        const template = e.layers.getFeatures('dimensions')[0]!;
+        const Line = template.getGeometry()!.constructor as new (c: number[][]) => unknown;
+        const Dim = template.constructor as new (p: Record<string, unknown>) => typeof template;
+        const dim = new Dim({
+          geometry: new Line([a!, b!]),
+          dimType: 'aligned',
+          offset: 5,
+          refs: [
+            { layer: 'parcels', id: 1, kind: 'vertex', path: [0, 0] },
+            { layer: 'parcels', id: 1, kind: 'vertex', path: [0, 1] },
+          ],
+        });
+        dim.setId('assoc-1');
+        e.execute(window.olcad.insertFeature('assoc', dim));
+      },
+      [ring[0]!, ring[1]!],
+    );
+    const state = () =>
+      page.evaluate(() => {
+        const e = window.editor;
+        const dim = e.layers.getFeatures('assoc')[0]!;
+        return {
+          start: (
+            dim.getGeometry() as unknown as { getCoordinates(): number[][] }
+          ).getCoordinates()[0]!,
+          stale: e.dimensions.isStale(dim),
+        };
+      });
+    await moveParcelCorner(page, 0, -2);
+    const moved = await state();
+    const corner = (await parcelRing(page, 1))[0]!;
+    expect(moved.stale).toBe(false);
+    expect(moved.start[0]).toBeCloseTo(corner[0]!, 6);
+    expect(moved.start[1]).toBeCloseTo(corner[1]!, 6);
+    // One undo reverts the corner and the dimension together.
+    await page.evaluate(() => window.editor.undo());
+    const undone = await state();
+    expect(undone.start[0]).toBeCloseTo(ring[0]![0]!, 6);
+    expect((await parcelRing(page, 1))[0]![0]).toBeCloseTo(ring[0]![0]!, 6);
+    expect(undone.stale).toBe(false);
+    // The seed layer is not associative: its dimensions turn stale instead.
+    await moveParcelCorner(page, 0, -2);
+    await expect.poll(() => staleIds(page).then((ids) => ids.sort())).toEqual([1001, 1002]);
+  });
+
+  test('the Vertices tool moves a dimension line through its grip', async ({ page }) => {
+    const grip = await page.evaluate(() => {
+      const e = window.editor;
+      const dim = e.layers.getFeatures('dimensions').find((f) => f.getId() === 1002)!;
+      e.map.getView().fit(dim.getGeometry()!.getExtent(), { padding: [200, 200, 200, 200] });
+      e.selection.set([dim]);
+      const values = e.dimensions.values(dim)!;
+      const grips = window.olcad.dimensionGrips(dim, values, e.map.getView().getProjection());
+      return { at: grips.find((g) => g.kind === 'line')!.at, offset: dim.get('offset') as number };
+    });
+    await page.evaluate(() => window.editor.tools.activate('modify'));
+    const point = await screenPoint(page, grip.at);
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.click(point.x, point.y);
+    const result = await page.evaluate(() => {
+      const e = window.editor;
+      const dim = e.layers.getFeatures('dimensions').find((f) => f.getId() === 1002)!;
+      const [p1] = (
+        dim.getGeometry() as unknown as { getCoordinates(): number[][] }
+      ).getCoordinates();
+      // Place the line 20 m off the measured points (the seed has 12 m), on the same side as before.
+      const values = e.dimensions.values(dim)!;
+      const n = [-values.direction[1]!, values.direction[0]!];
+      const projection = e.map.getView().getProjection().getCode();
+      const sign = Math.sign((dim.get('offset') as number) || 1);
+      const target = window.olcad.offsetMetres(
+        projection,
+        p1!,
+        n[0]! * 20 * sign,
+        n[1]! * 20 * sign,
+      );
+      e.input(`${target[0]},${target[1]}`);
+      return {
+        offset: dim.get('offset') as number,
+        changes: e.changes.get().changes.filter((c) => c.layer === 'dimensions'),
+      };
+    });
+    expect(Math.abs(result.offset)).toBeCloseTo(20, 1);
+    expect(result.changes).toEqual([
+      expect.objectContaining({ op: 'update', id: 1002, changed: ['offset'] }),
+    ]);
+  });
+
+  test('export writes dimensions as drawn lines and texts', async ({ page }) => {
+    const plain = await page.evaluate(() =>
+      JSON.parse(window.editor.exportLayers(['dimensions'], { format: 'geojson' }).content),
+    );
+    const drawn = await page.evaluate(() =>
+      JSON.parse(
+        window.editor.exportLayers(['dimensions'], { format: 'geojson', dimensionsAsDrawn: true })
+          .content,
+      ),
+    );
+    expect(plain.features).toHaveLength(4);
+    const parts = drawn.features.map((f: { properties: { part: string } }) => f.properties.part);
+    expect(parts).toContain('line');
+    const texts = drawn.features.filter(
+      (f: { properties: { part: string } }) => f.properties.part === 'text',
+    );
+    expect(texts.map((t: { properties: { text: string } }) => t.properties.text)).toContain(
+      '166.98',
+    );
+    expect(texts.every((t: { geometry: { type: string } }) => t.geometry.type === 'Point')).toBe(
+      true,
+    );
+  });
+});

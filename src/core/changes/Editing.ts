@@ -51,6 +51,12 @@ export interface EditingOptions {
    * `accept` and `discard` leave their features alone. Default: every layer is tracked.
    */
   isTracked?(layer: string): boolean;
+  /**
+   * Commands that follow from an applied command and belong to the same undo step, for example
+   * associative dimensions following a moved object. Called with the applied atomic commands;
+   * follow-ups that fail validation are left out without rejecting the command.
+   */
+  followUp?(applied: AtomicCommand[]): Command | null;
 }
 
 /** What `undo` needs to revert an applied atomic command, and `redo` to apply it again. */
@@ -101,10 +107,19 @@ export class Editing {
         return false;
       }
     }
-    const record =
+    let record: Record_ =
       command.type === 'composite'
         ? { type: 'composite' as const, records: atomics.map((c) => this.apply(c)) }
         : this.apply(command);
+    // Follow-ups (associative dimensions) join the same undo step.
+    const follow = this.options.followUp?.(atomics);
+    if (follow) {
+      const extra = flatten(follow).filter((atomic) => this.validate(atomic, follow) === null);
+      if (extra.length > 0) {
+        const base = record.type === 'composite' ? record.records : [record];
+        record = { type: 'composite', records: [...base, ...extra.map((c) => this.apply(c))] };
+      }
+    }
     this.undoStack.push(record);
     this.redoStack.length = 0;
     this.notify();

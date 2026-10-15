@@ -12,7 +12,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function fakeEditor() {
+function fakeEditor(dimensionLayer: string | null = null) {
   const emitter = new Emitter<EditorEvents>();
   const result = {
     content: '{}',
@@ -28,6 +28,7 @@ function fakeEditor() {
         { id: 'parcels', title: 'Parcels', featureCount: 2 },
         { id: 'roads', title: 'Roads', featureCount: 0 },
       ],
+      getConfig: (id: string) => (id === dimensionLayer ? { dimension: {} } : {}),
     },
     config: {
       view: { projection: 'EPSG:3857' },
@@ -135,5 +136,20 @@ describe('<olcad-export-dialog>', () => {
       'Unknown projection EPSG:9999',
     );
     expect(el.isOpen).toBe(true);
+  });
+
+  it('offers dimensions as drawn only with a dimension layer and passes the option', () => {
+    expect(q<HTMLElement>(mount(fakeEditor()), '.olcad-export-dialog__drawn').hidden).toBe(true);
+    const editor = fakeEditor('parcels');
+    const el = mount(editor);
+    expect(q<HTMLElement>(el, '.olcad-export-dialog__drawn').hidden).toBe(false);
+    q<HTMLInputElement>(el, 'input[name="drawn"]').checked = true;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    q<HTMLFormElement>(el, 'form').dispatchEvent(new Event('submit', { cancelable: true }));
+    expect(editor.exportLayers).toHaveBeenCalledWith(['parcels'], {
+      format: 'geojson',
+      projection: 'EPSG:4326',
+      dimensionsAsDrawn: true,
+    });
   });
 });

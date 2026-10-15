@@ -360,6 +360,7 @@ const DIMENSION_KEYS = [
   'font',
   'angleUnit',
   'angleTolerance',
+  'associative',
 ] as const;
 const DIMENSION_GEOMETRY_TYPES = ['LineString', 'Any'];
 
@@ -372,6 +373,7 @@ function checkDimension(dimension: unknown, path: string): void {
   optional(oneOf(['tick', 'arrow', 'dot', 'none']))(d.terminator, `${path}.terminator`);
   optional(oneOf(['brackets', 'plain']))(d.showComputed, `${path}.showComputed`);
   optional(oneOf(['deg', 'gon']))(d.angleUnit, `${path}.angleUnit`);
+  optional(boolean)(d.associative, `${path}.associative`);
   for (const key of ['color', 'deviationColor', 'font']) {
     optional(string)(d[key], `${path}.${key}`);
   }

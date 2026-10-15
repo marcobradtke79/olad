@@ -22,6 +22,7 @@ import {
   deleteFeature,
   updateGeometry,
   updateProperties,
+  type AtomicCommand,
   type Command,
 } from './changes/commands';
 import {
@@ -30,6 +31,7 @@ import {
   referencesOf,
   remapReferences,
 } from './dimensions/references';
+import { drawnDimensions } from './dimensions/drawn';
 import { dimensionValues, fromAngleUnit, type DimensionValues } from './dimensions/values';
 import type { ChangeSet } from './changes/exportChangeSet';
 import { applyEditCursor, Crosshair } from './crosshair';
@@ -802,6 +804,7 @@ class EditorImpl implements Editor {
       // Draft objects and local layers stay in the client: they never enter the change set.
       isTracked: (layer) =>
         (!config.draft.enabled || layer !== config.draft.id) && !this.layerManager.isLocal(layer),
+      followUp: (applied) => this.associativeFollowUp(applied),
       events: {
         change: (changeSet) => {
           // Features removed by a command, discard or undo leave the selection.
@@ -1355,11 +1358,20 @@ class EditorImpl implements Editor {
   }
 
   exportLayers(layerIds: string[], options: ExportOptions): ExportResult {
-    const layers = layerIds.map((id) => ({
-      id,
-      title: this.layerManager.getConfig(id).title,
-      features: this.layerManager.getSource(id).getFeatures(),
-    }));
+    const projection = this.getProjection();
+    const layers = layerIds.map((id) => {
+      const config = this.layerManager.getConfig(id);
+      const features = this.layerManager.getSource(id).getFeatures();
+      return {
+        id,
+        title: config.title,
+        // Dimensions as drawn: lines, arrow heads, marks and texts.
+        features:
+          options.dimensionsAsDrawn && config.dimension
+            ? drawnDimensions(features, config.dimension, projection, this.config.locale)
+            : features,
+      };
+    });
     return exportLayers(layers, options, this.getProjection());
   }
 
@@ -1612,6 +1624,43 @@ class EditorImpl implements Editor {
     this.staleDimensions = next;
     for (const feature of [...changed, ...cleared]) feature.changed();
     this.emitter.emit('dimensionstale', { features: [...next] });
+  }
+
+  /**
+   * Associative dimensions: after objects were reshaped, the dimensions of associative layers
+   * that reference them and no longer match follow them (one update command each), as part of
+   * the same undo step. Dimensions reshaped by the command itself are left alone.
+   */
+  private associativeFollowUp(applied: AtomicCommand[]): Command | null {
+    const touched = new Set<string>();
+    const reshaped = new Set<Feature>();
+    for (const atomic of applied) {
+      if (atomic.type !== 'updateGeometry') continue;
+      reshaped.add(atomic.feature);
+      const layer = this.layerManager.layerOf(atomic.feature);
+      const id = atomic.feature.getId();
+      if (layer !== undefined && id !== undefined) touched.add(`${layer}\u0000${String(id)}`);
+    }
+    if (touched.size === 0) return null;
+    const projection = this.getProjection();
+    const find = (layer: string, id: string | number) => this.findFeature(layer, id);
+    const commands: Command[] = [];
+    for (const info of this.layerManager.list()) {
+      if (!this.layerManager.getConfig(info.id).dimension?.associative) continue;
+      for (const feature of this.layerManager.getSource(info.id).getFeatures()) {
+        if (reshaped.has(feature)) continue;
+        const refs = referencesOf(feature);
+        if (!refs.some((ref) => ref && touched.has(`${ref.layer}\u0000${String(ref.id)}`)))
+          continue;
+        const at = (feature.getGeometry() as LineString | undefined)?.getFirstCoordinate();
+        if (!at || !dimensionIsStale(feature, find, 0.001 * unitsPerMetre(projection, at)))
+          continue;
+        const command = this.dimensionUpdate(feature);
+        if (command) commands.push(command);
+      }
+    }
+    if (commands.length === 0) return null;
+    return commands.length === 1 ? commands[0]! : composite(commands, 'associative dimensions');
   }
 
   /** The command that moves a dimension onto its referenced points, or `null`. */

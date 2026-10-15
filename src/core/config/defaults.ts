@@ -60,6 +60,7 @@ export const DIMENSION_DEFAULTS: Omit<
   deviationColor: '#dc2626',
   font: 'sans-serif',
   angleTolerance: 0.1,
+  associative: false,
 };
 
 /** Per-preset defaults: the typical plan scale and end mark of each discipline. */

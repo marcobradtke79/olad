@@ -258,7 +258,8 @@
         "deviationColor": "#f87171",
         "font": "system-ui, sans-serif",
         "angleUnit": "deg",
-        "angleTolerance": 0.2
+        "angleTolerance": 0.2,
+        "associative": false
       },
       "schema": {
         "fields": [

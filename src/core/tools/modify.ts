@@ -3,9 +3,14 @@ import Feature from 'ol/Feature';
 import type Geometry from 'ol/geom/Geometry';
 import Point from 'ol/geom/Point';
 import type Interaction from 'ol/interaction/Interaction';
-import type VectorLayer from 'ol/layer/Vector';
+import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import { composite, updateGeometry, type Command } from '../changes/commands';
+import { composite, updateGeometry, updateProperties, type Command } from '../changes/commands';
+import type { ResolvedDimensionConfig } from '../config/types';
+import { dimensionGrips, moveGrip, type DimensionGrip } from '../dimensions/grips';
+import { referenceFor } from '../dimensions/references';
+import { dimensionValues, type DimensionValues } from '../dimensions/values';
+import { dimensionStyleFunction } from '../layers/dimension';
 import {
   insertVertexAfter,
   listVertices,
@@ -26,7 +31,7 @@ export type ModifyStep = 'select' | 'idle' | 'placing';
 /** Prompt shown by the input bar for each step. */
 export const MODIFY_PROMPTS: Record<ModifyStep, string> = {
   select: 'Select the object to edit: click it',
-  idle: 'Click a vertex to move it or a segment to insert one; Alt+click removes a vertex; Enter finishes',
+  idle: 'Click a vertex to move it or a segment to insert one; Alt+click removes a vertex; Enter finishes (a dimension: its grips move points, line and value)',
   placing:
     'New position: click on the map, or type x,y · @dx,dy · @distance<angle · distance; Escape drops the vertex',
 };
@@ -58,6 +63,12 @@ export class ModifyTool extends BaseTool {
   private feature: Feature | null = null;
   private pick: VertexPick | null = null;
   private hovered: Vertex | null = null;
+  /** A dimension's grip under the pointer, and the one being placed. */
+  private hoveredGrip: DimensionGrip | null = null;
+  private grip: DimensionGrip | null = null;
+  /** The dimension being edited, drawn in its layer's style while a grip is placed. */
+  private dimensionPreview: VectorLayer<VectorSource<Feature>> | null = null;
+  private readonly dimensionSource = new VectorSource<Feature>();
   private select: Interaction | null = null;
   private pointer: PointPickInteraction | null = null;
   private preview: VectorLayer<VectorSource<Feature>> | null = null;
@@ -149,7 +160,9 @@ export class ModifyTool extends BaseTool {
 
   /** While placing, relative input, the angle lock and the perpendicular snap work from where the vertex was. */
   override referencePoint(): number[] | null {
-    return this.step === 'placing' && this.pick ? this.pick.origin.slice() : null;
+    if (this.step !== 'placing') return null;
+    if (this.grip) return this.grip.at.slice();
+    return this.pick ? this.pick.origin.slice() : null;
   }
 
   override setSuspended(suspended: boolean): void {
@@ -169,6 +182,72 @@ export class ModifyTool extends BaseTool {
     return this.ctx ? pickTolerance(this.ctx) : 0;
   }
 
+  /** The edited object as a dimension: its layer's settings and values, or `null`. */
+  private dimension(): { config: ResolvedDimensionConfig; values: DimensionValues } | null {
+    const ctx = this.ctx;
+    const feature = this.feature;
+    if (!ctx || !feature) return null;
+    const layer = ctx.layers.layerOf(feature);
+    const config = layer === undefined ? undefined : ctx.layers.getConfig(layer).dimension;
+    const values = config && dimensionValues(feature, config, ctx.getProjection());
+    return config && values ? { config, values } : null;
+  }
+
+  /** The grip of the edited dimension nearest to the raw pointer, within the pick tolerance. */
+  private gripAt(raw: Coordinate): DimensionGrip | null {
+    const dimension = this.dimension();
+    if (!dimension || !this.ctx || !this.feature) return null;
+    let best: DimensionGrip | null = null;
+    let bestDistance = this.tolerance();
+    for (const grip of dimensionGrips(this.feature, dimension.values, this.ctx.getProjection())) {
+      const distance = Math.hypot(grip.at[0]! - raw[0]!, grip.at[1]! - raw[1]!);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = grip;
+      }
+    }
+    return best;
+  }
+
+  /** The dimension with `grip` moved to `coordinate`, and the command that does it. */
+  private gripChange(coordinate: Coordinate): { preview: Feature; command: Command } | null {
+    const ctx = this.ctx;
+    const feature = this.feature;
+    const dimension = this.dimension();
+    const grip = this.grip;
+    if (!ctx || !feature || !dimension || !grip) return null;
+    const reference =
+      grip.kind === 'point' ? referenceFor(ctx.getSnap?.() ?? null, coordinate) : null;
+    const change = moveGrip(
+      feature,
+      dimension.values,
+      grip,
+      coordinate,
+      ctx.getProjection(),
+      reference,
+    );
+    if (!change) return null;
+    const preview = feature.clone();
+    if (change.geometry) preview.setGeometry(change.geometry);
+    preview.setProperties(change.properties);
+    const gis = change.geometry
+      ? dimensionValues(preview, dimension.config, ctx.getProjection())?.gis
+      : undefined;
+    const properties = {
+      ...change.properties,
+      ...(gis === undefined || gis === null ? {} : { gisValue: Math.round(gis * 1e6) / 1e6 }),
+    };
+    const commands: Command[] = [
+      ...(change.geometry ? [updateGeometry(feature, change.geometry)] : []),
+      ...(Object.keys(properties).length ? [updateProperties(feature, properties)] : []),
+    ];
+    if (commands.length === 0) return null;
+    return {
+      preview,
+      command: commands.length === 1 ? commands[0]! : composite(commands, 'move dimension grip'),
+    };
+  }
+
   private onClick(coordinate: Coordinate, raw: Coordinate, alt: boolean): void {
     if (this.step === 'placing') {
       this.place(coordinate);
@@ -176,6 +255,15 @@ export class ModifyTool extends BaseTool {
     }
     const geometry = this.feature?.getGeometry();
     if (this.step !== 'idle' || !geometry) return;
+    // A dimension is edited through its grips, not its vertices.
+    if (this.dimension()) {
+      const grip = this.gripAt(raw);
+      if (!grip || alt) return;
+      this.grip = grip;
+      this.goTo('placing');
+      this.updatePreview(coordinate);
+      return;
+    }
     const tolerance = this.tolerance();
     const vertex = nearestVertex(geometry, raw, tolerance);
     if (vertex) {
@@ -207,6 +295,21 @@ export class ModifyTool extends BaseTool {
     }
     const geometry = this.feature?.getGeometry();
     if (this.step !== 'idle' || !geometry) return;
+    const dimension = this.dimension();
+    if (dimension && this.ctx && this.feature) {
+      // All grips, the one under the pointer highlighted.
+      this.hoveredGrip = this.gripAt(raw);
+      this.previewSource.clear(true);
+      this.previewSource.addFeatures(
+        dimensionGrips(this.feature, dimension.values, this.ctx.getProjection()).map((grip) =>
+          marker(
+            grip.at,
+            grip === this.hoveredGrip || sameGrip(grip, this.hoveredGrip) ? 'hover' : 'picked',
+          ),
+        ),
+      );
+      return;
+    }
     this.hovered = nearestVertex(geometry, raw, this.tolerance());
     this.previewSource.clear(true);
     if (this.hovered) this.previewSource.addFeature(marker(this.hovered.coordinate, 'hover'));
@@ -219,6 +322,12 @@ export class ModifyTool extends BaseTool {
   }
 
   private place(coordinate: Coordinate): void {
+    if (this.grip) {
+      const change = this.gripChange(coordinate);
+      this.goTo('idle');
+      if (change) this.ctx?.execute(change.command);
+      return;
+    }
     const { pick, feature, ctx } = this;
     this.goTo('idle');
     if (!pick || !feature || !ctx) return;
@@ -236,6 +345,13 @@ export class ModifyTool extends BaseTool {
   }
 
   private updatePreview(coordinate: Coordinate): void {
+    if (this.grip) {
+      const change = this.gripChange(coordinate);
+      this.previewSource.clear(true);
+      this.previewSource.addFeature(marker(coordinate, 'picked'));
+      this.showDimension(change?.preview ?? null);
+      return;
+    }
     if (!this.pick) return;
     this.previewSource.clear(true);
     this.previewSource.addFeatures([
@@ -269,10 +385,45 @@ export class ModifyTool extends BaseTool {
     feature?.on('change:geometry', this.onGeometryChange);
   }
 
+  /** Draw `preview` in its dimension layer's style above the map (or remove the preview). */
+  private showDimension(preview: Feature | null): void {
+    const ctx = this.ctx;
+    const dimension = this.dimension();
+    if (!ctx) return;
+    if (!preview || !dimension) {
+      if (this.dimensionPreview) ctx.map.removeLayer(this.dimensionPreview);
+      this.dimensionPreview = null;
+      this.dimensionSource.clear(true);
+      return;
+    }
+    if (!this.dimensionPreview) {
+      this.dimensionPreview = new VectorLayer({
+        source: this.dimensionSource,
+        style: dimensionStyleFunction(
+          dimension.config,
+          {},
+          () => ctx.getProjection(),
+          ctx.getLocale(),
+        ),
+        zIndex: 1002,
+      });
+      ctx.map.addLayer(this.dimensionPreview);
+    }
+    this.dimensionSource.clear(true);
+    this.dimensionSource.addFeature(preview);
+  }
+
   private goTo(step: ModifyStep): void {
     this.step = step;
-    if (step !== 'placing') this.pick = null;
-    if (step !== 'idle') this.hovered = null;
+    if (step !== 'placing') {
+      this.pick = null;
+      this.grip = null;
+      this.showDimension(null);
+    }
+    if (step !== 'idle') {
+      this.hovered = null;
+      this.hoveredGrip = null;
+    }
     this.previewSource.clear(true);
     this.watchGeometry(step === 'placing' ? this.feature : null);
     this.applyActivity();
@@ -283,6 +434,11 @@ export class ModifyTool extends BaseTool {
     this.select?.setActive(!this.suspended && this.step === 'select');
     this.pointer?.setActive(!this.suspended && this.step !== 'select');
   }
+}
+
+/** Whether two grips are the same part of a dimension. */
+function sameGrip(a: DimensionGrip, b: DimensionGrip | null): boolean {
+  return b !== null && a.kind === b.kind && a.index === b.index;
 }
 
 /** Clone the geometries of `features` before an interaction mutates them in place. */

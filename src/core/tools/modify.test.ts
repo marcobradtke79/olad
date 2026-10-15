@@ -9,6 +9,7 @@ import type BaseLayer from 'ol/layer/Base';
 import type OlMap from 'ol/Map';
 import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import { describe, expect, it, vi } from 'vitest';
+import { resolveLayer } from '../config/defaults';
 import type { Command, UpdateGeometryCommand } from '../changes/commands';
 import { Selection } from '../selection/Selection';
 import { MODIFY_PROMPTS, ModifyTool, snapshot, submitGeometryChanges } from './modify';
@@ -51,7 +52,7 @@ function setup(selected: Feature[] = [], updatable: (f: Feature) => boolean = ()
   selection.set(selected);
   const ctx = {
     map,
-    layers: { list: () => [] },
+    layers: { list: () => [], layerOf: () => undefined },
     selection,
     execute: vi.fn((_command: Command) => true),
     getActiveLayer: () => null,
@@ -277,5 +278,61 @@ describe('submitGeometryChanges', () => {
     submitGeometryChanges({ execute } as unknown as ToolContext, [a], before);
     expect(execute.mock.calls[0]![0]).toMatchObject({ type: 'updateGeometry' });
     expect(submitGeometryChanges({ execute } as unknown as ToolContext, [], new Map())).toBe(false);
+  });
+});
+
+describe('ModifyTool: dimension grips', () => {
+  it('moves the dimension line, the value and a definition point through grips', () => {
+    const dim = new Feature({
+      geometry: new LineString([
+        [0, 0],
+        [100, 0],
+      ]),
+      dimType: 'aligned',
+      offset: 10,
+    });
+    const { ctx, event, preview } = setup([dim]);
+    Object.assign(ctx, {
+      layers: {
+        list: () => [],
+        layerOf: () => 'dims',
+        getConfig: () =>
+          resolveLayer({
+            id: 'dims',
+            geometryType: 'LineString',
+            source: { features: [] },
+            dimension: true,
+          }),
+      },
+      getProjection: () => 'EPSG:3857', // near the origin one map unit is one metre
+      getLocale: () => 'en',
+    });
+    event('pointermove', [20, 10]);
+    expect(preview().length).toBe(4); // two points, the line and the value
+    // The line grip (a fifth along the dimension line) sets the offset.
+    event('click', [20, 10]);
+    event('pointermove', [30, 25]);
+    event('click', [30, 25]);
+    expect(ctx.execute.mock.calls.at(-1)![0]).toMatchObject({
+      type: 'updateProperties',
+      properties: { offset: 25 },
+    });
+    // The value grip moves the text along the line.
+    event('click', [50, 10]);
+    event('click', [60, 10]);
+    expect(ctx.execute.mock.calls.at(-1)![0]).toMatchObject({ properties: { textPosition: 10 } });
+    // A point grip moves the definition point; the GIS value follows.
+    event('click', [100, 0]);
+    event('click', [120, 0]);
+    const [geometry, properties] = (
+      ctx.execute.mock.calls.at(-1)![0] as {
+        commands: { geometry?: LineString; properties?: Record<string, number> }[];
+      }
+    ).commands;
+    expect(geometry!.geometry!.getCoordinates()).toEqual([
+      [0, 0],
+      [120, 0],
+    ]);
+    expect(properties!.properties!.gisValue).toBeCloseTo(120, 3);
   });
 });

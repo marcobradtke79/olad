@@ -57,6 +57,9 @@ export {
   isStale,
   isRefs,
   remapReferences,
+  dimensionGrips,
+  moveGrip,
+  drawnDimensions,
 } from './core/dimensions';
 export type {
   DimensionType,
@@ -67,6 +70,7 @@ export type {
   DimensionIssue,
   DimensionReference,
   DimensionRefs,
+  DimensionGrip,
   LevelKind,
   SnapSource,
 } from './core/dimensions';

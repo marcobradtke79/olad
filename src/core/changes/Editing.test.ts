@@ -29,9 +29,15 @@ function fakeMap(): OlMap {
 }
 
 function setup(
-  options: { fullFeatures?: boolean; precision?: number; crs?: string; untracked?: string } = {},
+  options: {
+    fullFeatures?: boolean;
+    precision?: number;
+    crs?: string;
+    untracked?: string;
+    followUp?: ConstructorParameters<typeof Editing>[0]['followUp'];
+  } = {},
 ) {
-  const { untracked, ...changes } = options;
+  const { untracked, followUp, ...changes } = options;
   let projection = 'EPSG:3857';
   const lm = new LayerManager(fakeMap(), () => projection, {
     onChange: vi.fn(),
@@ -73,6 +79,7 @@ function setup(
     changes: { fullFeatures: false, ...changes },
     events,
     ...(untracked ? { isTracked: (layer: string) => layer !== untracked } : {}),
+    ...(followUp ? { followUp } : {}),
   });
   // A loaded feature with an id, as the loader would produce it (original kept in EPSG:4326).
   const loaded = new Feature({ geometry: new Point(fromLonLat([8, 49])), name: 'old', lanes: 2 });
@@ -620,5 +627,29 @@ describe('Editing: dimension layers', () => {
     // Other layers are not checked as dimensions.
     const road = new Feature(line());
     expect(editing.execute(insertFeature('lines', road))).toBe(true);
+  });
+});
+
+describe('Editing: follow-up commands', () => {
+  it('records follow-ups in the same undo step and leaves out invalid ones', () => {
+    let partner: Feature | null = null;
+    const { editing, line, loaded } = setup({
+      followUp: (applied) =>
+        applied.some((a) => a.feature === line) && partner
+          ? composite([
+              updateProperties(partner, { name: 'followed' }),
+              updateGeometry(partner, new LineString([[0, 0]])), // invalid: left out
+            ])
+          : null,
+    });
+    partner = loaded;
+    const moved = new LineString([fromLonLat([8, 49.1]), fromLonLat([8.1, 49.1])]);
+    expect(editing.execute(updateGeometry(line, moved))).toBe(true);
+    expect(loaded.get('name')).toBe('followed');
+    expect(loaded.getGeometry()!.getType()).toBe('Point');
+    // One undo reverts the command and its follow-up.
+    expect(editing.undo()).toBe(true);
+    expect(loaded.get('name')).toBe('old');
+    expect(editing.canUndo()).toBe(false);
   });
 });
