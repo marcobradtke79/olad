@@ -8,6 +8,7 @@ import {
   defaultProperties,
   drawTarget,
   drawType,
+  lineTarget,
   onDrawEnd,
   prepareInsert,
   sketchReference,
@@ -68,6 +69,16 @@ describe('draw helpers', () => {
     expect(drawTarget(ctx('gone', 'draft'))).toBeNull();
     insertable.delete('draft');
     expect(drawTarget(ctx(null, 'draft'))).toBeNull();
+    // Dimension layers take objects from the dimension tools only.
+    configs.dims = resolveLayer({
+      id: 'dims',
+      geometryType: 'LineString',
+      source: { features: [] },
+      dimension: true,
+    });
+    insertable.add('dims');
+    expect(drawTarget(ctx('dims', 'draft'))).toBeNull();
+    expect(lineTarget(ctx('dims', 'draft'))).toBeNull();
   });
 
   it('wraps single parts for multi-part layers and leaves others alone', () => {

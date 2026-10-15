@@ -27,7 +27,26 @@ export { validateGeometry } from './core/geometry/validity';
 export { mirrorGeometry, reflectPoint } from './core/geometry/mirror';
 export { scaleFactor, scaleGeometry } from './core/geometry/scale';
 export { textStyleFunction, textStyle, featureText } from './core/layers/text';
-export { TEXT_DEFAULTS } from './core/config/defaults';
+export { TEXT_DEFAULTS, DIMENSION_DEFAULTS, DIMENSION_PRESETS } from './core/config/defaults';
+export { dimensionStyleFunction, DIMENSION_PAPER_MM } from './core/layers/dimension';
+export {
+  DIMENSION_TYPES,
+  SUPPORTED_DIMENSION_TYPES,
+  formatDimension,
+  formatDimensionNumber,
+  decimalSeparator,
+  dimensionValues,
+  fieldValueOf,
+  validateDimensionFeature,
+} from './core/dimensions';
+export type {
+  DimensionType,
+  DimensionStatus,
+  DimensionProperties,
+  DimensionFormatOptions,
+  DimensionValues,
+  DimensionIssue,
+} from './core/dimensions';
 export {
   measureLength,
   measureArea,
@@ -211,6 +230,10 @@ export type {
   EditableConfig,
   EditOperation,
   GeometryType,
+  DimensionConfig,
+  ResolvedDimensionConfig,
+  DimensionPreset,
+  DimensionTerminator,
   SchemaConfig,
   FieldConfig,
   FieldType,

@@ -1,0 +1,97 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 1001,
+      "properties": {
+        "id": 1001,
+        "dimType": "aligned",
+        "offset": -12
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            8.399,
+            49.009
+          ],
+          [
+            8.401,
+            49.009
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 1002,
+      "properties": {
+        "id": 1002,
+        "dimType": "aligned",
+        "offset": 12,
+        "fieldValue": 166.98
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            8.399,
+            49.009
+          ],
+          [
+            8.399,
+            49.0105
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 1003,
+      "properties": {
+        "id": 1003,
+        "dimType": "aligned",
+        "offset": -12,
+        "fieldValue": 131.63
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            8.4012,
+            49.009
+          ],
+          [
+            8.403,
+            49.009
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 1004,
+      "properties": {
+        "id": 1004,
+        "dimType": "aligned",
+        "offset": 4,
+        "fieldValue": 2.015,
+        "text": "{value} lt. Bestand"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            8.4005,
+            49.0095
+          ],
+          [
+            8.40052759,
+            49.0095
+          ]
+        ]
+      }
+    }
+  ]
+}

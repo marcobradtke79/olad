@@ -312,6 +312,7 @@ const LAYER_KEYS = [
   'minZoom',
   'maxZoom',
   'text',
+  'dimension',
 ] as const;
 
 const TEXT_KEYS = [
@@ -344,6 +345,43 @@ function checkText(text: unknown, path: string): void {
     number(t.height, `${path}.height`);
     if (!((t.height as number) > 0))
       throw new ConfigError(`${path}.height`, 'must be greater than 0');
+  }
+}
+
+const DIMENSION_KEYS = [
+  'preset',
+  'referenceScale',
+  'textSize',
+  'terminator',
+  'tolerance',
+  'showComputed',
+  'color',
+  'deviationColor',
+  'font',
+] as const;
+const DIMENSION_GEOMETRY_TYPES = ['LineString', 'Any'];
+
+function checkDimension(dimension: unknown, path: string): void {
+  if (typeof dimension === 'boolean') return;
+  object(dimension, path);
+  const d = dimension as Record<string, unknown>;
+  checkKeys(d, path, DIMENSION_KEYS);
+  optional(oneOf(['architecture', 'surveying', 'landscape']))(d.preset, `${path}.preset`);
+  optional(oneOf(['tick', 'arrow', 'dot', 'none']))(d.terminator, `${path}.terminator`);
+  optional(oneOf(['brackets', 'plain']))(d.showComputed, `${path}.showComputed`);
+  for (const key of ['color', 'deviationColor', 'font']) {
+    optional(string)(d[key], `${path}.${key}`);
+  }
+  for (const key of ['referenceScale', 'textSize']) {
+    if (d[key] === undefined) continue;
+    number(d[key], `${path}.${key}`);
+    if (!((d[key] as number) > 0))
+      throw new ConfigError(`${path}.${key}`, 'must be greater than 0');
+  }
+  if (d.tolerance !== undefined) {
+    number(d.tolerance, `${path}.tolerance`);
+    if (!((d.tolerance as number) >= 0))
+      throw new ConfigError(`${path}.tolerance`, 'must not be negative');
   }
 }
 
@@ -474,6 +512,15 @@ function checkLayer(layer: unknown, path: string, ctx: Context): void {
     !TEXT_GEOMETRY_TYPES.includes(l.geometryType as string)
   ) {
     throw new ConfigError(`${path}.text`, 'needs geometryType Point, MultiPoint or Any');
+  }
+  optional(checkDimension)(l.dimension, `${path}.dimension`);
+  if (l.dimension !== undefined && l.dimension !== false) {
+    if (!DIMENSION_GEOMETRY_TYPES.includes(l.geometryType as string)) {
+      throw new ConfigError(`${path}.dimension`, 'needs geometryType LineString or Any');
+    }
+    if (l.text !== undefined && l.text !== false) {
+      throw new ConfigError(`${path}.dimension`, 'a layer cannot be a text and a dimension layer');
+    }
   }
 }
 

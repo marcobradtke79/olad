@@ -29,15 +29,17 @@ export function templateTarget(
   feature: Pick<TemplateFeature, 'layer' | 'geometry'>,
 ): TemplateTarget | null {
   const wanted = drawType(feature.geometry.getType() as Parameters<typeof drawType>[0]);
-  const fits = (layerId: string | null | undefined): TemplateTarget | null => {
+  // A dimension goes back into its own dimension layer only; nothing else goes into one.
+  const fits = (layerId: string | null | undefined, source = false): TemplateTarget | null => {
     if (!layerId || !ctx.layers.has(layerId) || !ctx.layers.canEdit(layerId, 'insert')) {
       return null;
     }
     const layer = ctx.layers.getConfig(layerId);
+    if (layer.dimension && !source) return null;
     const type = drawType(layer.geometryType);
     return type === null || type === wanted ? { layerId, layer } : null;
   };
-  return fits(feature.layer) ?? fits(ctx.getActiveLayer()) ?? fits(ctx.getDraftLayer());
+  return fits(feature.layer, true) ?? fits(ctx.getActiveLayer()) ?? fits(ctx.getDraftLayer());
 }
 
 /** Whether at least one object of the template has a layer to go to. */

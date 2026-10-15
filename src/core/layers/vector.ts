@@ -18,6 +18,8 @@ import VectorSource from 'ol/source/Vector';
 import type { FlatStyleLike } from 'ol/style/flat';
 import type { StyleFunction } from 'ol/style/Style';
 import type { GeometryType, ResolvedLayerConfig, VectorSourceConfig } from '../config/types';
+import type { Locale } from '../i18n';
+import { dimensionStyleFunction } from './dimension';
 import type { OriginalStore } from './originals';
 import { textStyleFunction } from './text';
 
@@ -28,6 +30,8 @@ export const DATA_PROJECTION_PROPERTY = 'olcad:dataProjection';
 
 export interface VectorLayerContext {
   getProjection(): string;
+  /** Locale of number formats (dimension values). Default `'en'`. */
+  locale?: Locale;
   originals: OriginalStore;
   onLoad(id: string, features: Feature[]): void;
   onError(id: string, error: Error): void;
@@ -233,14 +237,17 @@ async function fetchData(
 /**
  * The OpenLayers style of a layer: `flat` (a user style, `editor.layers.setStyle`) or the
  * configured / default flat style; text layers draw their texts through `textStyleFunction`
- * with `text` colours overriding the configured ones.
+ * with `text` colours overriding the configured ones, dimension layers their dimensions through
+ * `dimensionStyleFunction` with numbers in `locale`.
  */
 export function vectorLayerStyle(
   layer: ResolvedLayerConfig,
   getProjection: () => string,
   override: { flat?: FlatStyleLike; text?: { color: string; halo: string } } = {},
+  locale: Locale = 'en',
 ): FlatStyleLike | StyleFunction {
   const flat = override.flat ?? layer.style ?? DEFAULT_STYLES[layer.geometryType];
+  if (layer.dimension) return dimensionStyleFunction(layer.dimension, flat, getProjection, locale);
   if (!layer.text) return flat;
   const text = override.text
     ? { ...layer.text, color: override.text.color, haloColor: override.text.halo }
@@ -286,7 +293,7 @@ export function createVectorLayer(
   });
   const olLayer = new VectorLayer({
     source: vectorSource,
-    style: vectorLayerStyle(layer, ctx.getProjection),
+    style: vectorLayerStyle(layer, ctx.getProjection, {}, ctx.locale),
     visible: layer.visible,
     minZoom: layer.minZoom,
     maxZoom: layer.maxZoom,

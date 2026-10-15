@@ -1,6 +1,7 @@
 import type Feature from 'ol/Feature';
 import type Geometry from 'ol/geom/Geometry';
 import type { EditOperation, ResolvedChangesConfig } from '../config/types';
+import { validateDimensionFeature } from '../dimensions/validate';
 import { validateGeometry } from '../geometry/validity';
 import { formatMessage, type Locale } from '../i18n';
 import type { LayerManager } from '../layers/LayerManager';
@@ -291,6 +292,18 @@ export class Editing {
           : undefined;
     if (atomic.type === 'insert' || atomic.type === 'updateGeometry') {
       const issue = validateGeometry(geometry, this.layers.getConfig(layer).geometryType);
+      if (issue) return fail(issue.code, issue.params, layer, featureId);
+    }
+    // Dimension layers: the object must be a dimension this version draws, with valid values.
+    if (atomic.type !== 'delete' && this.layers.getConfig(layer).dimension) {
+      const properties = featureProperties(feature);
+      if (atomic.type === 'updateProperties') {
+        for (const [name, value] of Object.entries(atomic.properties)) {
+          if (value === undefined) delete properties[name];
+          else properties[name] = value;
+        }
+      }
+      const issue = validateDimensionFeature(geometry ?? feature.getGeometry(), properties);
       if (issue) return fail(issue.code, issue.params, layer, featureId);
     }
     return null;

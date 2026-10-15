@@ -42,7 +42,8 @@ export interface DrawTarget {
  * Where and what the draw tool draws: the active layer, or the draft layer while none is
  * active; the layer must exist and allow inserts. A layer with a fixed geometry type dictates
  * the type and refuses a different `options.type`; a layer accepting any geometry draws
- * `options.type`, points by default. `null` when nothing can be drawn.
+ * `options.type`, points by default. `null` when nothing can be drawn, also for a dimension
+ * layer (its objects come from the dimension tools).
  */
 export function drawTarget(
   ctx: Pick<ToolContext, 'layers' | 'getActiveLayer' | 'getDraftLayer'>,
@@ -53,6 +54,8 @@ export function drawTarget(
     return null;
   }
   const layer = ctx.layers.getConfig(layerId);
+  // Dimension objects come from the dimension tools only.
+  if (layer.dimension) return null;
   const fixed = drawType(layer.geometryType);
   if (fixed !== null && options.type !== undefined && options.type !== fixed) return null;
   return { layerId, layer, type: fixed ?? options.type ?? 'Point' };
@@ -79,6 +82,7 @@ export function shapeTarget(
     return null;
   }
   const layer = ctx.layers.getConfig(layerId);
+  if (layer.dimension) return null;
   const type = drawType(layer.geometryType);
   return type === shape || type === null ? { layerId, layer } : null;
 }

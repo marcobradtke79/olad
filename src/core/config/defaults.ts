@@ -1,8 +1,10 @@
 import type {
   BasemapConfig,
+  DimensionPreset,
   EditorConfig,
   LayerConfig,
   ResolvedBasemapConfig,
+  ResolvedDimensionConfig,
   ResolvedEditableConfig,
   ResolvedEditorConfig,
   ResolvedLayerConfig,
@@ -45,11 +47,43 @@ export function resolveText(text: LayerConfig['text']): ResolvedTextConfig | und
   return { ...TEXT_DEFAULTS, ...(text === true ? {} : text) };
 }
 
+/** Defaults of a dimension layer that every preset shares (`layers[].dimension`). */
+export const DIMENSION_DEFAULTS: Omit<ResolvedDimensionConfig, 'referenceScale' | 'terminator'> = {
+  preset: 'surveying',
+  textSize: 2.5,
+  tolerance: 0.05,
+  showComputed: 'brackets',
+  color: '#111827',
+  deviationColor: '#dc2626',
+  font: 'sans-serif',
+};
+
+/** Per-preset defaults: the typical plan scale and end mark of each discipline. */
+export const DIMENSION_PRESETS: Record<
+  DimensionPreset,
+  Pick<ResolvedDimensionConfig, 'referenceScale' | 'terminator'>
+> = {
+  architecture: { referenceScale: 100, terminator: 'tick' },
+  surveying: { referenceScale: 500, terminator: 'arrow' },
+  landscape: { referenceScale: 250, terminator: 'dot' },
+};
+
+/** The resolved dimension settings, or `undefined` for a layer that is not a dimension layer. */
+export function resolveDimension(
+  dimension: LayerConfig['dimension'],
+): ResolvedDimensionConfig | undefined {
+  if (!dimension) return undefined;
+  const given = dimension === true ? {} : dimension;
+  const preset = given.preset ?? DIMENSION_DEFAULTS.preset;
+  return { ...DIMENSION_DEFAULTS, ...DIMENSION_PRESETS[preset], ...given, preset };
+}
+
 export function resolveLayer(layer: LayerConfig): ResolvedLayerConfig {
   const format = layer.source.format ?? 'geojson';
   const defaultStrategy = format === 'wfs' || layer.source.loader ? 'bbox' : 'all';
-  const { text, ...rest } = layer;
+  const { text, dimension, ...rest } = layer;
   const resolvedText = resolveText(text);
+  const resolvedDimension = resolveDimension(dimension);
   return {
     ...rest,
     title: layer.title ?? layer.id,
@@ -58,6 +92,7 @@ export function resolveLayer(layer: LayerConfig): ResolvedLayerConfig {
     snappable: layer.snappable ?? true,
     source: { ...layer.source, format, strategy: layer.source.strategy ?? defaultStrategy },
     ...(resolvedText ? { text: resolvedText } : {}),
+    ...(resolvedDimension ? { dimension: resolvedDimension } : {}),
   };
 }
 

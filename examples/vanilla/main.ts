@@ -67,6 +67,44 @@ const editor = createEditor({
         ],
       },
     },
+    {
+      // A dimension layer: aligned dimensions after DIN 1356-1, the GIS value in brackets
+      // until a field value is set.
+      id: 'dimensions',
+      title: 'Dimensions',
+      geometryType: 'LineString',
+      editable: true,
+      snappable: false,
+      dimension: { preset: 'architecture', referenceScale: 2500, textSize: 3.5 },
+      source: {
+        features: [
+          {
+            type: 'Feature',
+            id: 1,
+            properties: { offset: -12 },
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [8.399, 49.009],
+                [8.401, 49.009],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            id: 2,
+            properties: { offset: 12, fieldValue: 166.98 },
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [8.399, 49.009],
+                [8.399, 49.0105],
+              ],
+            },
+          },
+        ],
+      },
+    },
   ],
 });
 

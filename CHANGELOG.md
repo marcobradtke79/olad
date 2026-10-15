@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Dimension layers (dimensions milestone D1): new config option `layers[].dimension` (`true` or `{ preset, referenceScale, textSize, terminator, tolerance, showComputed, color, deviationColor, font }`; geometry type `LineString` or `Any`, not combinable with `text`) makes two-point line objects draw as aligned dimensions: extension lines, the dimension line at the `offset` property, terminators (tick, arrow, dot) and the value, sized in paper millimetres at a reference scale. Presets after DIN / ISO: `architecture` (DIN 1356-1: cm below 1 m, mm as superscript, `2,01⁵`; 1:100, ticks), `surveying` (m with cm; 1:500, arrows; the default) and `landscape` (m with cm; 1:250, dots). The value is the GIS value measured like the measure tools (in brackets until a field value is set) or the `fieldValue` property (plain); a field value off by more than `tolerance` is drawn in `deviationColor`; `text` replaces the value (`{value}` inserts it); the decimal separator follows `locale`. Commands on dimension layers are checked (codes `dimension-type`, `dimension-points`, `dimension-value` in `en` and `de`). Exported `dimensionStyleFunction`, `dimensionValues`, `formatDimension`, `formatDimensionNumber`, `decimalSeparator`, `fieldValueOf`, `validateDimensionFeature`, `DIMENSION_TYPES`, `SUPPORTED_DIMENSION_TYPES`, `DIMENSION_DEFAULTS`, `DIMENSION_PRESETS`, `DIMENSION_PAPER_MM` and the types. Dimension layers are never the target of the draw and construction tools, the draft move, file import or the template fallback (a dimension copied as a template goes back into its own dimension layer). The test configuration has a `dimensions` layer with seed data; the vanilla example a small dimension layer.
+
 ## [0.1.1] - 2026-10-15
 
 ### Added

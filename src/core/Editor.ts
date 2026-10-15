@@ -719,6 +719,7 @@ class EditorImpl implements Editor {
         shouldLoad: (layerId, featureId) => this.editing.shouldLoad(layerId, featureId),
       },
       config.layerHighlight,
+      config.locale,
     );
     this.selectionManager = new Selection(this.map, config.selection, (features) =>
       this.emitter.emit('selectionchange', { features }),

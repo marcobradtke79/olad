@@ -470,3 +470,55 @@ describe('layers[].text', () => {
     expect(errorPath(layer({ text: true }, 'LineString'))).toBe('config.layers[0].text');
   });
 });
+
+describe('layers[].dimension', () => {
+  const layer = (extra: Record<string, unknown>, geometryType = 'LineString') => ({
+    ...base,
+    layers: [{ id: 'dims', geometryType, source: { features: [] }, ...extra }],
+  });
+
+  it('accepts true, false and the object form on line layers', () => {
+    expect(() => validateConfig(layer({ dimension: true }))).not.toThrow();
+    expect(() => validateConfig(layer({ dimension: false }, 'Point'))).not.toThrow();
+    expect(() =>
+      validateConfig(
+        layer(
+          {
+            dimension: {
+              preset: 'architecture',
+              referenceScale: 50,
+              textSize: 3.5,
+              terminator: 'dot',
+              tolerance: 0,
+              showComputed: 'plain',
+              color: '#000',
+              deviationColor: '#f00',
+              font: 'serif',
+            },
+          },
+          'Any',
+        ),
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects unknown keys, bad values, wrong geometry types and text layers', () => {
+    const path = (extra: Record<string, unknown>, type?: string) => errorPath(layer(extra, type));
+    expect(path({ dimension: { scale: 100 } })).toBe('config.layers[0].dimension.scale');
+    expect(path({ dimension: { preset: 'mechanical' } })).toBe('config.layers[0].dimension.preset');
+    expect(path({ dimension: { terminator: 'slash' } })).toBe(
+      'config.layers[0].dimension.terminator',
+    );
+    expect(path({ dimension: { referenceScale: 0 } })).toBe(
+      'config.layers[0].dimension.referenceScale',
+    );
+    expect(path({ dimension: { textSize: '2' } })).toBe('config.layers[0].dimension.textSize');
+    expect(path({ dimension: { tolerance: -1 } })).toBe('config.layers[0].dimension.tolerance');
+    expect(path({ dimension: { showComputed: 'never' } })).toBe(
+      'config.layers[0].dimension.showComputed',
+    );
+    expect(path({ dimension: 'yes' })).toBe('config.layers[0].dimension');
+    expect(path({ dimension: true }, 'Polygon')).toBe('config.layers[0].dimension');
+    expect(path({ dimension: true, text: true }, 'Any')).toBe('config.layers[0].dimension');
+  });
+});

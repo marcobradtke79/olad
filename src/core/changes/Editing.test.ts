@@ -565,3 +565,55 @@ describe('Editing: export options', () => {
     expect(set.changes.map((c: Change) => c.crs)).toEqual(['EPSG:4326', 'EPSG:3857']);
   });
 });
+
+describe('Editing: dimension layers', () => {
+  const dimensions = (lm: LayerManager) =>
+    lm.add({
+      id: 'dims',
+      geometryType: 'LineString',
+      editable: true,
+      dimension: { preset: 'surveying' },
+      source: { features: [] },
+    });
+  const line = () => new LineString([fromLonLat([8, 49]), fromLonLat([8.0001, 49])]);
+
+  it('inserts a valid dimension and tracks it with its properties', () => {
+    const { lm, editing, events } = setup();
+    dimensions(lm);
+    const dim = new Feature({ geometry: line(), dimType: 'aligned', offset: 2, fieldValue: 7.3 });
+    expect(editing.execute(insertFeature('dims', dim))).toBe(true);
+    const [change] = lastChangeSet(events).changes;
+    expect(change).toMatchObject({
+      op: 'insert',
+      layer: 'dims',
+      properties: { dimType: 'aligned', offset: 2, fieldValue: 7.3 },
+    });
+  });
+
+  it('rejects invalid dimensions and invalid property updates, changing nothing', () => {
+    const { lm, editing, events } = setup();
+    dimensions(lm);
+    const three = new Feature(
+      new LineString([fromLonLat([8, 49]), fromLonLat([8.1, 49]), fromLonLat([8.2, 49])]),
+    );
+    expect(editing.execute(insertFeature('dims', three))).toBe(false);
+    expect(events.validationerror).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        code: 'dimension-points',
+        message: 'A dimension needs 2 distinct points, got 3.',
+        layer: 'dims',
+      }),
+    );
+    const dim = new Feature({ geometry: line() });
+    expect(editing.execute(insertFeature('dims', dim))).toBe(true);
+    expect(editing.execute(updateProperties(dim, { fieldValue: -2 }))).toBe(false);
+    expect(events.validationerror).toHaveBeenLastCalledWith(
+      expect.objectContaining({ code: 'dimension-value' }),
+    );
+    expect(dim.get('fieldValue')).toBeUndefined();
+    expect(editing.execute(updateProperties(dim, { fieldValue: 7.31 }))).toBe(true);
+    // Other layers are not checked as dimensions.
+    const road = new Feature(line());
+    expect(editing.execute(insertFeature('lines', road))).toBe(true);
+  });
+});

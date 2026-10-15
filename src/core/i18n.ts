@@ -20,7 +20,10 @@ export type MessageCode =
   | 'input-invalid'
   | 'input-no-tool'
   | 'input-no-reference'
-  | 'input-not-accepted';
+  | 'input-not-accepted'
+  | 'dimension-type'
+  | 'dimension-points'
+  | 'dimension-value';
 
 export const MESSAGES: Record<Locale, Record<MessageCode, string>> = {
   en: {
@@ -39,6 +42,9 @@ export const MESSAGES: Record<Locale, Record<MessageCode, string>> = {
     'input-no-tool': 'No tool takes input: switch on edit mode and start drawing.',
     'input-no-reference': 'No previous point: type an absolute x,y first.',
     'input-not-accepted': 'The active tool did not accept the input.',
+    'dimension-type': 'Unknown dimension type "{type}".',
+    'dimension-points': 'A dimension needs {expected} distinct points, got {actual}.',
+    'dimension-value': 'The dimension property "{property}" is invalid.',
   },
   de: {
     'geometry-type': 'Erwartet wurde eine {expected}-Geometrie, erhalten {actual}.',
@@ -56,6 +62,9 @@ export const MESSAGES: Record<Locale, Record<MessageCode, string>> = {
     'input-no-tool': 'Kein Werkzeug nimmt Eingaben an: Bearbeitungsmodus einschalten und zeichnen.',
     'input-no-reference': 'Kein vorheriger Punkt: zuerst ein absolutes x,y eingeben.',
     'input-not-accepted': 'Das aktive Werkzeug hat die Eingabe nicht übernommen.',
+    'dimension-type': 'Unbekannter Bemaßungstyp "{type}".',
+    'dimension-points': 'Eine Bemaßung braucht {expected} verschiedene Punkte, erhalten {actual}.',
+    'dimension-value': 'Die Bemaßungseigenschaft "{property}" ist ungültig.',
   },
 };
 

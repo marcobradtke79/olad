@@ -276,6 +276,12 @@ export interface LayerConfig {
    * geometry type `Point`, `MultiPoint` or `Any`.
    */
   text?: boolean | TextConfig;
+  /**
+   * Dimension layer: line features are drawn as dimensions (extension lines, dimension line,
+   * terminators, value) after a drawing standard preset. `true` uses the defaults. Requires the
+   * geometry type `LineString` or `Any`; not combinable with `text`.
+   */
+  dimension?: boolean | DimensionConfig;
 }
 
 /** How a text layer stores and draws its texts. */
@@ -297,6 +303,39 @@ export interface TextConfig {
 }
 
 export type ResolvedTextConfig = Required<TextConfig>;
+
+/** Drawing standard of a dimension layer: number format, terminators and reference scale. */
+export type DimensionPreset = 'architecture' | 'surveying' | 'landscape';
+
+/** Mark at the ends of the dimension line. */
+export type DimensionTerminator = 'tick' | 'arrow' | 'dot' | 'none';
+
+/** How a dimension layer draws its dimensions. Sizes are paper millimetres at `referenceScale`. */
+export interface DimensionConfig {
+  /**
+   * Drawing standard: `'architecture'` (DIN 1356-1: cm below 1 m, mm as superscript, ticks),
+   * `'surveying'` (m with cm, arrows) or `'landscape'` (m with cm, dots). Default `'surveying'`.
+   */
+  preset?: DimensionPreset;
+  /** Plan scale denominator the paper sizes refer to. Default per preset: 100, 500 or 250. */
+  referenceScale?: number;
+  /** Text height in paper millimetres. Default `2.5`. */
+  textSize?: number;
+  /** End mark of the dimension line. Default per preset: `'tick'`, `'arrow'` or `'dot'`. */
+  terminator?: DimensionTerminator;
+  /** Largest difference between field and GIS value in metres before a dimension deviates. Default `0.05`. */
+  tolerance?: number;
+  /** How a value without a field measurement is shown: `'brackets'` (computed) or `'plain'`. Default `'brackets'`. */
+  showComputed?: 'brackets' | 'plain';
+  /** Line and text colour. Default `'#111827'`. */
+  color?: string;
+  /** Colour of dimensions whose field value deviates beyond `tolerance`. Default `'#dc2626'`. */
+  deviationColor?: string;
+  /** CSS font family. Default `'sans-serif'`. */
+  font?: string;
+}
+
+export type ResolvedDimensionConfig = Required<DimensionConfig>;
 
 /**
  * Configuration object for `createEditor`.
@@ -507,7 +546,7 @@ export interface ResolvedEditableConfig {
 
 export type ResolvedLayerConfig = Omit<
   LayerConfig,
-  'title' | 'visible' | 'editable' | 'snappable' | 'text'
+  'title' | 'visible' | 'editable' | 'snappable' | 'text' | 'dimension'
 > & {
   title: string;
   visible: boolean;
@@ -516,6 +555,8 @@ export type ResolvedLayerConfig = Omit<
   source: VectorSourceConfig & { strategy: 'all' | 'bbox' };
   /** Present for text layers only. */
   text?: ResolvedTextConfig;
+  /** Present for dimension layers only. */
+  dimension?: ResolvedDimensionConfig;
 };
 
 /** `EditorConfig` after validation and defaults, as exposed on `editor.config`. */

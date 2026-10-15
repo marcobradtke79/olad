@@ -40,7 +40,7 @@ export function importTargets(ctx: ImportContext, group: ImportGroup): string[] 
     .listLayers()
     .map((l) => l.id)
     .filter((id) => {
-      if (!ctx.canInsert(id)) return false;
+      if (!ctx.canInsert(id) || ctx.getConfig(id).dimension) return false;
       const type = ctx.getConfig(id).geometryType;
       return type === group.geometryType || type === 'Any' || type === `Multi${group.geometryType}`;
     });

@@ -33,6 +33,7 @@ function setup(draftFeatures: Feature[] = []) {
     rivers: { geometryType: 'MultiLineString', idProperty: 'id' },
     parcels: { geometryType: 'Polygon' },
     archive: { geometryType: 'LineString' }, // no inserts
+    dims: { geometryType: 'LineString', dimension: {} as never }, // dimension layer
     draft: { geometryType: 'Any', idProperty: 'fid' },
   };
   const ctx: DraftMoveContext = {

@@ -14,6 +14,7 @@ import type {
 } from '../config/types';
 import { resolveEditable, resolveLayer } from '../config/defaults';
 import { validateLayerConfig } from '../config/validate';
+import type { Locale } from '../i18n';
 import { createLayerHighlight } from './highlight';
 import { OriginalStore } from './originals';
 import {
@@ -116,6 +117,7 @@ export class LayerManager {
 
   private readonly map: OlMap;
   private readonly getProjection: () => string;
+  private readonly locale: Locale;
   private readonly events: LayerManagerEvents;
   private readonly highlightConfig: ResolvedLayerHighlightConfig;
 
@@ -124,8 +126,10 @@ export class LayerManager {
     getProjection: () => string,
     events: LayerManagerEvents,
     highlight: ResolvedLayerHighlightConfig = DEFAULT_HIGHLIGHT,
+    locale: Locale = 'en',
   ) {
     this.map = map;
+    this.locale = locale;
     this.getProjection = getProjection;
     this.events = events;
     this.highlightConfig = highlight;
@@ -137,6 +141,7 @@ export class LayerManager {
     const resolved = resolveLayer(config);
     const layer = createVectorLayer(resolved, {
       getProjection: this.getProjection,
+      locale: this.locale,
       originals: this.originals,
       onLoad: (id, features) => this.events.onLoad({ id, features }),
       onError: (id, error) => this.events.onError({ id, error }),
@@ -266,10 +271,15 @@ export class LayerManager {
     entry.style = clean;
     const { config, layer } = entry;
     layer.setStyle(
-      vectorLayerStyle(config, this.getProjection, {
-        flat: flatFromStyle(clean, config.geometryType),
-        ...(clean.text ? { text: clean.text } : {}),
-      }),
+      vectorLayerStyle(
+        config,
+        this.getProjection,
+        {
+          flat: flatFromStyle(clean, config.geometryType),
+          ...(clean.text ? { text: clean.text } : {}),
+        },
+        this.locale,
+      ),
     );
     layer.setOpacity(clean.opacity);
     layer.setMinZoom(clean.minZoom ?? config.minZoom ?? -Infinity);
@@ -284,7 +294,7 @@ export class LayerManager {
     if (!entry.style) return;
     delete entry.style;
     const { config, layer } = entry;
-    layer.setStyle(vectorLayerStyle(config, this.getProjection));
+    layer.setStyle(vectorLayerStyle(config, this.getProjection, {}, this.locale));
     layer.setOpacity(1);
     layer.setMinZoom(config.minZoom ?? -Infinity);
     layer.setMaxZoom(config.maxZoom ?? Infinity);

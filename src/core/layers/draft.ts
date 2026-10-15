@@ -24,7 +24,7 @@ export interface DraftMoveContext {
 
 /**
  * The layers a draft object can be moved to, in layer order: every layer except the draft
- * layer that allows `insert` and takes the object's geometry. Empty for a feature that is not
+ * layer and dimension layers that allows `insert` and takes the object's geometry. Empty for a feature that is not
  * in the draft layer or has no geometry.
  */
 export function draftTargets(ctx: DraftMoveContext, feature: Feature): string[] {
@@ -37,6 +37,7 @@ export function draftTargets(ctx: DraftMoveContext, feature: Feature): string[] 
     .filter(
       (id) =>
         id !== draft &&
+        !ctx.layers.getConfig(id).dimension &&
         ctx.layers.canEdit(id, 'insert') &&
         layerAcceptsGeometry(ctx.layers.getConfig(id).geometryType, geometry),
     );

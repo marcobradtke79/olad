@@ -59,6 +59,28 @@ editor.redo();
 - `delete`: `id` only.
 - The set is plain data: `JSON.parse(JSON.stringify(set))` equals `set`.
 
+### Dimension objects
+
+Objects of a dimension layer ([`layers[].dimension`](configuration.md#layersdimension-object-form)) are ordinary features in the change set: the geometry is a `LineString` with the two measured points, and the properties hold the dimension data, so the backend stores them like any other attribute:
+
+```json
+{
+  "op": "insert",
+  "layer": "dimensions",
+  "tempId": "tmp-3",
+  "geometry": {
+    "type": "LineString",
+    "coordinates": [
+      [8.4031, 49.0071],
+      [8.4034, 49.0071]
+    ]
+  },
+  "properties": { "dimType": "aligned", "offset": 2, "fieldValue": 21.47, "text": null }
+}
+```
+
+Setting a field value later is an `update` with `changed: ["fieldValue"]`. The GIS value is computed from the geometry when the dimension is drawn and is not part of the change set unless a property `gisValue` is set.
+
 ## Collapse rules
 
 | Sequence                             | Net result                        |

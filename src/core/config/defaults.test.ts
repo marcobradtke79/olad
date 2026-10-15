@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { applyDefaults, resolveLayer, resolveText, TEXT_DEFAULTS } from './defaults';
+import {
+  applyDefaults,
+  DIMENSION_DEFAULTS,
+  resolveDimension,
+  resolveLayer,
+  resolveText,
+  TEXT_DEFAULTS,
+} from './defaults';
 
 describe('applyDefaults', () => {
   it('fills view defaults and keeps extra view fields', () => {
@@ -131,6 +138,38 @@ describe('resolveText', () => {
     expect(resolved.text).toEqual(TEXT_DEFAULTS);
     expect(
       'text' in resolveLayer({ id: 'x', geometryType: 'Point', source: { features: [] } }),
+    ).toBe(false);
+  });
+});
+
+describe('resolveDimension', () => {
+  it('resolves the preset defaults and lets the layer override them', () => {
+    expect(resolveDimension(undefined)).toBeUndefined();
+    expect(resolveDimension(false)).toBeUndefined();
+    expect(resolveDimension(true)).toEqual({
+      ...DIMENSION_DEFAULTS,
+      preset: 'surveying',
+      referenceScale: 500,
+      terminator: 'arrow',
+    });
+    expect(resolveDimension({ preset: 'architecture' })).toMatchObject({
+      referenceScale: 100,
+      terminator: 'tick',
+      showComputed: 'brackets',
+    });
+    expect(resolveDimension({ preset: 'landscape', terminator: 'arrow' })).toMatchObject({
+      referenceScale: 250,
+      terminator: 'arrow',
+    });
+    const resolved = resolveLayer({
+      id: 'dims',
+      geometryType: 'LineString',
+      source: { features: [] },
+      dimension: { preset: 'architecture', referenceScale: 50 },
+    });
+    expect(resolved.dimension).toMatchObject({ preset: 'architecture', referenceScale: 50 });
+    expect(
+      'dimension' in resolveLayer({ id: 'x', geometryType: 'Point', source: { features: [] } }),
     ).toBe(false);
   });
 });

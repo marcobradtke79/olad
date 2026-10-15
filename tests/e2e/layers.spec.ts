@@ -14,7 +14,7 @@ test.describe('layers and projections', () => {
     await waitForEditor(page);
     await expect(page.locator('#map canvas')).toBeVisible();
     const rows = page.locator('olcad-layer-list [data-layer-id]');
-    await expect(rows).toHaveCount(10); // the configured layers and the draft layer
+    await expect(rows).toHaveCount(11); // the configured layers and the draft layer
 
     const expected: Record<string, number> = {
       parcels: 2,
@@ -26,6 +26,7 @@ test.describe('layers and projections', () => {
       trees: 3,
       lamps: 3,
       labels: 2,
+      dimensions: 4,
       draft: 0,
     };
     await expect
@@ -58,7 +59,7 @@ test.describe('layers and projections', () => {
     await waitForEditor(page);
     await openFlyout(page, 'layers');
     const enabled = page.locator('olcad-layer-list [data-action="edit"]:not([disabled])');
-    await expect(enabled).toHaveCount(8); // all but the read-only tracks and trees
+    await expect(enabled).toHaveCount(9); // all but the read-only tracks and trees
     await expect(page.locator('olcad-toolbar .olcad-toolbar__active-layer')).toHaveText(
       'No layer selected',
     );
