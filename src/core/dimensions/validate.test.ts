@@ -75,3 +75,12 @@ describe('validateDimensionFeature: tie and running', () => {
     );
   });
 });
+
+describe('validateDimensionFeature: refs', () => {
+  it('accepts well-formed references and rejects others', () => {
+    const ref = { layer: 'parcels', id: 1, kind: 'vertex', path: [0, 2] };
+    expect(validateDimensionFeature(line, { refs: [ref, null] })).toBeNull();
+    expect(validateDimensionFeature(line, { refs: [ref] })?.params.property).toBe('refs');
+    expect(validateDimensionFeature(line, { refs: 'x' })?.params.property).toBe('refs');
+  });
+});

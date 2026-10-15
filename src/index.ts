@@ -40,6 +40,13 @@ export {
   validateDimensionFeature,
   DIMENSION_FORM_FIELDS,
   layerFormFields,
+  referenceFor,
+  resolveReference,
+  referencesOf,
+  referencedPoints,
+  isStale,
+  isRefs,
+  remapReferences,
 } from './core/dimensions';
 export type {
   DimensionType,
@@ -48,6 +55,9 @@ export type {
   DimensionFormatOptions,
   DimensionValues,
   DimensionIssue,
+  DimensionReference,
+  DimensionRefs,
+  SnapSource,
 } from './core/dimensions';
 export {
   measureLength,

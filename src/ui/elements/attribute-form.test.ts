@@ -60,10 +60,20 @@ const draft = resolveLayer({
 function fakeEditor(editMode = true) {
   const emitter = new Emitter<EditorEvents>();
   let selected: Feature[] = [];
+  const stale = new Set<Feature>();
   const layerOf = new Map<Feature, string>();
   const configs = { hydrants, bare, draft, dims };
   const editor = {
     isEditMode: () => editMode,
+    dimensions: {
+      isStale: (f: Feature) => stale.has(f),
+      update: vi.fn(() => true),
+      detach: vi.fn(() => true),
+    },
+    markStale(f: Feature) {
+      stale.add(f);
+      emitter.emit('dimensionstale', { features: [...stale] });
+    },
     canEdit: (_op: string, f: Feature) =>
       configs[layerOf.get(f) as keyof typeof configs].editable.update,
     execute: vi.fn((_command: Command) => true),
@@ -195,6 +205,21 @@ describe('<olcad-attribute-form>', () => {
       type: 'updateProperties',
       properties: { fieldValue: undefined, text: '{value} lt. Bestand' },
     });
+  });
+
+  it('offers Update and Detach for a stale dimension', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    const feature = editor.place('dims', {});
+    editor.selection.set([feature]);
+    expect(el.querySelector('.olcad-attribute-form__notice')).toBeNull();
+    editor.markStale(feature);
+    const notice = el.querySelector('.olcad-attribute-form__notice')!;
+    expect(notice.textContent).toContain('A measured object changed');
+    notice.querySelector<HTMLButtonElement>('[data-action="update-dimension"]')!.click();
+    expect(editor.dimensions.update).toHaveBeenCalledWith(feature);
+    el.querySelector<HTMLButtonElement>('[data-action="detach-dimension"]')!.click();
+    expect(editor.dimensions.detach).toHaveBeenCalledWith(feature);
   });
 
   it('blocks submit on native validation errors and shows core rejections', () => {

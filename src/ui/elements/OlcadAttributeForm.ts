@@ -92,6 +92,7 @@ export class OlcadAttributeForm extends HTMLElement {
           this.render(true);
         }),
         editor.on('layerchange', rerender),
+        editor.on('dimensionstale', rerender),
         editor.on('editmodechange', rerender),
         editor.on('validationerror', ({ message, command }) => {
           if (command.type === 'updateProperties' && command.feature === this.subject) {
@@ -246,6 +247,9 @@ export class OlcadAttributeForm extends HTMLElement {
       return;
     }
     const editable = editor.isEditMode() && editor.canEdit('update', feature);
+    if (config.dimension && editor.dimensions.isStale(feature)) {
+      target.append(this.staleNotice(editor, feature, editable));
+    }
     const form = document.createElement('form');
     form.className = 'olcad-attribute-form__form';
     form.noValidate = false;
@@ -293,6 +297,10 @@ export class OlcadAttributeForm extends HTMLElement {
   }
 
   /** Popup mode: done with this feature (it keeps its attributes); shows the next or closes. */
+  private staleNotice(editor: Editor, feature: Feature, editable: boolean): HTMLElement {
+    return staleNotice(editor, feature, editable, () => this.render(true));
+  }
+
   private laterButton(text: string): HTMLButtonElement {
     const later = document.createElement('button');
     later.type = 'button';
@@ -356,6 +364,42 @@ function openDialog(dialog: HTMLDialogElement): void {
 function closeDialog(dialog: HTMLDialogElement): void {
   if (typeof dialog.close === 'function') dialog.close();
   else dialog.removeAttribute('open');
+}
+
+/** The notice for a stale dimension, with Update and Detach. */
+function staleNotice(
+  editor: Editor,
+  feature: Feature,
+  editable: boolean,
+  onDone: () => void,
+): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'olcad-attribute-form__notice';
+  box.setAttribute('role', 'status');
+  const text = document.createElement('p');
+  text.textContent =
+    'A measured object changed or is gone. Update moves the dimension onto it and keeps the field value; Detach keeps the dimension as it is.';
+  const update = document.createElement('button');
+  update.type = 'button';
+  update.className = 'olcad-toolbar__button olcad-attribute-form__update';
+  update.dataset.action = 'update-dimension';
+  update.textContent = 'Update';
+  const detach = document.createElement('button');
+  detach.type = 'button';
+  detach.className = 'olcad-toolbar__button olcad-attribute-form__detach';
+  detach.dataset.action = 'detach-dimension';
+  detach.textContent = 'Detach';
+  update.disabled = detach.disabled = !editable;
+  update.addEventListener('click', () => {
+    editor.dimensions.update(feature);
+    onDone();
+  });
+  detach.addEventListener('click', () => {
+    editor.dimensions.detach(feature);
+    onDone();
+  });
+  box.append(text, update, detach);
+  return box;
 }
 
 function hint(text: string): HTMLElement {

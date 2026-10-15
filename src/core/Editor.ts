@@ -17,7 +17,19 @@ import type {
 } from './config/types';
 import type MapBrowserEvent from 'ol/MapBrowserEvent';
 import { Editing, type HistoryState, type ValidationError } from './changes/Editing';
-import { composite, deleteFeature, updateProperties, type Command } from './changes/commands';
+import {
+  composite,
+  deleteFeature,
+  updateGeometry,
+  updateProperties,
+  type Command,
+} from './changes/commands';
+import {
+  isStale as dimensionIsStale,
+  referencedPoints,
+  referencesOf,
+  remapReferences,
+} from './dimensions/references';
 import { dimensionValues, type DimensionValues } from './dimensions/values';
 import type { ChangeSet } from './changes/exportChangeSet';
 import { applyEditCursor, Crosshair } from './crosshair';
@@ -81,7 +93,7 @@ import {
   type LocalLayerInfo,
   type LocalLayersJson,
 } from './layers/local';
-import { offsetMetres } from './measure';
+import { offsetMetres, unitsPerMetre } from './measure';
 import {
   MeasurementStore,
   type Measurement,
@@ -131,6 +143,11 @@ export interface EditorEvents extends Record<string, unknown> {
     id: string;
     type: LayerChangeType;
   };
+  /**
+   * The set of stale dimensions changed (a measured object moved, changed or was deleted, or a
+   * dimension was updated or detached). `features` is the whole current set.
+   */
+  dimensionstale: { features: Feature[] };
   /** A layer finished loading features. */
   layerload: { id: string; features: Feature[] };
   /** The active layer (target of inserts) changed. */
@@ -503,6 +520,20 @@ export interface DimensionsApi {
    * selected, updatable dimension. `null` otherwise.
    */
   inputTarget(): Feature | null;
+  /** Whether a measured object of the dimension changed or is gone (derived, never stored). */
+  isStale(feature: Feature): boolean;
+  /** The stale dimensions of all layers, or of one layer. */
+  listStale(layerId?: string): Feature[];
+  /**
+   * Move the dimension's definition points onto what its references point at now and update its
+   * GIS value, as one command; the field value stays. `false` when a referenced object is gone,
+   * the dimension is not updatable or nothing references anything.
+   */
+  update(feature: Feature): boolean;
+  /** `update` for every resolvable stale dimension (of one layer), as one command. Returns the count. */
+  updateStale(layerId?: string): number;
+  /** Drop the references: the dimension keeps its points and is no longer checked. One command. */
+  detach(feature: Feature): boolean;
 }
 
 export interface LocalLayersApi {
@@ -684,6 +715,10 @@ class EditorImpl implements Editor {
   readonly measurements: MeasurementsApi;
   readonly localLayers: LocalLayersApi;
   readonly dimensions: DimensionsApi;
+  /** The last snap of the pointer, for tools that record what a point was snapped to. */
+  private lastSnap: SnapResult | null = null;
+  /** Dimensions whose measured objects changed (derived after every change). */
+  private staleDimensions = new Set<Feature>();
   readonly import: ImportApi;
   readonly units: UnitsApi;
 
@@ -807,6 +842,7 @@ class EditorImpl implements Editor {
         getCurveTolerance: () => this.config.curves.tolerance,
         getLengthUnit: () => this.lengthUnit(),
         getLocale: () => config.locale,
+        getSnap: () => this.lastSnap,
         formatLength: (metres) => formatLengthIn(metres, this.lengthUnit()),
         templates: this.templateStore,
         done: () => this.toolManager.deactivate(),
@@ -901,6 +937,7 @@ class EditorImpl implements Editor {
         (config.snapping.enabled || config.grid.enabled || config.constraints.angle.enabled),
       onSnap: (result) => {
         this.crosshair?.setSnap(result ? [result.pixel[0]!, result.pixel[1]!] : null, result?.mode);
+        this.lastSnap = result;
         this.emitter.emit('snap', result);
       },
       getReference: () => this.toolManager.referencePoint(),
@@ -1054,7 +1091,11 @@ class EditorImpl implements Editor {
     this.changes = {
       get: () => this.editing.getChangeSet(),
       hasChanges: () => this.editing.hasChanges(),
-      accept: (options) => this.editing.accept(options),
+      accept: (options) => {
+        // References to new objects follow their backend ids (before the new baseline is taken).
+        if (options?.idMap) this.remapDimensionReferences(options.idMap);
+        this.editing.accept(options);
+      },
       discard: () => this.editing.discard(),
     };
 
@@ -1200,7 +1241,14 @@ class EditorImpl implements Editor {
         const layer = this.layerManager.layerOf(feature);
         const config =
           layer === undefined ? undefined : this.layerManager.getConfig(layer).dimension;
-        return config ? dimensionValues(feature, config, this.getProjection()) : null;
+        return config
+          ? dimensionValues(
+              feature,
+              config,
+              this.getProjection(),
+              this.staleDimensions.has(feature),
+            )
+          : null;
       },
       setFieldValue: (feature, metres) => {
         if (!isDimension(feature) || !this.editing.canEdit('update', feature)) return false;
@@ -1215,7 +1263,35 @@ class EditorImpl implements Editor {
         const feature = selected[0]!;
         return isDimension(feature) && this.editing.canEdit('update', feature) ? feature : null;
       },
+      isStale: (feature) => this.staleDimensions.has(feature),
+      listStale: (layerId) =>
+        [...this.staleDimensions].filter(
+          (f) => layerId === undefined || this.layerManager.layerOf(f) === layerId,
+        ),
+      update: (feature) => {
+        const command = this.dimensionUpdate(feature);
+        return command !== null && this.editing.execute(command);
+      },
+      updateStale: (layerId) => {
+        const commands = this.dimensions
+          .listStale(layerId)
+          .map((f) => this.dimensionUpdate(f))
+          .filter((c): c is Command => c !== null);
+        if (commands.length === 0) return 0;
+        const command =
+          commands.length === 1 ? commands[0]! : composite(commands, 'update dimensions');
+        return this.editing.execute(command) ? commands.length : 0;
+      },
+      detach: (feature) => {
+        if (!isDimension(feature) || !this.editing.canEdit('update', feature)) return false;
+        if (referencesOf(feature).length === 0) return false;
+        return this.editing.execute(updateProperties(feature, { refs: undefined }));
+      },
     };
+    this.layerManager.setDimensionStaleTest((feature) => this.staleDimensions.has(feature));
+    for (const type of ['change', 'layerload', 'layerchange', 'projectionchange'] as const) {
+      this.emitter.on(type, () => this.refreshStaleDimensions());
+    }
 
     this.localLayers = {
       list: () => local.list(),
@@ -1453,6 +1529,76 @@ class EditorImpl implements Editor {
   }
 
   /** The effective default length unit: `units.length`, or the view projection's. */
+  /** An editor object by layer and id, for dimension references. */
+  private findFeature(layer: string, id: string | number): Feature | null {
+    return this.layerManager.has(layer)
+      ? (this.layerManager.getSource(layer).getFeatureById(id) as Feature | null)
+      : null;
+  }
+
+  /** The objects of every dimension layer. */
+  private dimensionFeatures(): Feature[] {
+    return this.layerManager
+      .list()
+      .filter((info) => this.layerManager.getConfig(info.id).dimension)
+      .flatMap((info) => this.layerManager.getSource(info.id).getFeatures());
+  }
+
+  /**
+   * Recompute which dimensions are stale (a referenced point moved by more than a millimetre,
+   * or its object is gone); redraw the dimensions whose state changed and emit `dimensionstale`
+   * when the set changed.
+   */
+  private refreshStaleDimensions(): void {
+    const projection = this.getProjection();
+    const find = (layer: string, id: string | number) => this.findFeature(layer, id);
+    const next = new Set<Feature>();
+    for (const feature of this.dimensionFeatures()) {
+      if (referencesOf(feature).length === 0) continue;
+      const at = (feature.getGeometry() as LineString | undefined)?.getFirstCoordinate();
+      if (!at) continue;
+      const tolerance = 0.001 * unitsPerMetre(projection, at);
+      if (dimensionIsStale(feature, find, tolerance)) next.add(feature);
+    }
+    const changed = [...next].filter((f) => !this.staleDimensions.has(f));
+    const cleared = [...this.staleDimensions].filter((f) => !next.has(f));
+    if (changed.length === 0 && cleared.length === 0) return;
+    this.staleDimensions = next;
+    for (const feature of [...changed, ...cleared]) feature.changed();
+    this.emitter.emit('dimensionstale', { features: [...next] });
+  }
+
+  /** The command that moves a dimension onto its referenced points, or `null`. */
+  private dimensionUpdate(feature: Feature): Command | null {
+    const layer = this.layerManager.layerOf(feature);
+    const config = layer === undefined ? undefined : this.layerManager.getConfig(layer).dimension;
+    if (!config || !this.editing.canEdit('update', feature)) return null;
+    if (referencesOf(feature).length === 0) return null;
+    const points = referencedPoints(feature, (l, id) => this.findFeature(l, id));
+    if (!points) return null;
+    const geometry = new LineString(points);
+    const moved = feature.clone();
+    moved.setGeometry(geometry);
+    const gis = dimensionValues(moved, config, this.getProjection())?.gis;
+    return composite(
+      [
+        updateGeometry(feature, geometry),
+        ...(gis === undefined
+          ? []
+          : [updateProperties(feature, { gisValue: Math.round(gis * 1000) / 1000 })]),
+      ],
+      'update dimension',
+    );
+  }
+
+  /** Replace temporary ids in dimension references by the ids the backend assigned. */
+  private remapDimensionReferences(idMap: Record<string, string | number>): void {
+    for (const feature of this.dimensionFeatures()) {
+      const next = remapReferences(referencesOf(feature), idMap);
+      if (next) feature.set('refs', next);
+    }
+  }
+
   private lengthUnit(): LengthUnit {
     const setting = this.config.units.length;
     return setting === 'auto' ? crsLengthUnit(this.getProjection()) : setting;

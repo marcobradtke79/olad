@@ -1721,6 +1721,35 @@
   box-shadow: inset 3px 0 0 #22c55e;
 }
 
+/* A dimension whose measured object changed: update or detach it. */
+.olcad-feature-table__row[data-status='stale'] {
+  font-style: italic;
+  color: var(--olcad-layer-highlight-color);
+}
+
+.olcad-feature-table__update-stale {
+  margin-left: var(--olcad-spacing);
+}
+
+.olcad-feature-table__update-stale[hidden] {
+  display: none;
+}
+
+.olcad-attribute-form__notice {
+  margin: 0 0 var(--olcad-spacing);
+  padding: calc(var(--olcad-spacing) / 2) var(--olcad-spacing);
+  border-left: 3px solid var(--olcad-layer-highlight-color);
+  background: var(--olcad-color-hover);
+}
+
+.olcad-attribute-form__notice p {
+  margin: 0 0 calc(var(--olcad-spacing) / 2);
+}
+
+.olcad-attribute-form__notice button + button {
+  margin-left: calc(var(--olcad-spacing) / 2);
+}
+
 /* A dimension whose field value deviates from the GIS value beyond the layer's tolerance. */
 .olcad-feature-table__row[data-status='deviates'] {
   color: var(--olcad-color-error);

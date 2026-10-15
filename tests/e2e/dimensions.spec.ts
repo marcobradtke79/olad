@@ -352,3 +352,137 @@ test.describe('linear dimension tool', () => {
     );
   });
 });
+
+/** Move one corner of parcel 1 (ring path [0, index]) east by `metres`, as one command. */
+async function moveParcelCorner(page: Page, index: number, metres: number): Promise<void> {
+  await page.evaluate(
+    ([i, m]) => {
+      const parcel = window.editor.layers.getFeatures('parcels').find((f) => f.getId() === 1)!;
+      const geometry = parcel.getGeometry()!.clone() as unknown as {
+        getCoordinates(): number[][][];
+        setCoordinates(c: number[][][]): void;
+      };
+      const ring = geometry.getCoordinates();
+      const corner = ring[0]![i!]!;
+      const projection = window.editor.map.getView().getProjection().getCode();
+      const moved = window.olcad.offsetMetres(projection, corner, m!, 0);
+      ring[0]![i!] = moved;
+      if (i === 0) ring[0]![ring[0]!.length - 1] = moved;
+      geometry.setCoordinates(ring);
+      window.editor.execute(
+        window.olcad.updateGeometry(
+          parcel,
+          geometry as unknown as Parameters<typeof window.olcad.updateGeometry>[1],
+        ),
+      );
+    },
+    [index, metres],
+  );
+}
+
+const staleIds = (page: Page) =>
+  page.evaluate(() => window.editor.dimensions.listStale().map((f) => f.getId()));
+
+test.describe('dimension references', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await request.post('/reset');
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('dimensions').featureCount))
+      .toBe(4);
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('parcels').featureCount))
+      .toBe(2);
+    await page.evaluate(() => window.editor.setEditMode(true));
+  });
+
+  test('a moved corner makes its dimensions stale; Update moves them back onto it', async ({
+    page,
+  }) => {
+    expect(await staleIds(page)).toEqual([]);
+    await moveParcelCorner(page, 1, 3);
+    await expect.poll(() => staleIds(page)).toEqual([1001]);
+    expect((await labels(page))['1001']!.text).toMatch(/^⚠ \(/);
+    const updated = await page.evaluate(() => {
+      const e = window.editor;
+      const dim = e.layers.getFeatures('dimensions').find((f) => f.getId() === 1001)!;
+      const before = dim.get('gisValue') as number | undefined;
+      const ok = e.dimensions.update(dim);
+      return { ok, before, after: dim.get('gisValue') as number, stale: e.dimensions.isStale(dim) };
+    });
+    expect(updated.ok).toBe(true);
+    expect(updated.stale).toBe(false);
+    expect(updated.after).toBeCloseTo(146.04 + 3, 0);
+    // Undo of the update makes it stale again; the parcel stays moved.
+    await page.evaluate(() => window.editor.undo());
+    await expect.poll(() => staleIds(page)).toEqual([1001]);
+  });
+
+  test('the attribute form and the table offer the stale actions', async ({ page }) => {
+    await moveParcelCorner(page, 0, -2); // the corner both seed dimensions start at
+    await expect.poll(async () => (await staleIds(page)).sort()).toEqual([1001, 1002]);
+    // Detach 1002 in the attribute form.
+    await page.evaluate(() => {
+      const dim = window.editor.layers.getFeatures('dimensions').find((f) => f.getId() === 1002)!;
+      window.editor.selection.set([dim]);
+    });
+    await openFlyout(page, 'attributes');
+    const notice = page.locator('olcad-attribute-form .olcad-attribute-form__notice');
+    await expect(notice).toContainText('A measured object changed');
+    await notice.locator('[data-action="detach-dimension"]').click();
+    await expect.poll(() => staleIds(page)).toEqual([1001]);
+    await closeFlyout(page, 'attributes');
+    // Update the rest from the table.
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement & { show(id: string): void }>('olcad-feature-table')!
+        .show('dimensions'),
+    );
+    const table = page.locator('olcad-feature-table');
+    await expect(table.locator('tbody tr[data-row="1001"]')).toHaveAttribute(
+      'data-status',
+      'stale',
+    );
+    const button = table.locator('[data-action="update-stale"]');
+    await expect(button).toHaveText('Update 1 stale');
+    await button.click();
+    await expect.poll(() => staleIds(page)).toEqual([]);
+    await expect(button).toBeHidden();
+  });
+
+  test('accept rewrites references to new objects to their backend ids', async ({ page }) => {
+    const refs = await page.evaluate(() => {
+      const e = window.editor;
+      const parcel = e.layers.getFeatures('parcels').find((f) => f.getId() === 2)!;
+      const copy = new (parcel.constructor as new (g: unknown) => typeof parcel)(
+        parcel.getGeometry()!.clone(),
+      );
+      e.execute(window.olcad.insertFeature('parcels', copy));
+      const tempId = copy.getId() as string;
+      const ring = (
+        copy.getGeometry() as unknown as { getCoordinates(): number[][][] }
+      ).getCoordinates()[0]!;
+      const DimFeature = parcel.constructor as new (p: Record<string, unknown>) => typeof parcel;
+      const line = new (
+        e.layers.getFeatures('dimensions')[0]!.getGeometry()!.constructor as new (
+          c: number[][],
+        ) => unknown
+      )([ring[0]!, ring[1]!]);
+      const dim = new DimFeature({
+        geometry: line,
+        dimType: 'aligned',
+        offset: -5,
+        refs: [
+          { layer: 'parcels', id: tempId, kind: 'vertex', path: [0, 0] },
+          { layer: 'parcels', id: tempId, kind: 'vertex', path: [0, 1] },
+        ],
+      });
+      e.execute(window.olcad.insertFeature('dimensions', dim));
+      e.changes.accept({ idMap: { [tempId]: 777 } });
+      return { refs: dim.get('refs'), stale: e.dimensions.isStale(dim) };
+    });
+    expect(refs.refs.map((r: { id: unknown }) => r.id)).toEqual([777, 777]);
+    expect(refs.stale).toBe(false);
+  });
+});

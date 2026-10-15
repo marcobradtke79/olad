@@ -65,6 +65,7 @@ function fakeEditor() {
       clear: () => select([]),
     },
     changes: { get: () => changeSet },
+    isEditMode: () => true,
     getProjection: () => 'EPSG:3857',
     units: {
       formatLength: (metres: number) => formatLength(metres, unit),
@@ -82,6 +83,7 @@ function fakeEditor() {
     },
     features,
     fit,
+    emitter,
     destroy: () => emitter.emit('destroy', undefined),
   };
   return editor as unknown as Editor & typeof editor;
@@ -274,7 +276,15 @@ describe('<olcad-feature-table> dimension layers', () => {
         },
       }),
     });
-    Object.assign(editor, { dimensions: { values: (f: Feature) => values.get(f) ?? null } });
+    const updateStale = vi.fn(() => 1);
+    let stale: Feature[] = [];
+    Object.assign(editor, {
+      dimensions: {
+        values: (f: Feature) => values.get(f) ?? null,
+        listStale: () => stale,
+        updateStale,
+      },
+    });
     const { table } = mount(editor);
     table.show('dims');
     expect(headers(table)).toEqual([
@@ -292,5 +302,16 @@ describe('<olcad-feature-table> dimension layers', () => {
     expect(column(table, 5)).toEqual(['ok', 'deviates']);
     expect(row(table, '1003').dataset.status).toBe('deviates');
     expect(row(table, '1001').dataset.status).toBeUndefined();
+    // Stale dimensions: a header button updates them all.
+    const button = table.querySelector<HTMLButtonElement>('[data-action="update-stale"]')!;
+    expect(button.hidden).toBe(true);
+    stale = [dims[0]!];
+    values.set(dims[0], { gis: 146.03, field: null, status: 'stale' });
+    editor.emitter.emit('dimensionstale', { features: stale });
+    expect(button.hidden).toBe(false);
+    expect(button.textContent).toBe('Update 1 stale');
+    expect(row(table, '1001').dataset.status).toBe('stale');
+    button.click();
+    expect(updateStale).toHaveBeenCalledWith('dims');
   });
 });

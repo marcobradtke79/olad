@@ -158,6 +158,20 @@ describe('dimensionStyleFunction', () => {
     expect(rel(tip!)).toEqual([10, -2]);
   });
 
+  it('draws a stale dimension dashed with a warning sign before the value', () => {
+    const feature = dim([0, 0], [10, 0], { offset: 2 });
+    const style = dimensionStyleFunction(
+      resolveDimension({ preset: 'surveying' })!,
+      base,
+      () => 'EPSG:25832',
+      'de',
+      (f) => f === feature,
+    );
+    const styles = style(feature, 0.05) as Style[];
+    expect(styles[0]!.getStroke()!.getLineDash()).toEqual([8, 4]);
+    expect(parts(styles).text.getText()!.getText()).toBe('⚠ (10,00)');
+  });
+
   it('leaves out the value below one pixel and draws other features with the base style', () => {
     const tiny = draw({ preset: 'architecture' }, dim([0, 0], [10, 0]), 10) as Style[];
     expect(tiny.some((s) => s.getText())).toBe(false);

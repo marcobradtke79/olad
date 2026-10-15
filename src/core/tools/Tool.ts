@@ -7,6 +7,7 @@ import type { MeasurementStore } from '../measure/MeasurementStore';
 import type { Selection } from '../selection/Selection';
 import type { TemplateStore } from '../templates/TemplateStore';
 import type { Locale } from '../i18n';
+import type { SnapResult } from '../snapping/SnapEngine';
 import type { LengthUnit } from '../units';
 
 /** What a tool step expects typed into the command line (`Tool.getInputRequest`). */
@@ -53,6 +54,8 @@ export interface ToolContext {
   getLengthUnit(): LengthUnit;
   /** The editor's locale (`config.locale`), for number formats such as dimension values. */
   getLocale(): Locale;
+  /** The last snap of the pointer (layer, object, mode), so a tool can record what a point was snapped to. */
+  getSnap?(): SnapResult | null;
   /** A length in metres formatted in the default unit's system, for prompts. */
   formatLength(metres: number): string;
   /** The editor's template store (`editor.templates`). */

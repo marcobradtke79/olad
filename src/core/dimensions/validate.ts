@@ -1,6 +1,7 @@
 import type Geometry from 'ol/geom/Geometry';
 import LineString from 'ol/geom/LineString';
 import type { MessageCode } from '../i18n';
+import { isRefs } from './references';
 import { DIMENSION_TYPES, SUPPORTED_DIMENSION_TYPES, type DimensionType } from './types';
 
 export interface DimensionIssue {
@@ -46,6 +47,9 @@ export function validateDimensionFeature(
     if (!isNullish(value) && !(typeof value === 'number' && Number.isFinite(value))) {
       return { code: 'dimension-value', params: { property: name } };
     }
+  }
+  if (!isRefs(properties.refs, points.length)) {
+    return { code: 'dimension-value', params: { property: 'refs' } };
   }
   for (const name of ['text', 'chain']) {
     const value = properties[name];

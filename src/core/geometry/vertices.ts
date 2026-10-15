@@ -142,6 +142,40 @@ export function nearestEdge(
   return best;
 }
 
+/** The coordinate of the vertex at `path`, or `null` when the geometry has no such vertex. */
+export function vertexAt(geometry: Geometry, path: VertexPath): Coordinate | null {
+  if (geometry instanceof Point) return path.length === 0 ? geometry.getCoordinates() : null;
+  for (const line of lines(geometry)) {
+    const prefix = path.slice(0, -1);
+    if (prefix.length !== line.prefix.length || prefix.some((v, i) => v !== line.prefix[i])) {
+      continue;
+    }
+    const index = path[path.length - 1]!;
+    const count = line.closed ? line.coordinates.length - 1 : line.coordinates.length;
+    return Number.isInteger(index) && index >= 0 && index < count ? line.coordinates[index]! : null;
+  }
+  return null;
+}
+
+/**
+ * The segment that starts at the vertex at `path` (its end is the next vertex; a ring's last
+ * vertex ends at the first), or `null` when there is none.
+ */
+export function segmentAt(geometry: Geometry, path: VertexPath): [Coordinate, Coordinate] | null {
+  for (const line of lines(geometry)) {
+    if (!line.segments) continue;
+    const prefix = path.slice(0, -1);
+    if (prefix.length !== line.prefix.length || prefix.some((v, i) => v !== line.prefix[i])) {
+      continue;
+    }
+    const index = path[path.length - 1]!;
+    return Number.isInteger(index) && index >= 0 && index < line.coordinates.length - 1
+      ? [line.coordinates[index]!, line.coordinates[index + 1]!]
+      : null;
+  }
+  return null;
+}
+
 /** A copy of `geometry` with the vertex at `path` moved to `coordinate`. */
 export function setVertex(geometry: Geometry, path: VertexPath, coordinate: Coordinate): Geometry {
   return edit(geometry, path, (line, index) => {

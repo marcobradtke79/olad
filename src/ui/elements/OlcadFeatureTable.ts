@@ -109,6 +109,8 @@ export class OlcadFeatureTable extends HTMLElement {
   private readonly count = document.createElement('span');
   private readonly filterInput = document.createElement('input');
   private readonly closeButton = document.createElement('button');
+  /** Update all stale dimensions of the shown layer (only for dimension layers with stale ones). */
+  private readonly updateStaleButton = document.createElement('button');
   private readonly body = document.createElement('div');
 
   /** Id of the layer shown, or `null` when closed. */
@@ -142,6 +144,7 @@ export class OlcadFeatureTable extends HTMLElement {
         editor.on('layerload', rerender),
         editor.on('projectionchange', rerender),
         editor.on('unitschange', rerender),
+        editor.on('dimensionstale', rerender),
         editor.on('selectionchange', () => {
           this.render();
           if (!this.selecting) this.scrollToSelection();
@@ -218,7 +221,21 @@ export class OlcadFeatureTable extends HTMLElement {
     this.closeButton.dataset.action = 'close';
     setIconButton(this.closeButton, 'close', 'Close table');
     this.closeButton.addEventListener('click', () => this.close());
-    header.append(this.title_, this.count, this.filterInput, this.closeButton);
+    this.updateStaleButton.type = 'button';
+    this.updateStaleButton.className = 'olcad-toolbar__button olcad-feature-table__update-stale';
+    this.updateStaleButton.dataset.action = 'update-stale';
+    this.updateStaleButton.hidden = true;
+    this.updateStaleButton.addEventListener('click', () => {
+      const editor = this.boundEditor;
+      if (editor && this.layer) editor.dimensions.updateStale(this.layer);
+    });
+    header.append(
+      this.title_,
+      this.count,
+      this.updateStaleButton,
+      this.filterInput,
+      this.closeButton,
+    );
     this.body.className = 'olcad-feature-table__body';
     this.append(header, this.body);
   }
@@ -261,6 +278,15 @@ export class OlcadFeatureTable extends HTMLElement {
       rows.length === all.length
         ? `${all.length} object${all.length === 1 ? '' : 's'}`
         : `${rows.length} of ${all.length}`;
+    // Dimension layers: one button moves every stale dimension onto its objects again.
+    const stale = editor.layers.getConfig(id).dimension
+      ? editor.dimensions.listStale(id).length
+      : 0;
+    this.updateStaleButton.hidden = stale === 0;
+    this.updateStaleButton.textContent = `Update ${stale} stale`;
+    this.updateStaleButton.title =
+      'Move the stale dimensions onto their measured objects again (field values stay)';
+    this.updateStaleButton.disabled = !editor.isEditMode();
 
     const table = document.createElement('table');
     table.className = 'olcad-feature-table__table';

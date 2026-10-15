@@ -7,6 +7,7 @@ import VectorSource from 'ol/source/Vector';
 import { insertFeature } from '../changes/commands';
 import type { ResolvedDimensionConfig, ResolvedLayerConfig } from '../config/types';
 import { decimalSeparator, formatDimensionNumber } from '../dimensions/format';
+import { referenceFor, type DimensionReference } from '../dimensions/references';
 import { dimensionValues } from '../dimensions/values';
 import { DIMENSION_PAPER_MM, dimensionStyleFunction } from '../layers/dimension';
 import { unitsPerMetre } from '../measure';
@@ -91,8 +92,10 @@ interface DimensionSet {
   id: string;
   rotation: number;
   origin: number[];
+  originRef: DimensionReference | null;
   offset: number;
   last: number[];
+  lastRef: DimensionReference | null;
   count: number;
 }
 
@@ -112,6 +115,8 @@ export class DimensionLinearTool extends BaseTool {
   private step: DimensionLinearStep = 'first';
   /** The points of the dimension in progress. */
   private points: number[][] = [];
+  /** What each point was snapped to (`null`: typed or free), recorded as the dimension's `refs`. */
+  private refs: (DimensionReference | null)[] = [];
   /** Offset of the dimension line in metres, left of the measured direction positive. */
   private offset = 0;
   /** Direction in degrees of a rotated dimension or a set. */
@@ -214,14 +219,17 @@ export class DimensionLinearTool extends BaseTool {
       case 'value':
         if (this.set) {
           this.points = [];
+          this.refs = [];
           this.goTo('next');
         } else if (this.method === 'tie') {
           this.points.pop();
+          this.refs.pop();
           this.goTo('second');
         } else this.goTo('line');
         return true;
       case 'line':
         this.points.pop();
+        this.refs.pop();
         this.goTo('second');
         return true;
       case 'second':
@@ -282,6 +290,7 @@ export class DimensionLinearTool extends BaseTool {
 
   private reset(): void {
     this.points = [];
+    this.refs = [];
     this.offset = 0;
     this.set = null;
     this.goTo(this.method === 'baseline' || this.method === 'running' ? 'origin' : 'first');
@@ -290,8 +299,10 @@ export class DimensionLinearTool extends BaseTool {
   private take(coordinate: number[]): void {
     const ctx = this.ctx;
     if (!ctx) return;
+    const ref = referenceFor(ctx.getSnap?.() ?? null, coordinate);
     if (this.step === 'first' || this.step === 'origin') {
       this.points = [coordinate];
+      this.refs = [ref];
       this.goTo('second');
     } else if (this.step === 'second') {
       const first = this.points[0]!;
@@ -306,25 +317,33 @@ export class DimensionLinearTool extends BaseTool {
         this.points = [first];
         return; // nothing measured along the direction: wait for another point
       }
+      this.refs = [this.refs[0] ?? null, ref];
       this.offset = 0;
       this.goTo(this.method === 'tie' ? 'value' : 'line');
     } else if (this.step === 'line') {
       this.offset = this.offsetAt(coordinate);
       this.goTo('value');
     } else if (this.step === 'next' && this.set) {
-      this.takeNext(ctx, this.set, coordinate);
+      this.takeNext(ctx, this.set, coordinate, ref);
     }
   }
 
   /** The next point of a set: a span from the last point (chain) or from the origin. */
-  private takeNext(ctx: ToolContext, set: DimensionSet, coordinate: number[]): void {
-    const from = this.method === 'chain' ? set.last : set.origin;
+  private takeNext(
+    ctx: ToolContext,
+    set: DimensionSet,
+    coordinate: number[],
+    ref: DimensionReference | null,
+  ): void {
+    const chain = this.method === 'chain';
+    const from = chain ? set.last : set.origin;
     if (coordinate[0] === from[0] && coordinate[1] === from[1]) return;
     this.points = [from, coordinate];
     if (Math.abs(this.along()) < 1e-9) {
       this.points = [];
       return;
     }
+    this.refs = [chain ? set.lastRef : set.originRef, ref];
     if (this.method === 'chain') {
       // On the first span's line: shift the offset by how far this span's start lies across.
       const u = this.direction();
@@ -384,6 +403,10 @@ export class DimensionLinearTool extends BaseTool {
       offset: type === 'tie' ? 0 : round(this.offset, 3),
       ...(type === 'rotated' || type === 'running' ? { rotation: round(this.rotation, 6) } : {}),
       ...(this.isSet() ? { chain: this.set?.id ?? null } : {}),
+      // What the points were snapped to, so the dimension can tell when they move.
+      ...(this.refs.some((ref) => ref !== null)
+        ? { refs: [this.refs[0] ?? null, this.refs[1] ?? null].map((r) => r && structuredClone(r)) }
+        : {}),
     });
   }
 
@@ -405,8 +428,10 @@ export class DimensionLinearTool extends BaseTool {
         id: chainId(),
         rotation: this.rotation,
         origin: this.points[0]!,
+        originRef: this.refs[0] ?? null,
         offset: this.offset,
         last: this.points[1]!,
+        lastRef: this.refs[1] ?? null,
         count: 0,
       };
     }
@@ -423,8 +448,10 @@ export class DimensionLinearTool extends BaseTool {
     const set = this.set;
     if (set) {
       set.last = this.points[1]!;
+      set.lastRef = this.refs[1] ?? null;
       set.count++;
       this.points = [];
+      this.refs = [];
       this.goTo('next');
     } else this.reset();
     if (ctx.execute(insertFeature(target.layerId, feature))) ctx.selection.set([feature]);

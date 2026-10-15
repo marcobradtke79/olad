@@ -45,6 +45,8 @@ export function dimensionValues(
   feature: Feature,
   config: Pick<ResolvedDimensionConfig, 'tolerance'>,
   projection: ProjectionLike,
+  /** Whether a measured object changed (references, see `isStale`): status `stale` wins. */
+  stale = false,
 ): DimensionValues | null {
   const geometry = feature.getGeometry();
   if (!(geometry instanceof LineString)) return null;
@@ -81,6 +83,6 @@ export function dimensionValues(
     field,
     value: field ?? gis,
     computed: field === null,
-    status: deviates ? 'deviates' : 'ok',
+    status: stale ? 'stale' : deviates ? 'deviates' : 'ok',
   };
 }

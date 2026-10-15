@@ -60,12 +60,19 @@ export function dimensionStyleFunction(
   base: FlatStyleLike,
   getProjection: () => string,
   locale: Locale = 'en',
+  /** Whether a measured object changed since the dimension was drawn (drawn dashed, marked ⚠). */
+  isStale: (feature: Feature) => boolean = () => false,
 ): StyleFunction {
   const baseStyle = flatStyleFunction(base);
   const decimal = decimalSeparator(locale);
   return (feature, resolution) => {
     const projection = getProjection();
-    const values = dimensionValues(feature as Feature, config, projection);
+    const values = dimensionValues(
+      feature as Feature,
+      config,
+      projection,
+      isStale(feature as Feature),
+    );
     if (!values) return baseStyle(feature, resolution);
     if (!(resolution > 0)) return undefined;
     const [p1, p2] = values.points as [Coordinate, Coordinate];
@@ -89,12 +96,13 @@ export function dimensionStyleFunction(
     const d1 = add(p1, n, offset);
     const d2 = add(d1, u, length);
     const color = values.status === 'deviates' ? config.deviationColor : config.color;
-    const stroke = new Stroke({ color, width: LINE_WIDTH });
+    const stale = values.status === 'stale';
+    const stroke = new Stroke({ color, width: LINE_WIDTH, ...(stale ? { lineDash: [8, 4] } : {}) });
     const fill = new Fill({ color });
     const styles: Style[] = [
       new Style({
         geometry: new LineString([d1, d2]),
-        stroke: tie ? new Stroke({ color, width: LINE_WIDTH, lineDash: [6, 4] }) : stroke,
+        stroke: tie && !stale ? new Stroke({ color, width: LINE_WIDTH, lineDash: [6, 4] }) : stroke,
       }),
     ];
 
@@ -190,12 +198,13 @@ export function dimensionStyleFunction(
         align = turn ? 'right' : 'left';
         centre = add(d2, outward, gapUp);
       }
-      const label = formatDimension(values.value, config.preset, {
+      const formatted = formatDimension(values.value, config.preset, {
         decimal,
         computed: values.computed,
         showComputed: config.showComputed,
         text: (feature.get('text') as string | null | undefined) ?? null,
       });
+      const label = stale ? `⚠ ${formatted}` : formatted;
       const size = Math.round(Math.min(pixels, MAX_TEXT_PIXELS) * 10) / 10;
       styles.push(
         new Style({

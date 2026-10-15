@@ -118,6 +118,9 @@ export class LayerManager {
   private readonly map: OlMap;
   private readonly getProjection: () => string;
   private readonly locale: Locale;
+  /** Whether a dimension's measured objects changed; set by the editor (`setDimensionStaleTest`). */
+  private staleTest: (feature: Feature) => boolean = () => false;
+  private readonly isStale = (feature: Feature): boolean => this.staleTest(feature);
   private readonly events: LayerManagerEvents;
   private readonly highlightConfig: ResolvedLayerHighlightConfig;
 
@@ -135,6 +138,11 @@ export class LayerManager {
     this.highlightConfig = highlight;
   }
 
+  /** Install the test that marks dimensions whose measured objects changed (drawn as stale). */
+  setDimensionStaleTest(test: (feature: Feature) => boolean): void {
+    this.staleTest = test;
+  }
+
   add(config: LayerConfig): void {
     validateLayerConfig(config);
     if (this.entries.has(config.id)) throw new Error(`Layer "${config.id}" already exists`);
@@ -142,6 +150,7 @@ export class LayerManager {
     const layer = createVectorLayer(resolved, {
       getProjection: this.getProjection,
       locale: this.locale,
+      isDimensionStale: this.isStale,
       originals: this.originals,
       onLoad: (id, features) => this.events.onLoad({ id, features }),
       onError: (id, error) => this.events.onError({ id, error }),
@@ -279,6 +288,7 @@ export class LayerManager {
           ...(clean.text ? { text: clean.text } : {}),
         },
         this.locale,
+        this.isStale,
       ),
     );
     layer.setOpacity(clean.opacity);
@@ -294,7 +304,7 @@ export class LayerManager {
     if (!entry.style) return;
     delete entry.style;
     const { config, layer } = entry;
-    layer.setStyle(vectorLayerStyle(config, this.getProjection, {}, this.locale));
+    layer.setStyle(vectorLayerStyle(config, this.getProjection, {}, this.locale, this.isStale));
     layer.setOpacity(1);
     layer.setMinZoom(config.minZoom ?? -Infinity);
     layer.setMaxZoom(config.maxZoom ?? Infinity);

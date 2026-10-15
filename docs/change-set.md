@@ -79,7 +79,7 @@ Objects of a dimension layer ([`layers[].dimension`](configuration.md#layersdime
 }
 ```
 
-Setting a field value later is an `update` with `changed: ["fieldValue"]`. The GIS value is computed from the geometry when the dimension is drawn and is not part of the change set unless a property `gisValue` is set.
+Setting a field value later is an `update` with `changed: ["fieldValue"]`. `refs` lists, per point, the object (layer and id) and the vertex or segment it was snapped to. References to objects inserted in the same change set carry their `tempId`; the backend maps them with the ids it assigns, and `accept({ idMap })` rewrites them in the client. The GIS value is computed from the geometry when the dimension is drawn and is not part of the change set unless a property `gisValue` is set.
 
 ## Collapse rules
 

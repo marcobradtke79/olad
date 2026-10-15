@@ -7,7 +7,27 @@
       "properties": {
         "id": 1001,
         "dimType": "aligned",
-        "offset": -12
+        "offset": -12,
+        "refs": [
+          {
+            "layer": "parcels",
+            "id": 1,
+            "kind": "vertex",
+            "path": [
+              0,
+              0
+            ]
+          },
+          {
+            "layer": "parcels",
+            "id": 1,
+            "kind": "vertex",
+            "path": [
+              0,
+              1
+            ]
+          }
+        ]
       },
       "geometry": {
         "type": "LineString",
@@ -30,7 +50,27 @@
         "id": 1002,
         "dimType": "aligned",
         "offset": 12,
-        "fieldValue": 166.98
+        "fieldValue": 166.98,
+        "refs": [
+          {
+            "layer": "parcels",
+            "id": 1,
+            "kind": "vertex",
+            "path": [
+              0,
+              0
+            ]
+          },
+          {
+            "layer": "parcels",
+            "id": 1,
+            "kind": "vertex",
+            "path": [
+              0,
+              3
+            ]
+          }
+        ]
       },
       "geometry": {
         "type": "LineString",

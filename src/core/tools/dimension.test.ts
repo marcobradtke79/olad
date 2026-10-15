@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import Collection from 'ol/Collection';
+import Feature from 'ol/Feature';
+import Polygon from 'ol/geom/Polygon';
 import type LineString from 'ol/geom/LineString';
 import type Interaction from 'ol/interaction/Interaction';
 import type BaseLayer from 'ol/layer/Base';
@@ -270,5 +272,43 @@ describe('DimensionLinearTool', () => {
     });
     expect(inserted().get('rotation')).toBeUndefined();
     expect(inserted().get('chain')).toBeUndefined();
+  });
+
+  it('records what each point was snapped to as references', () => {
+    const { tool, ctx, event, inserted } = setup('dims');
+    const parcel = new Feature(
+      new Polygon([
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+      ]),
+    );
+    parcel.setId(4);
+    let snap: { coordinate: number[]; mode: string; layer?: string; feature?: Feature } | null =
+      null;
+    Object.assign(ctx, { getSnap: () => snap });
+    tool.activate(ctx, { method: 'chain' });
+    snap = { coordinate: [0, 0], mode: 'vertex', layer: 'parcels', feature: parcel };
+    event('click', [0, 0]);
+    snap = { coordinate: [10, 0], mode: 'vertex', layer: 'parcels', feature: parcel };
+    event('click', [10, 0]);
+    snap = null;
+    event('click', [5, -3]);
+    tool.finish();
+    event('click', [16, 0]); // a free point: no reference
+    tool.finish();
+    expect(inserted(0).get('refs')).toEqual([
+      { layer: 'parcels', id: 4, kind: 'vertex', path: [0, 0] },
+      { layer: 'parcels', id: 4, kind: 'vertex', path: [0, 1] },
+    ]);
+    // The next span starts where the last one ended, with that point's reference.
+    expect(inserted(1).get('refs')).toEqual([
+      { layer: 'parcels', id: 4, kind: 'vertex', path: [0, 1] },
+      null,
+    ]);
   });
 });

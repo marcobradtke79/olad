@@ -32,6 +32,8 @@ export interface VectorLayerContext {
   getProjection(): string;
   /** Locale of number formats (dimension values). Default `'en'`. */
   locale?: Locale;
+  /** Whether a dimension's measured objects changed (drawn as stale). */
+  isDimensionStale?(feature: Feature): boolean;
   originals: OriginalStore;
   onLoad(id: string, features: Feature[]): void;
   onError(id: string, error: Error): void;
@@ -245,9 +247,12 @@ export function vectorLayerStyle(
   getProjection: () => string,
   override: { flat?: FlatStyleLike; text?: { color: string; halo: string } } = {},
   locale: Locale = 'en',
+  isDimensionStale: (feature: Feature) => boolean = () => false,
 ): FlatStyleLike | StyleFunction {
   const flat = override.flat ?? layer.style ?? DEFAULT_STYLES[layer.geometryType];
-  if (layer.dimension) return dimensionStyleFunction(layer.dimension, flat, getProjection, locale);
+  if (layer.dimension) {
+    return dimensionStyleFunction(layer.dimension, flat, getProjection, locale, isDimensionStale);
+  }
   if (!layer.text) return flat;
   const text = override.text
     ? { ...layer.text, color: override.text.color, haloColor: override.text.halo }
@@ -293,7 +298,9 @@ export function createVectorLayer(
   });
   const olLayer = new VectorLayer({
     source: vectorSource,
-    style: vectorLayerStyle(layer, ctx.getProjection, {}, ctx.locale),
+    style: vectorLayerStyle(layer, ctx.getProjection, {}, ctx.locale, (f) =>
+      ctx.isDimensionStale ? ctx.isDimensionStale(f) : false,
+    ),
     visible: layer.visible,
     minZoom: layer.minZoom,
     maxZoom: layer.maxZoom,
