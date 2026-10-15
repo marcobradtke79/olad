@@ -93,3 +93,14 @@ describe('dimensionValues: rotated', () => {
     expect(dimensionValues(feature(undefined), config, 'EPSG:25832')).toBeNull();
   });
 });
+
+describe('dimensionValues: tie and running', () => {
+  it('measures a tie like an aligned and a running like a rotated dimension', () => {
+    const at = [457000, 5428000];
+    const line = new LineString([at, [at[0]! + 3, at[1]! + 4]]);
+    const tie = new Feature({ geometry: line.clone(), dimType: 'tie' });
+    expect(dimensionValues(tie, config, 'EPSG:25832')!.gis).toBeCloseTo(5, 6);
+    const running = new Feature({ geometry: line.clone(), dimType: 'running', rotation: 0 });
+    expect(dimensionValues(running, config, 'EPSG:25832')!.gis).toBeCloseTo(3, 6);
+  });
+});

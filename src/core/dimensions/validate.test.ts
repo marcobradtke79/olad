@@ -63,3 +63,15 @@ describe('validateDimensionFeature: rotated', () => {
     );
   });
 });
+
+describe('validateDimensionFeature: tie and running', () => {
+  it('accepts tie distances and needs a rotation for running dimensions', () => {
+    expect(validateDimensionFeature(line, { dimType: 'tie' })).toBeNull();
+    expect(
+      validateDimensionFeature(line, { dimType: 'running', rotation: 0, chain: 'c-1' }),
+    ).toBeNull();
+    expect(validateDimensionFeature(line, { dimType: 'running' })?.params.property).toBe(
+      'rotation',
+    );
+  });
+});

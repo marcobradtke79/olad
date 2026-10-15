@@ -37,7 +37,8 @@ export function validateDimensionFeature(
     return { code: 'dimension-value', params: { property: 'fieldValue' } };
   }
   const rotation = properties.rotation;
-  if (type === 'rotated' && !(typeof rotation === 'number' && Number.isFinite(rotation))) {
+  const directed = type === 'rotated' || type === 'running';
+  if (directed && !(typeof rotation === 'number' && Number.isFinite(rotation))) {
     return { code: 'dimension-value', params: { property: 'rotation' } };
   }
   for (const name of ['offset', 'textPosition', 'gisValue', 'rotation']) {

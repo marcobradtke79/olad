@@ -296,6 +296,11 @@ export class OlcadFeatureTable extends HTMLElement {
       tr.setAttribute('aria-selected', String(selected.has(feature)));
       const state = states.get(String(feature.getId()));
       if (state) tr.dataset.state = state;
+      // Dimensions whose field value deviates from the GIS value beyond the tolerance.
+      if (editor.layers.getConfig(id).dimension) {
+        const status = editor.dimensions.values(feature)?.status;
+        if (status && status !== 'ok') tr.dataset.status = status;
+      }
       for (const column of columns) {
         const td = document.createElement('td');
         td.textContent = column.text(feature);
@@ -345,6 +350,8 @@ export class OlcadFeatureTable extends HTMLElement {
     const names = new Set<string>();
     for (const field of config.schema?.fields ?? []) {
       names.add(field.name);
+      // A dimension layer's field value has its own column, in the default unit.
+      if (config.dimension && field.name === 'fieldValue') continue;
       columns.push({
         key: field.name,
         label: field.label ?? field.name,
@@ -380,6 +387,45 @@ export class OlcadFeatureTable extends HTMLElement {
           sortValue: (f) => (f.get(heightProperty) as number | undefined) ?? null,
         });
       }
+    }
+    if (config.dimension) {
+      // GIS value, field value, their difference and the status (dimensionValues).
+      const values = (f: Feature) => editor.dimensions.values(f);
+      const length = (value: number | null | undefined) =>
+        value === null || value === undefined ? '' : editor.units.formatLength(value);
+      const difference = (f: Feature): number | null => {
+        const v = values(f);
+        return v && v.field !== null ? v.field - v.gis : null;
+      };
+      columns.push(
+        {
+          key: '#gis',
+          label: 'GIS value',
+          text: (f) => length(values(f)?.gis),
+          sortValue: (f) => values(f)?.gis ?? null,
+        },
+        {
+          key: '#field',
+          label: 'Field value',
+          text: (f) => length(values(f)?.field),
+          sortValue: (f) => values(f)?.field ?? null,
+        },
+        {
+          key: '#difference',
+          label: 'Difference',
+          text: (f) => {
+            const value = difference(f);
+            return value === null ? '' : `${value > 0 ? '+' : ''}${length(value)}`;
+          },
+          sortValue: difference,
+        },
+        {
+          key: '#status',
+          label: 'Status',
+          text: (f) => values(f)?.status ?? '',
+          sortValue: (f) => values(f)?.status ?? null,
+        },
+      );
     }
     columns.push({
       key: '#geometry',

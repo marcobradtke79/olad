@@ -2,6 +2,7 @@
 export const DIMENSION_TYPES = [
   'aligned',
   'rotated',
+  'running',
   'tie',
   'angular',
   'radius',
@@ -15,7 +16,12 @@ export const DIMENSION_TYPES = [
 export type DimensionType = (typeof DIMENSION_TYPES)[number];
 
 /** The types the editor accepts and draws so far. */
-export const SUPPORTED_DIMENSION_TYPES: readonly DimensionType[] = ['aligned', 'rotated'];
+export const SUPPORTED_DIMENSION_TYPES: readonly DimensionType[] = [
+  'aligned',
+  'rotated',
+  'running',
+  'tie',
+];
 
 /** `stale`: a measured object changed (planned); `deviates`: field and GIS value differ beyond the tolerance. */
 export type DimensionStatus = 'ok' | 'stale' | 'deviates';
@@ -24,7 +30,7 @@ export type DimensionStatus = 'ok' | 'stale' | 'deviates';
 export interface DimensionProperties {
   /** Dimension type. A two-point line without it is an `aligned` dimension. */
   dimType?: DimensionType;
-  /** Direction of a `rotated` dimension in degrees, counter-clockwise from the x-axis. */
+  /** Direction of a `rotated` or `running` dimension in degrees, counter-clockwise from the x-axis. */
   rotation?: number;
   /** Signed distance of the dimension line from the measured points in metres, left of p1 → p2 positive. */
   offset?: number;

@@ -8,7 +8,7 @@ import { insertFeature } from '../changes/commands';
 import type { ResolvedDimensionConfig, ResolvedLayerConfig } from '../config/types';
 import { decimalSeparator, formatDimensionNumber } from '../dimensions/format';
 import { dimensionValues } from '../dimensions/values';
-import { dimensionStyleFunction } from '../layers/dimension';
+import { DIMENSION_PAPER_MM, dimensionStyleFunction } from '../layers/dimension';
 import { unitsPerMetre } from '../measure';
 import { defaultProperties } from './draw';
 import { PointPickInteraction } from './pointer';
@@ -16,20 +16,29 @@ import { createPreviewLayer, PREVIEW_LAYER_PROPERTY, PREVIEW_VERTEX_PROPERTY } f
 import { BaseTool, type InputRequest, type ToolContext, type ToolOptions } from './Tool';
 
 /** Variants of the linear dimension tool (`ToolOptions.method`). */
-export const DIMENSION_LINEAR_METHODS = ['aligned', 'rotated'] as const;
+export const DIMENSION_LINEAR_METHODS = [
+  'aligned',
+  'rotated',
+  'chain',
+  'baseline',
+  'running',
+  'tie',
+] as const;
 export type DimensionLinearMethod = (typeof DIMENSION_LINEAR_METHODS)[number];
 export const DEFAULT_DIMENSION_LINEAR_METHOD: DimensionLinearMethod = 'aligned';
 
-export type DimensionLinearStep = 'first' | 'second' | 'line' | 'value';
+export type DimensionLinearStep = 'first' | 'origin' | 'second' | 'line' | 'value' | 'next';
 
 /** Prompt shown by the input bar for each step; `{gis}` is the measured value. */
 export const DIMENSION_LINEAR_PROMPTS: Record<DimensionLinearStep, string> = {
   first: 'First point of the dimension: click (snaps to objects) or type x,y',
+  origin: 'Origin of the dimensions: click (snaps to objects) or type x,y',
   second:
     'Second point: click, or type x,y · @dx,dy · @distance<angle relative to the first point; Escape drops the dimension',
   line: 'Position of the dimension line: click, or type the offset in {unit}; Backspace steps back',
   value:
     'Field value in {unit} [Enter keeps {gis}], or t <text> for a free text; Backspace steps back',
+  next: 'Next point: click or type (relative to the last point); Enter or Escape ends',
 };
 
 /** The method named by the options (the default when none), or `null` for an unknown one. */
@@ -68,22 +77,46 @@ function marker(coordinate: number[]): Feature {
   return feature;
 }
 
+/** Methods that draw a set of dimensions sharing a direction and a `chain` id. */
+const SET_METHODS: readonly DimensionLinearMethod[] = ['chain', 'baseline', 'running'];
+
+let chainCounter = 0;
+/** A new id for a chain or baseline set. */
+function chainId(): string {
+  return `c-${Date.now().toString(36)}-${++chainCounter}`;
+}
+
+/** The set in progress: its direction, origin, the first line's offset and the last point. */
+interface DimensionSet {
+  id: string;
+  rotation: number;
+  origin: number[];
+  offset: number;
+  last: number[];
+  count: number;
+}
+
 /**
- * Draw a linear dimension into the active dimension layer: two measured points (snapped like
- * every tool point), the position of the dimension line (pointer or typed offset), then the
+ * Draw linear dimensions into the active dimension layer. Every dimension: its points (snapped
+ * like every tool point), the position of the dimension line (pointer or typed offset), then the
  * field value (Enter keeps the GIS value, a typed length is the field value, `t <text>` a free
- * text). `aligned` measures the true distance, `rotated` the distance along the straightedge.
- * The dimension is inserted as one command and selected; the tool stays active.
+ * text). `aligned` measures the true distance, `rotated` the distance along the straightedge,
+ * `tie` a survey tie distance without a dimension line. `chain`, `baseline` and `running` go on
+ * after the first dimension: every further point adds a span from the last point (chain, all on
+ * one line), a stacked dimension from the origin (baseline) or a value on the common line from
+ * the origin (running), until Enter or Escape. Each dimension is one command and is selected.
  */
 export class DimensionLinearTool extends BaseTool {
   readonly id = 'dimension-linear';
   private method: DimensionLinearMethod = DEFAULT_DIMENSION_LINEAR_METHOD;
   private step: DimensionLinearStep = 'first';
+  /** The points of the dimension in progress. */
   private points: number[][] = [];
   /** Offset of the dimension line in metres, left of the measured direction positive. */
   private offset = 0;
-  /** Direction of a rotated dimension in degrees, taken from the straightedge at the second point. */
+  /** Direction in degrees of a rotated dimension or a set. */
   private rotation = 0;
+  private set: DimensionSet | null = null;
   private pointer: PointPickInteraction | null = null;
   private markers: VectorLayer<VectorSource<Feature>> | null = null;
   private dimensionLayer: VectorLayer<VectorSource<Feature>> | null = null;
@@ -157,28 +190,46 @@ export class DimensionLinearTool extends BaseTool {
     this.markers = null;
     this.dimensionLayer = null;
     this.points = [];
+    this.set = null;
     this.step = 'first';
   }
 
-  /** Escape drops the dimension in progress. */
+  /** Escape drops the dimension in progress and ends a set. */
   override cancel(): void {
-    if (this.points.length > 0) this.reset();
+    if (this.points.length > 0 || this.set) this.reset();
   }
 
-  /** Enter in the value step keeps the GIS value. */
+  /** Enter keeps the GIS value in the value step, and ends a set while it waits for a point. */
   override finish(): void {
     if (this.step === 'value') this.insert(null, null);
+    else if (this.step === 'next') this.reset();
   }
 
-  /** Backspace steps back one step. */
+  /** Backspace steps back one step; while a set waits for its next point it ends the set. */
   override removeLastPoint(): boolean {
-    if (this.step === 'value') this.goTo('line');
-    else if (this.step === 'line') {
-      this.points.pop();
-      this.goTo('second');
-    } else if (this.step === 'second') this.reset();
-    else return false;
-    return true;
+    switch (this.step) {
+      case 'next':
+        this.reset();
+        return true;
+      case 'value':
+        if (this.set) {
+          this.points = [];
+          this.goTo('next');
+        } else if (this.method === 'tie') {
+          this.points.pop();
+          this.goTo('second');
+        } else this.goTo('line');
+        return true;
+      case 'line':
+        this.points.pop();
+        this.goTo('second');
+        return true;
+      case 'second':
+        this.reset();
+        return true;
+      default:
+        return false;
+    }
   }
 
   /** A typed point is the next measured point, or (in the line step) the dimension line's position. */
@@ -193,7 +244,6 @@ export class DimensionLinearTool extends BaseTool {
     if (this.step === 'line' && metres >= 0) {
       this.offset = Math.sign(this.offset || 1) * metres;
       this.goTo('value');
-      this.drawDimension();
       return true;
     }
     if (this.step === 'value' && metres > 0) {
@@ -212,50 +262,95 @@ export class DimensionLinearTool extends BaseTool {
     return true;
   }
 
-  /** Relative input is measured from the first point. */
+  /** Relative input is measured from the last point of a chain, else from the first point (the origin). */
   override referencePoint(): number[] | null {
+    if (this.step === 'next' && this.set) {
+      return this.method === 'chain' ? this.set.last : this.set.origin;
+    }
     return this.points[0] ?? null;
+  }
+
+  private isSet(): boolean {
+    return SET_METHODS.includes(this.method);
+  }
+
+  /** The stored type of the dimensions this variant draws. */
+  private dimType(): 'aligned' | 'rotated' | 'running' | 'tie' {
+    if (this.method === 'aligned' || this.method === 'tie') return this.method;
+    return this.method === 'running' ? 'running' : 'rotated';
   }
 
   private reset(): void {
     this.points = [];
     this.offset = 0;
-    this.goTo('first');
+    this.set = null;
+    this.goTo(this.method === 'baseline' || this.method === 'running' ? 'origin' : 'first');
   }
 
   private take(coordinate: number[]): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (this.step === 'first') {
+    if (this.step === 'first' || this.step === 'origin') {
       this.points = [coordinate];
       this.goTo('second');
     } else if (this.step === 'second') {
       const first = this.points[0]!;
       if (coordinate[0] === first[0] && coordinate[1] === first[1]) return;
-      this.rotation = ctx.getStraightedgeAngle();
+      // The direction: the straightedge for rotated, else (sets) the first two points.
+      this.rotation =
+        this.method === 'rotated'
+          ? ctx.getStraightedgeAngle()
+          : (Math.atan2(coordinate[1]! - first[1]!, coordinate[0]! - first[0]!) * 180) / Math.PI;
       this.points = [first, coordinate];
-      if (this.method === 'rotated' && Math.abs(this.along()) < 1e-9) {
+      if (Math.abs(this.along()) < 1e-9) {
         this.points = [first];
-        return; // nothing measured along the straightedge: wait for another point
+        return; // nothing measured along the direction: wait for another point
       }
       this.offset = 0;
-      this.goTo('line');
+      this.goTo(this.method === 'tie' ? 'value' : 'line');
     } else if (this.step === 'line') {
       this.offset = this.offsetAt(coordinate);
       this.goTo('value');
-      this.drawDimension();
+    } else if (this.step === 'next' && this.set) {
+      this.takeNext(ctx, this.set, coordinate);
     }
+  }
+
+  /** The next point of a set: a span from the last point (chain) or from the origin. */
+  private takeNext(ctx: ToolContext, set: DimensionSet, coordinate: number[]): void {
+    const from = this.method === 'chain' ? set.last : set.origin;
+    if (coordinate[0] === from[0] && coordinate[1] === from[1]) return;
+    this.points = [from, coordinate];
+    if (Math.abs(this.along()) < 1e-9) {
+      this.points = [];
+      return;
+    }
+    if (this.method === 'chain') {
+      // On the first span's line: shift the offset by how far this span's start lies across.
+      const u = this.direction();
+      const across = (from[0]! - set.origin[0]!) * -u[1]! + (from[1]! - set.origin[1]!) * u[0]!;
+      this.offset = set.offset - across / unitsPerMetre(ctx.getProjection(), this.midpoint());
+    } else if (this.method === 'baseline') {
+      const target = dimensionTarget(ctx);
+      const spacing = target
+        ? (DIMENSION_PAPER_MM.baselineSpacing / 1000) * target.layer.dimension.referenceScale
+        : 0;
+      this.offset = set.offset + Math.sign(set.offset || 1) * spacing * set.count;
+    } else {
+      this.offset = set.offset;
+    }
+    this.goTo('value');
   }
 
   /** Unit vector of the measured direction (map units). */
   private direction(): number[] {
     const [p1, p2] = this.points as [number[], number[]];
-    if (this.method === 'rotated') {
-      const angle = (this.rotation * Math.PI) / 180;
-      return [Math.cos(angle), Math.sin(angle)];
+    if (this.dimType() === 'aligned' || this.dimType() === 'tie') {
+      const length = Math.hypot(p2[0]! - p1[0]!, p2[1]! - p1[1]!);
+      return [(p2[0]! - p1[0]!) / length, (p2[1]! - p1[1]!) / length];
     }
-    const length = Math.hypot(p2[0]! - p1[0]!, p2[1]! - p1[1]!);
-    return [(p2[0]! - p1[0]!) / length, (p2[1]! - p1[1]!) / length];
+    const angle = (this.rotation * Math.PI) / 180;
+    return [Math.cos(angle), Math.sin(angle)];
   }
 
   /** Signed distance from p1 to p2 along the direction (map units). */
@@ -265,24 +360,30 @@ export class DimensionLinearTool extends BaseTool {
     return (p2[0]! - p1[0]!) * u[0]! + (p2[1]! - p1[1]!) * u[1]!;
   }
 
+  private midpoint(): number[] {
+    const [p1, p2] = this.points as [number[], number[]];
+    return [(p1[0]! + p2[0]!) / 2, (p1[1]! + p2[1]!) / 2];
+  }
+
   /** Offset in metres of a dimension line through `coordinate`. */
   private offsetAt(coordinate: number[]): number {
     const ctx = this.ctx!;
-    const [p1, p2] = this.points as [number[], number[]];
+    const p1 = this.points[0]!;
     const u = this.direction();
     const across = (coordinate[0]! - p1[0]!) * -u[1]! + (coordinate[1]! - p1[1]!) * u[0]!;
-    const mid = [(p1[0]! + p2[0]!) / 2, (p1[1]! + p2[1]!) / 2];
-    return across / unitsPerMetre(ctx.getProjection(), mid);
+    return across / unitsPerMetre(ctx.getProjection(), this.midpoint());
   }
 
   /** The feature of the dimension in progress (both points fixed). */
   private feature(): Feature | null {
     if (this.points.length < 2) return null;
+    const type = this.dimType();
     return new Feature({
       geometry: new LineString(this.points.map((p) => p.slice())),
-      dimType: this.method,
-      offset: round(this.offset, 3),
-      ...(this.method === 'rotated' ? { rotation: this.rotation } : {}),
+      dimType: type,
+      offset: type === 'tie' ? 0 : round(this.offset, 3),
+      ...(type === 'rotated' || type === 'running' ? { rotation: round(this.rotation, 6) } : {}),
+      ...(this.isSet() ? { chain: this.set?.id ?? null } : {}),
     });
   }
 
@@ -297,9 +398,21 @@ export class DimensionLinearTool extends BaseTool {
   private insert(fieldValue: number | null, text: string | null): void {
     const ctx = this.ctx;
     const target = ctx && dimensionTarget(ctx);
+    if (!ctx || !target || this.points.length < 2) return;
+    // The first dimension of a set starts it: its id, direction, origin and line.
+    if (this.isSet() && !this.set) {
+      this.set = {
+        id: chainId(),
+        rotation: this.rotation,
+        origin: this.points[0]!,
+        offset: this.offset,
+        last: this.points[1]!,
+        count: 0,
+      };
+    }
     const drawn = this.feature();
     const gis = this.gisValue();
-    if (!ctx || !target || !drawn || gis === null) return;
+    if (!drawn || gis === null) return;
     const feature = new Feature({
       ...defaultProperties(target.layer),
       ...drawn.getProperties(),
@@ -307,12 +420,18 @@ export class DimensionLinearTool extends BaseTool {
       fieldValue,
       text,
     });
-    this.reset();
+    const set = this.set;
+    if (set) {
+      set.last = this.points[1]!;
+      set.count++;
+      this.points = [];
+      this.goTo('next');
+    } else this.reset();
     if (ctx.execute(insertFeature(target.layerId, feature))) ctx.selection.set([feature]);
   }
 
   private onPointerMove(coordinate: number[]): void {
-    if (!this.ctx || this.points.length === 0) return;
+    if (!this.ctx) return;
     if (this.step === 'line') this.offset = this.offsetAt(coordinate);
     this.markerSource.clear(true);
     this.markerSource.addFeatures(this.points.map(marker));
@@ -325,7 +444,8 @@ export class DimensionLinearTool extends BaseTool {
   /** Draw the dimension in progress in the layer's own dimension style. */
   private drawDimension(): void {
     this.dimensionSource.clear(true);
-    const feature = this.step === 'line' || this.step === 'value' ? this.feature() : null;
+    const shown = this.step === 'line' || this.step === 'value' || this.method === 'tie';
+    const feature = shown ? this.feature() : null;
     if (feature) this.dimensionSource.addFeature(feature);
   }
 

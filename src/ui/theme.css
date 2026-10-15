@@ -1721,6 +1721,11 @@
   box-shadow: inset 3px 0 0 #22c55e;
 }
 
+/* A dimension whose field value deviates from the GIS value beyond the layer's tolerance. */
+.olcad-feature-table__row[data-status='deviates'] {
+  color: var(--olcad-color-error);
+}
+
 .olcad-feature-table__sort:focus-visible,
 .olcad-feature-table__row:focus-visible {
   outline: 2px solid var(--olcad-color-focus);

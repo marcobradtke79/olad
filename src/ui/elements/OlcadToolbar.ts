@@ -187,6 +187,37 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
         icon: 'dimensionRotated',
         options: { method: 'rotated' },
       },
+      {
+        id: 'chain',
+        label: 'Chain dimension',
+        title:
+          'Chain: consecutive spans on one dimension line in the first span’s direction; Enter ends',
+        icon: 'dimensionChain',
+        options: { method: 'chain' },
+      },
+      {
+        id: 'baseline',
+        label: 'Baseline dimension',
+        title: 'Baseline: every point from one origin, the dimension lines stacked; Enter ends',
+        icon: 'dimensionBaseline',
+        options: { method: 'baseline' },
+      },
+      {
+        id: 'running',
+        label: 'Running dimension',
+        title:
+          'Running: every point from one origin on one line, cumulative values (DIN 406); Enter ends',
+        icon: 'dimensionRunning',
+        options: { method: 'running' },
+      },
+      {
+        id: 'tie',
+        label: 'Tie distance',
+        title:
+          'Tie distance (survey): the direct distance between two points, written along a thin line',
+        icon: 'dimensionTie',
+        options: { method: 'tie' },
+      },
     ],
   },
   modify: {

@@ -34,6 +34,10 @@ export const DIMENSION_PAPER_MM = {
   dotRadius: 0.5,
   /** Gap between the dimension line and the bottom of the value. */
   textGap: 1,
+  /** Distance between the stacked lines of a baseline dimension set. */
+  baselineSpacing: 8,
+  /** Radius of the origin circle of running dimensions. */
+  originRadius: 1,
 };
 
 /** Line width of dimensions in pixels. */
@@ -77,13 +81,22 @@ export function dimensionStyleFunction(
     const perMetre = unitsPerMetre(projection, mid);
     /** Paper millimetres → map units. */
     const paper = (mm: number) => (mm / 1000) * config.referenceScale * perMetre;
-    const offset = (Number(feature.get('offset')) || 0) * perMetre;
+    // A tie distance is drawn between its points; a running dimension's first point is the
+    // origin of the common line.
+    const tie = values.type === 'tie';
+    const running = values.type === 'running';
+    const offset = tie ? 0 : (Number(feature.get('offset')) || 0) * perMetre;
     const d1 = add(p1, n, offset);
     const d2 = add(d1, u, length);
     const color = values.status === 'deviates' ? config.deviationColor : config.color;
     const stroke = new Stroke({ color, width: LINE_WIDTH });
     const fill = new Fill({ color });
-    const styles: Style[] = [new Style({ geometry: new LineString([d1, d2]), stroke })];
+    const styles: Style[] = [
+      new Style({
+        geometry: new LineString([d1, d2]),
+        stroke: tie ? new Stroke({ color, width: LINE_WIDTH, lineDash: [6, 4] }) : stroke,
+      }),
+    ];
 
     // Extension lines from each point to its foot on the dimension line, only where the line
     // stands off the point; a rotated dimension's two extension lines differ in length.
@@ -99,12 +112,32 @@ export function dimensionStyleFunction(
       const side = Math.sign(across);
       extensions.push([add(point, n, gap * side), add(foot, n, overrun * side)]);
     }
-    if (extensions.length > 0) {
+    if (extensions.length > 0 && !tie) {
       styles.push(new Style({ geometry: new MultiLineString(extensions), stroke }));
     }
 
-    // Terminators.
-    if (config.terminator === 'tick') {
+    // Terminators: none on a tie distance; a running dimension has the origin circle and an
+    // arrow pointing away from the origin; otherwise the preset's mark at both ends.
+    if (tie) {
+      // no terminators
+    } else if (running) {
+      const along = paper(DIMENSION_PAPER_MM.arrowLength);
+      const across = paper(DIMENSION_PAPER_MM.arrowWidth) / 2;
+      const back = add(d2, u, -along * Math.sign(length));
+      styles.push(
+        new Style({
+          geometry: new Point(d1),
+          image: new CircleStyle({
+            radius: Math.max(paper(DIMENSION_PAPER_MM.originRadius) / resolution, 2),
+            stroke,
+          }),
+        }),
+        new Style({
+          geometry: new MultiPolygon([[[d2, add(back, n, across), add(back, n, -across), d2]]]),
+          fill,
+        }),
+      );
+    } else if (config.terminator === 'tick') {
       const half = paper(DIMENSION_PAPER_MM.tick) / 2;
       const t: Coordinate = [(u[0]! + n[0]!) / Math.SQRT2, (u[1]! + n[1]!) / Math.SQRT2];
       styles.push(
@@ -143,7 +176,20 @@ export function dimensionStyleFunction(
       const read: Coordinate = flip ? [-u[0]!, -u[1]!] : u;
       const up: Coordinate = [-read[1]!, read[0]!];
       const shift = (Number(feature.get('textPosition')) || 0) * perMetre;
-      const centre = add(add(d1, u, length / 2 + shift), up, paper(DIMENSION_PAPER_MM.textGap));
+      const gapUp = paper(DIMENSION_PAPER_MM.textGap);
+      // A running value is written along its extension line, outward from the dimension line at
+      // the point's foot (DIN 406), so the values of close points stand side by side; other
+      // values sit above the middle of the dimension line.
+      let centre = add(add(d1, u, length / 2 + shift), up, gapUp);
+      let rotationOf = read;
+      let align: CanvasTextAlign = 'center';
+      if (running) {
+        const outward: Coordinate = offset < 0 ? [-n[0]!, -n[1]!] : n;
+        const turn = outward[0]! < 0 || (outward[0] === 0 && outward[1]! < 0);
+        rotationOf = turn ? [-outward[0]!, -outward[1]!] : outward;
+        align = turn ? 'right' : 'left';
+        centre = add(d2, outward, gapUp);
+      }
       const label = formatDimension(values.value, config.preset, {
         decimal,
         computed: values.computed,
@@ -162,14 +208,30 @@ export function dimensionStyleFunction(
               color: 'rgba(255, 255, 255, 0.85)',
               width: Math.min(Math.max(size / 8, 1), 4),
             }),
-            rotation: -Math.atan2(read[1]!, read[0]!),
+            rotation: -Math.atan2(rotationOf[1]!, rotationOf[0]!),
             rotateWithView: true,
-            textAlign: 'center',
+            textAlign: align,
             textBaseline: 'bottom',
             overflow: true,
           }),
         }),
       );
+      if (running) {
+        styles.push(
+          new Style({
+            geometry: new Point(add(d1, up, gapUp)),
+            text: new Text({
+              text: '0',
+              font: `${size}px ${config.font}`,
+              fill,
+              rotation: -Math.atan2(read[1]!, read[0]!),
+              rotateWithView: true,
+              textAlign: 'center',
+              textBaseline: 'bottom',
+            }),
+          }),
+        );
+      }
     }
     return styles;
   };

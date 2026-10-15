@@ -84,7 +84,8 @@ describe('dimensionLinearMethod', () => {
   it('defaults to aligned and refuses unknown methods', () => {
     expect(dimensionLinearMethod()).toBe('aligned');
     expect(dimensionLinearMethod({ method: 'rotated' })).toBe('rotated');
-    expect(dimensionLinearMethod({ method: 'chain' })).toBeNull();
+    expect(dimensionLinearMethod({ method: 'chain' })).toBe('chain');
+    expect(dimensionLinearMethod({ method: 'angular' })).toBeNull();
   });
 });
 
@@ -186,5 +187,88 @@ describe('DimensionLinearTool', () => {
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.first);
     expect(tool.referencePoint()).toBeNull();
     tool.deactivate();
+  });
+
+  it('draws a chain on one line in the first span’s direction, until Enter', () => {
+    const { tool, ctx, event, inserted } = setup('dims');
+    tool.activate(ctx, { method: 'chain' });
+    event('click', [0, 0]);
+    event('click', [10, 0]);
+    event('click', [5, -4]); // the chain's line 4 m south
+    tool.finish(); // first span: keeps the GIS value
+    expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.next);
+    expect(tool.referencePoint()).toEqual([10, 0]);
+    event('click', [16, 2]); // a bent outline: measured along the chain's line
+    tool.finish();
+    expect(tool.handleLength(9.98)).toBe(false); // waiting for a point, not a value
+    event('click', [20, -1]);
+    expect(tool.handleLength(4.02)).toBe(true);
+    tool.finish(); // Enter while waiting for a point ends the chain
+    expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.first);
+    const spans = [0, 1, 2].map((i) => inserted(i));
+    const chain = spans[0]!.get('chain') as string;
+    expect(chain).toMatch(/^c-/);
+    for (const span of spans) {
+      expect(span.getProperties()).toMatchObject({ dimType: 'rotated', rotation: 0, chain });
+    }
+    // Every span's line lies 4 m south of the first point: offset = -4 - (start y).
+    expect(spans.map((f) => f.get('offset'))).toEqual([-4, -4, -6]);
+    expect(spans.map((f) => Math.round(f.get('gisValue') as number))).toEqual([10, 6, 4]);
+    expect(spans[2]!.get('fieldValue')).toBe(4.02);
+  });
+
+  it('stacks baseline dimensions from the origin by the spacing', () => {
+    const { tool, ctx, event, inserted } = setup('dims');
+    tool.activate(ctx, { method: 'baseline' });
+    expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.origin);
+    event('click', [0, 0]);
+    event('click', [5, 0]);
+    event('click', [2, 3]);
+    tool.finish();
+    expect(tool.referencePoint()).toEqual([0, 0]);
+    event('click', [9, 1]);
+    tool.finish();
+    event('click', [14, 0]);
+    tool.finish();
+    tool.cancel();
+    // Surveying preset at 1:500: 8 mm spacing is 4 m on the ground.
+    expect([0, 1, 2].map((i) => inserted(i).get('offset'))).toEqual([3, 7, 11]);
+    expect([0, 1, 2].map((i) => Math.round(inserted(i).get('gisValue') as number))).toEqual([
+      5, 9, 14,
+    ]);
+    expect((inserted(2).getGeometry() as LineString).getCoordinates()[0]).toEqual([0, 0]);
+  });
+
+  it('draws running dimensions on one line from the origin', () => {
+    const { tool, ctx, event, inserted } = setup('dims');
+    tool.activate(ctx, { method: 'running' });
+    event('click', [0, 0]);
+    event('click', [5, 0]);
+    event('click', [2, 3]);
+    tool.finish();
+    event('click', [12, 2]);
+    tool.finish();
+    expect(tool.removeLastPoint()).toBe(true); // Backspace while waiting ends the set too
+    const [first, second] = [inserted(0), inserted(1)];
+    expect(first.getProperties()).toMatchObject({ dimType: 'running', offset: 3, rotation: 0 });
+    expect(second.getProperties()).toMatchObject({ dimType: 'running', offset: 3 });
+    expect(Math.round(second.get('gisValue') as number)).toBe(12);
+    expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.origin);
+  });
+
+  it('measures a tie distance without a dimension line step', () => {
+    const { tool, ctx, event, inserted } = setup('dims');
+    tool.activate(ctx, { method: 'tie' });
+    event('click', [0, 0]);
+    event('click', [3, 4]);
+    expect(tool.getInputRequest()).toBe('value');
+    expect(tool.handleLength(5.01)).toBe(true);
+    expect(inserted().getProperties()).toMatchObject({
+      dimType: 'tie',
+      offset: 0,
+      fieldValue: 5.01,
+    });
+    expect(inserted().get('rotation')).toBeUndefined();
+    expect(inserted().get('chain')).toBeUndefined();
   });
 });

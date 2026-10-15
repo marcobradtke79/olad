@@ -123,6 +123,41 @@ describe('dimensionStyleFunction', () => {
     expect(text.getText()!.getText()).toBe('(8,00)');
   });
 
+  it('draws a tie distance as a dashed line with the value in the middle, no terminators', () => {
+    const styles = draw(
+      { preset: 'surveying' },
+      dim([0, 0], [10, 0], { dimType: 'tie', offset: 7 }),
+    ) as Style[];
+    expect(styles).toHaveLength(2); // the line and the value
+    const line = styles[0]!;
+    expect((line.getGeometry() as LineString).getCoordinates().map(rel)).toEqual([
+      [0, 0],
+      [10, 0],
+    ]);
+    expect(line.getStroke()!.getLineDash()).toEqual([6, 4]);
+    expect(rel((styles[1]!.getGeometry() as Point).getCoordinates())).toEqual([5, 0.5]);
+  });
+
+  it('draws a running dimension with the origin mark, an outward arrow and the value at its end', () => {
+    const styles = draw(
+      { preset: 'surveying' },
+      dim([0, 0], [10, 3], { dimType: 'running', rotation: 0, offset: -2 }),
+    ) as Style[];
+    const texts = styles.filter((s) => s.getText()).map((s) => s.getText()!.getText());
+    expect(texts).toEqual(['(10,00)', '0']);
+    const value = styles.find((s) => s.getText()?.getText() === '(10,00)')!;
+    // Written along the extension line, outward (south) from the line at the point's foot,
+    // turned to read upwards: right-aligned, so it ends 1 mm (0.5 m) beyond the line.
+    expect(value.getText()!.getTextAlign()).toBe('right');
+    expect(value.getText()!.getRotation()).toBeCloseTo(-Math.PI / 2);
+    expect(rel((value.getGeometry() as Point).getCoordinates())).toEqual([10, -2.5]);
+    const origin = styles.find((s) => s.getGeometry() instanceof Point && s.getImage())!;
+    expect(rel((origin.getGeometry() as Point).getCoordinates())).toEqual([0, -2]);
+    const arrow = styles.find((s) => s.getGeometry() instanceof MultiPolygon)!;
+    const [tip] = (arrow.getGeometry() as MultiPolygon).getCoordinates()[0]![0]!;
+    expect(rel(tip!)).toEqual([10, -2]);
+  });
+
   it('leaves out the value below one pixel and draws other features with the base style', () => {
     const tiny = draw({ preset: 'architecture' }, dim([0, 0], [10, 0]), 10) as Style[];
     expect(tiny.some((s) => s.getText())).toBe(false);

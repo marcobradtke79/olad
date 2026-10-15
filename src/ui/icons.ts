@@ -130,6 +130,22 @@ export const ICONS = {
   dimensionRotated: svg(
     '<path d="M5 20 17 12"/><path d="M5 20V6M17 12V6"/><path d="M5 8h12"/><path d="m3.5 9.5 3-3M15.5 9.5l3-3"/>',
   ),
+  // Chain: one dimension line with three ticks over two spans.
+  dimensionChain: svg(
+    '<path d="M3 15h18"/><path d="M3 9v8M12 9v8M21 9v8"/><path d="m1.5 16.5 3-3M10.5 16.5l3-3M19.5 16.5l3-3"/>',
+  ),
+  // Baseline: two stacked dimension lines from one origin.
+  dimensionBaseline: svg(
+    '<path d="M4 4v17M12 13v8M20 7v14"/><path d="M4 17h8M4 9h16"/><path d="m2.5 18.5 3-3M10.5 18.5l3-3M2.5 10.5l3-3M18.5 10.5l3-3"/>',
+  ),
+  // Running: one line from an origin circle with arrows to each point.
+  dimensionRunning: svg(
+    '<circle cx="4" cy="14" r="1.6"/><path d="M5.6 14H21"/><path d="M4 6v6M12 6v12M21 6v12"/><path d="m9.5 12.5 2.5 1.5-2.5 1.5M18.5 12.5l2.5 1.5-2.5 1.5"/>',
+  ),
+  // Tie distance: a dashed line between two point marks.
+  dimensionTie: svg(
+    '<circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="m7 16.3 2-1.7M11 12.9l2-1.7M15 9.5l2-1.7"/>',
+  ),
   measureDistance: svg('<path d="M3 16 16 3l5 5L8 21z"/><path d="m7 12 2 2M10 9l2 2M13 6l2 2"/>'),
   measureArea: svg(
     '<path d="M4 6 13 3l7 7-4 10H6z" stroke-dasharray="2 2"/><path d="M9 10h6M9 14h6"/>',

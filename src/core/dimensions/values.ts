@@ -37,8 +37,9 @@ export function fieldValueOf(value: unknown): number | null {
 
 /**
  * The values of a dimension object, or `null` when the feature is not a dimension this version
- * draws: a two-point line with `dimType` `aligned` (or unset) or `rotated` (with `rotation`).
- * A rotated dimension measures the distance projected onto its direction.
+ * draws: a two-point line with `dimType` `aligned` (or unset), `tie`, or `rotated` / `running`
+ * (with `rotation`). A rotated or running dimension measures the distance projected onto its
+ * direction; a running dimension's first point is the origin.
  */
 export function dimensionValues(
   feature: Feature,
@@ -48,7 +49,8 @@ export function dimensionValues(
   const geometry = feature.getGeometry();
   if (!(geometry instanceof LineString)) return null;
   const type = (feature.get('dimType') ?? 'aligned') as DimensionType;
-  if (type !== 'aligned' && type !== 'rotated') return null;
+  // `tie` measures like `aligned`, `running` like `rotated` (from the origin, the first point).
+  if (!['aligned', 'rotated', 'running', 'tie'].includes(type)) return null;
   const points = geometry.getCoordinates();
   if (points.length !== 2) return null;
   const [p1, p2] = points as [Coordinate, Coordinate];
@@ -56,7 +58,7 @@ export function dimensionValues(
   const dy = p2[1]! - p1[1]!;
   let direction: Coordinate;
   let measured: Coordinate[] = points;
-  if (type === 'rotated') {
+  if (type === 'rotated' || type === 'running') {
     const rotation = feature.get('rotation');
     if (typeof rotation !== 'number' || !Number.isFinite(rotation)) return null;
     const angle = (rotation * Math.PI) / 180;

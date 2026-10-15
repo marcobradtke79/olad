@@ -234,3 +234,63 @@ describe('<olcad-feature-table>', () => {
     expect(panel.hidden).toBe(true);
   });
 });
+
+describe('<olcad-feature-table> dimension layers', () => {
+  it('shows GIS value, field value, difference and status, and marks deviating rows', () => {
+    const editor = fakeEditor();
+    const dims = [
+      feature(
+        1001,
+        { fieldValue: null },
+        new LineString([
+          [0, 0],
+          [146.03, 0],
+        ]),
+      ),
+      feature(
+        1003,
+        { fieldValue: 131.63 },
+        new LineString([
+          [0, 0],
+          [131.43, 0],
+        ]),
+      ),
+    ];
+    const values = new Map([
+      [dims[0], { gis: 146.03, field: null, status: 'ok' }],
+      [dims[1], { gis: 131.43, field: 131.63, status: 'deviates' }],
+    ]);
+    Object.assign(editor.layers, {
+      list: () => [{ id: 'dims', title: 'Dimensions' }],
+      getFeatures: () => dims,
+      getConfig: () => ({
+        id: 'dims',
+        dimension: { preset: 'surveying', tolerance: 0.05 },
+        schema: {
+          fields: [
+            { name: 'fieldValue', type: 'number' },
+            { name: 'note', type: 'string' },
+          ],
+        },
+      }),
+    });
+    Object.assign(editor, { dimensions: { values: (f: Feature) => values.get(f) ?? null } });
+    const { table } = mount(editor);
+    table.show('dims');
+    expect(headers(table)).toEqual([
+      'Id',
+      'note',
+      'GIS value',
+      'Field value',
+      'Difference',
+      'Status',
+      'Geometry',
+    ]);
+    expect(column(table, 2)).toEqual(['146.03 m', '131.43 m']);
+    expect(column(table, 3)).toEqual(['', '131.63 m']);
+    expect(column(table, 4)).toEqual(['', '+0.20 m']);
+    expect(column(table, 5)).toEqual(['ok', 'deviates']);
+    expect(row(table, '1003').dataset.status).toBe('deviates');
+    expect(row(table, '1001').dataset.status).toBeUndefined();
+  });
+});

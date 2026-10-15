@@ -257,4 +257,98 @@ test.describe('linear dimension tool', () => {
     );
     expect(result).toEqual({ count: 1, changes: 0, preset: 'landscape' });
   });
+
+  test('a chain along the south edges of both parcels lies on one line', async ({ page }) => {
+    await editLayer(page, 'Dimensions');
+    const [p1, p2] = [await parcelRing(page, 1), await parcelRing(page, 2)];
+    const points = [p1[0]!, p1[1]!, p2[0]!, p2[1]!];
+    const spans = await page.evaluate((corners) => {
+      const e = window.editor;
+      e.tools.activate('dimension-linear', { method: 'chain' });
+      const at = (c: number[]) => e.input(`${c[0]},${c[1]}`);
+      at(corners[0]!);
+      at(corners[1]!);
+      e.input('6');
+      e.tools.finish(); // first span keeps its GIS value
+      at(corners[2]!);
+      e.tools.finish();
+      at(corners[3]!);
+      e.input('131.4');
+      e.tools.finish(); // ends the chain
+      return e.layers
+        .getFeatures('dimensions')
+        .filter((f) => f.get('chain'))
+        .map((f) => ({
+          chain: f.get('chain') as string,
+          rotation: f.get('rotation') as number,
+          offset: f.get('offset') as number,
+          fieldValue: f.get('fieldValue') as number | null,
+        }));
+    }, points);
+    expect(spans).toHaveLength(3);
+    expect(new Set(spans.map((s) => s.chain)).size).toBe(1);
+    for (const span of spans) {
+      expect(span.rotation).toBeCloseTo(spans[0]!.rotation, 6);
+      expect(span.offset).toBeCloseTo(spans[0]!.offset, 2); // the corners lie on one line
+    }
+    expect(spans[2]!.fieldValue).toBe(131.4);
+  });
+
+  test('running dimensions from one origin and a tie distance', async ({ page }) => {
+    await editLayer(page, 'Dimensions');
+    const [p1, p2] = [await parcelRing(page, 1), await parcelRing(page, 2)];
+    const result = await page.evaluate(
+      ([origin, a, b, tieFrom, tieTo]) => {
+        const e = window.editor;
+        const at = (c: number[]) => e.input(`${c[0]},${c[1]}`);
+        e.tools.activate('dimension-linear', { method: 'running' });
+        at(origin!);
+        at(a!);
+        e.input('5');
+        e.tools.finish();
+        at(b!);
+        e.tools.finish();
+        e.tools.cancel();
+        e.tools.activate('dimension-linear', { method: 'tie' });
+        at(tieFrom!);
+        at(tieTo!);
+        e.tools.finish();
+        const features = e.layers.getFeatures('dimensions');
+        const running = features.filter((f) => f.get('dimType') === 'running');
+        const tie = features.find((f) => f.get('dimType') === 'tie')!;
+        return {
+          running: running.map((f) => e.dimensions.values(f)!.gis),
+          tie: e.dimensions.values(tie)!.gis,
+          tieOffset: tie.get('offset'),
+        };
+      },
+      [p1[0]!, p1[1]!, p2[1]!, p1[2]!, p2[0]!],
+    );
+    expect(result.running).toHaveLength(2);
+    expect(result.running[1]!).toBeGreaterThan(result.running[0]!); // cumulative from the origin
+    expect(result.tie).toBeGreaterThan(0);
+    expect(result.tieOffset).toBe(0);
+  });
+
+  test('the table lists GIS value, field value, difference and status', async ({ page }) => {
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement & { show(id: string): void }>('olcad-feature-table')!
+        .show('dimensions'),
+    );
+    const table = page.locator('olcad-feature-table');
+    await expect(table.locator('th')).toContainText([
+      'GIS value',
+      'Field value',
+      'Difference',
+      'Status',
+    ]);
+    const deviating = table.locator('tbody tr[data-row="1003"]');
+    await expect(deviating).toHaveAttribute('data-status', 'deviates');
+    await expect(deviating).toContainText('+0.20 m');
+    await expect(table.locator('tbody tr[data-row="1002"]')).not.toHaveAttribute(
+      'data-status',
+      /.+/,
+    );
+  });
 });
