@@ -494,6 +494,8 @@ describe('layers[].dimension', () => {
               color: '#000',
               deviationColor: '#f00',
               font: 'serif',
+              angleUnit: 'gon',
+              angleTolerance: 0.05,
             },
           },
           'Any',
@@ -516,6 +518,10 @@ describe('layers[].dimension', () => {
     expect(path({ dimension: { tolerance: -1 } })).toBe('config.layers[0].dimension.tolerance');
     expect(path({ dimension: { showComputed: 'never' } })).toBe(
       'config.layers[0].dimension.showComputed',
+    );
+    expect(path({ dimension: { angleUnit: 'rad' } })).toBe('config.layers[0].dimension.angleUnit');
+    expect(path({ dimension: { angleTolerance: -0.1 } })).toBe(
+      'config.layers[0].dimension.angleTolerance',
     );
     expect(path({ dimension: 'yes' })).toBe('config.layers[0].dimension');
     expect(path({ dimension: true }, 'Polygon')).toBe('config.layers[0].dimension');

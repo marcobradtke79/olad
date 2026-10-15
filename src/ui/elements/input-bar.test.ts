@@ -44,7 +44,7 @@ function fakeEditor(units = 'm') {
     tools,
     input,
     isEditMode: () => state.editMode,
-    dimensions: { inputTarget: () => state.dimension },
+    dimensions: { inputTarget: () => state.dimension, values: () => null },
     units: { getLength: () => 'm', formatLength: (m: number) => `${m.toFixed(2)} m` },
     layers: { get: (id: string) => ({ title: id === 'roads' ? 'Roads' : id }) },
     map: { getView: () => ({ getProjection: () => ({ getUnits: () => units }) }) },

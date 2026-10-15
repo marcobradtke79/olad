@@ -220,6 +220,58 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
       },
     ],
   },
+  'dimension-angular': {
+    label: 'Angular dimension',
+    title:
+      'Dimension an angle in the active dimension layer: three points or two edges, the arc, then the field angle; the triangle opens the variants',
+    icon: 'dimensionAngular',
+    variants: [
+      {
+        id: 'points',
+        label: 'Angle: three points',
+        title:
+          'Angle by three points: a point on the first leg, the vertex, a point on the second leg',
+        icon: 'dimensionAngular',
+        options: { method: 'points' },
+      },
+      {
+        id: 'segments',
+        label: 'Angle: two edges',
+        title: 'Angle between two edges of objects; the vertex is where their lines meet',
+        icon: 'dimensionAngularSegments',
+        options: { method: 'segments' },
+      },
+    ],
+  },
+  'dimension-radial': {
+    label: 'Radial dimension',
+    title:
+      'Dimension a circle or arc in the active dimension layer: click the curve, place the dimension, then the field value; the triangle opens the variants',
+    icon: 'dimensionRadius',
+    variants: [
+      {
+        id: 'radius',
+        label: 'Radius',
+        title: 'Radius of a circle or arc (R)',
+        icon: 'dimensionRadius',
+        options: { method: 'radius' },
+      },
+      {
+        id: 'diameter',
+        label: 'Diameter',
+        title: 'Diameter of a circle (Ø)',
+        icon: 'dimensionDiameter',
+        options: { method: 'diameter' },
+      },
+      {
+        id: 'arc',
+        label: 'Arc length',
+        title: 'Length along an arc between a start and an end point',
+        icon: 'dimensionArc',
+        options: { method: 'arc' },
+      },
+    ],
+  },
   modify: {
     label: 'Vertices',
     title:

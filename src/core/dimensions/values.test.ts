@@ -104,3 +104,35 @@ describe('dimensionValues: tie and running', () => {
     expect(dimensionValues(running, config, 'EPSG:25832')!.gis).toBeCloseTo(3, 6);
   });
 });
+
+describe('dimensionValues: angular and radial', () => {
+  const o = [457000, 5428000];
+  const at = (x: number, y: number) => [o[0]! + x, o[1]! + y];
+  const dim = (type: string, points: number[][], properties: Record<string, unknown> = {}) =>
+    new Feature({ geometry: new LineString(points), dimType: type, offset: 2, ...properties });
+
+  it('measures the angle counter-clockwise from the first to the second leg, in degrees', () => {
+    const right = dim('angular', [at(10, 0), at(0, 0), at(0, 10)]);
+    expect(dimensionValues(right, config, 'EPSG:25832')).toMatchObject({ unit: 'deg' });
+    expect(dimensionValues(right, config, 'EPSG:25832')!.gis).toBeCloseTo(90, 9);
+    const reflex = dim('angular', [at(0, 10), at(0, 0), at(10, 0)]);
+    expect(dimensionValues(reflex, config, 'EPSG:25832')!.gis).toBeCloseTo(270, 9);
+    // The angle tolerance is in the layer's unit: 0.1 gon = 0.09°.
+    const field = dim('angular', [at(10, 0), at(0, 0), at(0, 10)], { fieldValue: 90.1 });
+    const gon = { tolerance: 0.05, angleTolerance: 0.1, angleUnit: 'gon' as const };
+    expect(dimensionValues(field, gon, 'EPSG:25832')!.status).toBe('deviates');
+    expect(dimensionValues(field, { ...gon, angleUnit: 'deg' }, 'EPSG:25832')!.status).toBe('ok');
+  });
+
+  it('measures radius, diameter and arc length in metres', () => {
+    expect(
+      dimensionValues(dim('radius', [at(0, 0), at(3, 4)]), config, 'EPSG:25832')!.gis,
+    ).toBeCloseTo(5, 9);
+    expect(
+      dimensionValues(dim('diameter', [at(0, 0), at(3, 4)]), config, 'EPSG:25832')!.gis,
+    ).toBeCloseTo(10, 9);
+    const quarter = dim('arc', [at(0, 0), at(5, 0), at(0, 5)]);
+    expect(dimensionValues(quarter, config, 'EPSG:25832')!.gis).toBeCloseTo((5 * Math.PI) / 2, 9);
+    expect(dimensionValues(dim('arc', [at(0, 0), at(5, 0)]), config, 'EPSG:25832')).toBeNull();
+  });
+});

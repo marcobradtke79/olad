@@ -151,6 +151,7 @@ describe('resolveDimension', () => {
       preset: 'surveying',
       referenceScale: 500,
       terminator: 'arrow',
+      angleUnit: 'gon',
     });
     expect(resolveDimension({ preset: 'architecture' })).toMatchObject({
       referenceScale: 100,

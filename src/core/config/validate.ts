@@ -358,6 +358,8 @@ const DIMENSION_KEYS = [
   'color',
   'deviationColor',
   'font',
+  'angleUnit',
+  'angleTolerance',
 ] as const;
 const DIMENSION_GEOMETRY_TYPES = ['LineString', 'Any'];
 
@@ -369,6 +371,7 @@ function checkDimension(dimension: unknown, path: string): void {
   optional(oneOf(['architecture', 'surveying', 'landscape']))(d.preset, `${path}.preset`);
   optional(oneOf(['tick', 'arrow', 'dot', 'none']))(d.terminator, `${path}.terminator`);
   optional(oneOf(['brackets', 'plain']))(d.showComputed, `${path}.showComputed`);
+  optional(oneOf(['deg', 'gon']))(d.angleUnit, `${path}.angleUnit`);
   for (const key of ['color', 'deviationColor', 'font']) {
     optional(string)(d[key], `${path}.${key}`);
   }
@@ -378,10 +381,10 @@ function checkDimension(dimension: unknown, path: string): void {
     if (!((d[key] as number) > 0))
       throw new ConfigError(`${path}.${key}`, 'must be greater than 0');
   }
-  if (d.tolerance !== undefined) {
-    number(d.tolerance, `${path}.tolerance`);
-    if (!((d.tolerance as number) >= 0))
-      throw new ConfigError(`${path}.tolerance`, 'must not be negative');
+  for (const key of ['tolerance', 'angleTolerance']) {
+    if (d[key] === undefined) continue;
+    number(d[key], `${path}.${key}`);
+    if (!((d[key] as number) >= 0)) throw new ConfigError(`${path}.${key}`, 'must not be negative');
   }
 }
 

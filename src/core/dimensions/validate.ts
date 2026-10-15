@@ -2,7 +2,12 @@ import type Geometry from 'ol/geom/Geometry';
 import LineString from 'ol/geom/LineString';
 import type { MessageCode } from '../i18n';
 import { isRefs } from './references';
-import { DIMENSION_TYPES, SUPPORTED_DIMENSION_TYPES, type DimensionType } from './types';
+import {
+  DIMENSION_TYPES,
+  dimensionPointCount,
+  SUPPORTED_DIMENSION_TYPES,
+  type DimensionType,
+} from './types';
 
 export interface DimensionIssue {
   code: Extract<MessageCode, 'dimension-type' | 'dimension-points' | 'dimension-value'>;
@@ -28,10 +33,18 @@ export function validateDimensionFeature(
     return { code: 'dimension-type', params: { type: String(type) } };
   }
   const points = geometry instanceof LineString ? geometry.getCoordinates() : [];
+  const expected = dimensionPointCount(type as DimensionType);
+  const same = (a: number[], b: number[]) => a[0] === b[0] && a[1] === b[1];
+  // Consecutive points differ; the vertex of an angle and the centre of an arc differ from
+  // both other points.
   const distinct =
-    points.length === 2 && (points[0]![0] !== points[1]![0] || points[0]![1] !== points[1]![1]);
-  if (!distinct) {
-    return { code: 'dimension-points', params: { expected: 2, actual: points.length } };
+    points.length === expected &&
+    points.every((point, i) => i === 0 || !same(point, points[i - 1]!)) &&
+    (expected < 3 || !same(points[0]!, points[2]!) || type === 'arc');
+  const centreApart =
+    type !== 'arc' || (!same(points[0]!, points[1]!) && !same(points[0]!, points[2]!));
+  if (!distinct || !centreApart) {
+    return { code: 'dimension-points', params: { expected, actual: points.length } };
   }
   const field = properties.fieldValue;
   if (!isNullish(field) && !(typeof field === 'number' && Number.isFinite(field) && field >= 0)) {
@@ -41,6 +54,9 @@ export function validateDimensionFeature(
   const directed = type === 'rotated' || type === 'running';
   if (directed && !(typeof rotation === 'number' && Number.isFinite(rotation))) {
     return { code: 'dimension-value', params: { property: 'rotation' } };
+  }
+  if (type === 'angular' && !(typeof properties.offset === 'number' && properties.offset > 0)) {
+    return { code: 'dimension-value', params: { property: 'offset' } };
   }
   for (const name of ['offset', 'textPosition', 'gisValue', 'rotation']) {
     const value = properties[name];

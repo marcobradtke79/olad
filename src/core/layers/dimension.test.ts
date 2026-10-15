@@ -172,6 +172,73 @@ describe('dimensionStyleFunction', () => {
     expect(parts(styles).text.getText()!.getText()).toBe('⚠ (10,00)');
   });
 
+  it('draws an angle as an arc around the vertex with the value outside', () => {
+    const feature = new Feature({
+      geometry: new LineString([at(10, 0), at(0, 0), at(0, 10)]),
+      dimType: 'angular',
+      offset: 4,
+    });
+    const styles = draw({ preset: 'architecture', angleUnit: 'deg' }, feature) as Style[];
+    const arc = (styles[0]!.getGeometry() as LineString).getCoordinates().map(rel);
+    expect(arc[0]).toEqual([4, 0]);
+    expect(arc[arc.length - 1]).toEqual([0, 4]);
+    const text = parts(styles).text;
+    expect(text.getText()!.getText()).toBe('(90,0°)');
+    const [x, y] = rel((text.getGeometry() as Point).getCoordinates());
+    expect(Math.hypot(x!, y!)).toBeGreaterThan(4); // outside the arc
+  });
+
+  it('draws radius, diameter and arc dimensions with their prefixes', () => {
+    const radial = (type: string, points: number[][]) =>
+      new Feature({
+        geometry: new LineString(points.map(([x, y]) => at(x!, y!))),
+        dimType: type,
+        offset: 3,
+      });
+    const label = (feature: Feature) =>
+      parts(draw({ preset: 'landscape' }, feature) as Style[])
+        .text.getText()!
+        .getText();
+    expect(
+      label(
+        radial('radius', [
+          [0, 0],
+          [5, 0],
+        ]),
+      ),
+    ).toBe('R (5,00)');
+    expect(
+      label(
+        radial('diameter', [
+          [0, 0],
+          [5, 0],
+        ]),
+      ),
+    ).toBe('Ø (10,00)');
+    expect(
+      label(
+        radial('arc', [
+          [0, 0],
+          [5, 0],
+          [0, 5],
+        ]),
+      ),
+    ).toBe('⌒ (7,85)');
+    const leader = (
+      draw(
+        { preset: 'landscape' },
+        radial('radius', [
+          [0, 0],
+          [5, 0],
+        ]),
+      ) as Style[]
+    )[0]!;
+    expect((leader.getGeometry() as LineString).getCoordinates().map(rel)).toEqual([
+      [0, 0],
+      [8, 0],
+    ]);
+  });
+
   it('leaves out the value below one pixel and draws other features with the base style', () => {
     const tiny = draw({ preset: 'architecture' }, dim([0, 0], [10, 0]), 10) as Style[];
     expect(tiny.some((s) => s.getText())).toBe(false);

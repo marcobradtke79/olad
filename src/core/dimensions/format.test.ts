@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { decimalSeparator, formatDimension, formatDimensionNumber } from './format';
+import {
+  decimalSeparator,
+  formatDimension,
+  formatDimensionAngle,
+  formatDimensionNumber,
+} from './format';
 
 describe('formatDimensionNumber', () => {
   it('writes architecture dimensions after DIN 1356-1', () => {
@@ -36,5 +41,18 @@ describe('formatDimension', () => {
   it('takes the decimal separator from the locale', () => {
     expect(decimalSeparator('de')).toBe(',');
     expect(decimalSeparator('en')).toBe('.');
+  });
+});
+
+describe('formatDimensionAngle and prefixes', () => {
+  it('writes degrees with one decimal and gon with four', () => {
+    expect(formatDimensionAngle(87.5, 'deg')).toBe('87,5°');
+    expect(formatDimensionAngle(90, 'gon')).toBe('100,0000 gon');
+    expect(formatDimensionAngle(87.5, 'gon', '.')).toBe('97.2222 gon');
+    expect(formatDimension(90, 'surveying', { angle: 'gon', computed: true })).toBe(
+      '(100,0000 gon)',
+    );
+    expect(formatDimension(4.5, 'landscape', { prefix: 'R' })).toBe('R 4,50');
+    expect(formatDimension(9, 'architecture', { prefix: 'Ø', computed: true })).toBe('Ø (9,00)');
   });
 });

@@ -4,6 +4,7 @@ import type LineString from 'ol/geom/LineString';
 import type MultiLineString from 'ol/geom/MultiLineString';
 import type MultiPolygon from 'ol/geom/MultiPolygon';
 import type Polygon from 'ol/geom/Polygon';
+import { formatDimensionAngle } from '../../core/dimensions/format';
 import type { Editor } from '../../core/Editor';
 import type { ChangeSet } from '../../core/changes/exportChangeSet';
 import { measureArea, measureLength } from '../../core/measure/measurements';
@@ -417,8 +418,14 @@ export class OlcadFeatureTable extends HTMLElement {
     if (config.dimension) {
       // GIS value, field value, their difference and the status (dimensionValues).
       const values = (f: Feature) => editor.dimensions.values(f);
-      const length = (value: number | null | undefined) =>
-        value === null || value === undefined ? '' : editor.units.formatLength(value);
+      // Lengths in the default unit, angles in the layer's angle unit.
+      const angleUnit = config.dimension.angleUnit;
+      const format = (f: Feature, value: number | null | undefined) =>
+        value === null || value === undefined
+          ? ''
+          : values(f)?.unit === 'deg'
+            ? formatDimensionAngle(value, angleUnit, '.')
+            : editor.units.formatLength(value);
       const difference = (f: Feature): number | null => {
         const v = values(f);
         return v && v.field !== null ? v.field - v.gis : null;
@@ -427,13 +434,13 @@ export class OlcadFeatureTable extends HTMLElement {
         {
           key: '#gis',
           label: 'GIS value',
-          text: (f) => length(values(f)?.gis),
+          text: (f) => format(f, values(f)?.gis),
           sortValue: (f) => values(f)?.gis ?? null,
         },
         {
           key: '#field',
           label: 'Field value',
-          text: (f) => length(values(f)?.field),
+          text: (f) => format(f, values(f)?.field),
           sortValue: (f) => values(f)?.field ?? null,
         },
         {
@@ -441,7 +448,7 @@ export class OlcadFeatureTable extends HTMLElement {
           label: 'Difference',
           text: (f) => {
             const value = difference(f);
-            return value === null ? '' : `${value > 0 ? '+' : ''}${length(value)}`;
+            return value === null ? '' : `${value > 0 ? '+' : ''}${format(f, value)}`;
           },
           sortValue: difference,
         },

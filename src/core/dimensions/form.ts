@@ -2,7 +2,7 @@ import type { FieldConfig, ResolvedLayerConfig } from '../config/types';
 
 /** Attributes every dimension layer offers in forms, besides its own schema. */
 export const DIMENSION_FORM_FIELDS: readonly FieldConfig[] = [
-  { name: 'fieldValue', type: 'number', min: 0, label: 'Field value (m)' },
+  { name: 'fieldValue', type: 'number', min: 0, label: 'Field value' },
   { name: 'text', type: 'string', label: 'Text' },
 ];
 

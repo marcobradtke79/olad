@@ -29,11 +29,17 @@ export { scaleFactor, scaleGeometry } from './core/geometry/scale';
 export { textStyleFunction, textStyle, featureText } from './core/layers/text';
 export { TEXT_DEFAULTS, DIMENSION_DEFAULTS, DIMENSION_PRESETS } from './core/config/defaults';
 export { dimensionStyleFunction, DIMENSION_PAPER_MM } from './core/layers/dimension';
+export { fitCircleRun, type CircleRun } from './core/geometry/circleFit';
 export {
   DIMENSION_TYPES,
   SUPPORTED_DIMENSION_TYPES,
   formatDimension,
   formatDimensionNumber,
+  formatDimensionAngle,
+  sweepAngle,
+  toAngleUnit,
+  fromAngleUnit,
+  dimensionPointCount,
   decimalSeparator,
   dimensionValues,
   fieldValueOf,
@@ -247,6 +253,7 @@ export type {
   ResolvedDimensionConfig,
   DimensionPreset,
   DimensionTerminator,
+  DimensionAngleUnit,
   SchemaConfig,
   FieldConfig,
   FieldType,

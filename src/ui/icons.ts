@@ -146,6 +146,24 @@ export const ICONS = {
   dimensionTie: svg(
     '<circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="m7 16.3 2-1.7M11 12.9l2-1.7M15 9.5l2-1.7"/>',
   ),
+  // Angular dimension: two legs with a dimension arc between them.
+  dimensionAngular: svg('<path d="M4 20 20 20M4 20 15 6"/><path d="M14 20a10 10 0 0 0-3.8-7.8"/>'),
+  // Angle between two picked edges: two edges meeting beyond their ends, the arc in between.
+  dimensionAngularSegments: svg(
+    '<path d="M3 20h9M15 20h6M6 15.5 11 9M13 6.5l2-2.5"/><path d="M17 20a10 10 0 0 0-3.4-7.5" stroke-dasharray="2 2"/>',
+  ),
+  // Radius: a circle with a leader from the centre and its arrow.
+  dimensionRadius: svg(
+    '<circle cx="10" cy="14" r="7"/><path d="M10 14 22 2"/><path d="m15.4 8.6 0.8-3 3 0.8" fill="currentColor" stroke="none"/><path d="M15 9l1.4-1.4"/>',
+  ),
+  // Diameter: a circle with a line through the centre, arrows at both ends.
+  dimensionDiameter: svg(
+    '<circle cx="12" cy="12" r="8"/><path d="M6.3 17.7 17.7 6.3"/><path d="m6.3 17.7 0.7-3M6.3 17.7l3-0.7M17.7 6.3l-3 0.7M17.7 6.3l-0.7 3"/>',
+  ),
+  // Arc length: an arc with a concentric dimension arc and ticks.
+  dimensionArc: svg(
+    '<path d="M4 18a10 10 0 0 1 16 0"/><path d="M2 12a12 12 0 0 1 20 0" stroke-dasharray="0"/><path d="m1 13 2-2M21 13l2-2"/>',
+  ),
   measureDistance: svg('<path d="M3 16 16 3l5 5L8 21z"/><path d="m7 12 2 2M10 9l2 2M13 6l2 2"/>'),
   measureArea: svg(
     '<path d="M4 6 13 3l7 7-4 10H6z" stroke-dasharray="2 2"/><path d="M9 10h6M9 14h6"/>',

@@ -40,16 +40,40 @@ export interface DimensionFormatOptions {
   showComputed?: 'brackets' | 'plain';
   /** Free text replacing the value; `{value}` inserts the formatted value. */
   text?: string | null;
+  /** Format the value (degrees) as an angle in this unit instead of a length. */
+  angle?: 'deg' | 'gon';
+  /** Symbol written before the number: `R`, `Ø`, `⌒` for radial dimensions. */
+  prefix?: string;
 }
 
-/** The label of a dimension: formatted number, brackets for computed values, free text. */
+/**
+ * An angle given in degrees, written in `unit`: degrees with one decimal (`87,5°`) or gon with
+ * four decimals (`97,2222 gon`), as surveyors write them.
+ */
+export function formatDimensionAngle(
+  degrees: number,
+  unit: 'deg' | 'gon',
+  decimal: ',' | '.' = ',',
+): string {
+  return unit === 'gon'
+    ? `${((degrees * 400) / 360).toFixed(4).replace('.', decimal)} gon`
+    : `${degrees.toFixed(1).replace('.', decimal)}°`;
+}
+
+/**
+ * The label of a dimension: formatted number (metres, or degrees with `angle`), brackets for
+ * computed values, a radial prefix, free text.
+ */
 export function formatDimension(
   metres: number,
   preset: DimensionPreset,
   options: DimensionFormatOptions = {},
 ): string {
-  let value = formatDimensionNumber(metres, preset, options.decimal ?? ',');
+  let value = options.angle
+    ? formatDimensionAngle(metres, options.angle, options.decimal ?? ',')
+    : formatDimensionNumber(metres, preset, options.decimal ?? ',');
   if (options.computed && (options.showComputed ?? 'brackets') === 'brackets') value = `(${value})`;
+  if (options.prefix) value = `${options.prefix} ${value}`;
   if (options.text) return options.text.split('{value}').join(value);
   return value;
 }

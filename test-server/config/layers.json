@@ -256,7 +256,9 @@
         "showComputed": "brackets",
         "color": "#fde68a",
         "deviationColor": "#f87171",
-        "font": "system-ui, sans-serif"
+        "font": "system-ui, sans-serif",
+        "angleUnit": "deg",
+        "angleTolerance": 0.2
       },
       "schema": {
         "fields": [

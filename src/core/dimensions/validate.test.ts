@@ -25,7 +25,7 @@ describe('validateDimensionFeature', () => {
 
   it('rejects unknown and not yet supported types', () => {
     expect(validateDimensionFeature(line, { dimType: 'fancy' })?.code).toBe('dimension-type');
-    expect(validateDimensionFeature(line, { dimType: 'angular' })?.code).toBe('dimension-type');
+    expect(validateDimensionFeature(line, { dimType: 'station' })?.code).toBe('dimension-type');
   });
 
   it('needs two distinct points', () => {
@@ -82,5 +82,28 @@ describe('validateDimensionFeature: refs', () => {
     expect(validateDimensionFeature(line, { refs: [ref, null] })).toBeNull();
     expect(validateDimensionFeature(line, { refs: [ref] })?.params.property).toBe('refs');
     expect(validateDimensionFeature(line, { refs: 'x' })?.params.property).toBe('refs');
+  });
+});
+
+describe('validateDimensionFeature: angular and radial', () => {
+  const three = (points: number[][]) => new LineString(points);
+  it('needs three points for angles and arcs, a radius for angles', () => {
+    const angle = three([
+      [10, 0],
+      [0, 0],
+      [0, 10],
+    ]);
+    expect(validateDimensionFeature(angle, { dimType: 'angular', offset: 4 })).toBeNull();
+    expect(validateDimensionFeature(angle, { dimType: 'angular' })?.params.property).toBe('offset');
+    expect(validateDimensionFeature(line, { dimType: 'angular', offset: 4 })?.code).toBe(
+      'dimension-points',
+    );
+    expect(validateDimensionFeature(line, { dimType: 'radius' })).toBeNull();
+    const fullArc = three([
+      [0, 0],
+      [5, 0],
+      [5, 0],
+    ]);
+    expect(validateDimensionFeature(fullArc, { dimType: 'arc' })?.code).toBe('dimension-points');
   });
 });

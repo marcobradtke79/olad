@@ -30,7 +30,7 @@ import {
   referencesOf,
   remapReferences,
 } from './dimensions/references';
-import { dimensionValues, type DimensionValues } from './dimensions/values';
+import { dimensionValues, fromAngleUnit, type DimensionValues } from './dimensions/values';
 import type { ChangeSet } from './changes/exportChangeSet';
 import { applyEditCursor, Crosshair } from './crosshair';
 import LineString from 'ol/geom/LineString';
@@ -103,7 +103,9 @@ import {
 import type Select from 'ol/interaction/Select';
 import {
   CircleTool,
+  DimensionAngularTool,
   DimensionLinearTool,
+  DimensionRadialTool,
   EllipseTool,
   CurveTool,
   ParallelTool,
@@ -359,7 +361,7 @@ export interface ChangesApi {
 }
 
 export interface ToolsApi {
-  /** Registered tool ids: `select`, `draw`, `rectangle`, `circle`, `ellipse`, `regular-polygon`, `curve`, `parallel`, `text`, `dimension-linear`, `modify`, `move`, `rotate`, `scale`, `offset`, `trim`, `extend`, `mirror`, `template-copy`, `template-insert`. */
+  /** Registered tool ids: `select`, `draw`, `rectangle`, `circle`, `ellipse`, `regular-polygon`, `curve`, `parallel`, `text`, `dimension-linear`, `dimension-angular`, `dimension-radial`, `modify`, `move`, `rotate`, `scale`, `offset`, `trim`, `extend`, `mirror`, `template-copy`, `template-insert`. */
   list(): string[];
   getActive(): string | null;
   /** The options the active tool works with, for example `{ type: 'LineString' }` for `draw`. */
@@ -433,6 +435,8 @@ const LAYER_BOUND_TOOLS = [
   'parallel',
   'text',
   'dimension-linear',
+  'dimension-angular',
+  'dimension-radial',
 ];
 
 /**
@@ -861,6 +865,8 @@ class EditorImpl implements Editor {
       new ParallelTool(),
       new TextTool(),
       new DimensionLinearTool(),
+      new DimensionAngularTool(),
+      new DimensionRadialTool(),
       new ModifyTool(),
       new MoveTool(),
       new RotateTool(),
@@ -1413,6 +1419,17 @@ class EditorImpl implements Editor {
     const parsed = parseInput(text, this.lengthUnit());
     if (!parsed) return fail('input-invalid');
     if (dimension && parsed.kind === 'length') {
+      // An angular dimension takes a plain number in its layer's angle unit, stored in degrees.
+      const values = this.dimensions.values(dimension);
+      if (values?.unit === 'deg') {
+        const layer = this.layerManager.layerOf(dimension)!;
+        const angleUnit = this.layerManager.getConfig(layer).dimension!.angleUnit;
+        if (parsed.unit !== null) return fail('input-not-accepted');
+        const degrees = fromAngleUnit(parsed.value, angleUnit);
+        return this.dimensions.setFieldValue(dimension, degrees)
+          ? { ok: true, text, fieldValue: degrees }
+          : fail('input-not-accepted');
+      }
       return this.dimensions.setFieldValue(dimension, parsed.distance)
         ? { ok: true, text, fieldValue: parsed.distance }
         : fail('input-not-accepted');

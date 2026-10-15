@@ -1,4 +1,6 @@
 import type { Editor, InputResult } from '../../core/Editor';
+import type Feature from 'ol/Feature';
+import { formatDimensionAngle } from '../../core/dimensions/format';
 import { lengthUnitInfo } from '../../core/units';
 import { OlcadPanel, type DockPosition } from './OlcadPanel';
 
@@ -171,7 +173,7 @@ export class OlcadInputBar extends OlcadPanel {
     const dimension = tool ? null : editor.dimensions.inputTarget();
     this.dimensionTarget = dimension;
     const idle = dimension
-      ? `Field value of the selected dimension in ${lengthUnitInfo(editor.units.getLength()).symbol}; - clears it`
+      ? `Field value of the selected dimension in ${this.dimensionUnit(editor, dimension)}; - clears it`
       : NO_TOOL_PROMPT;
     this.show(own ?? (tool ? (PROMPTS[tool] ?? `Tool: ${tool}`) : idle), 'prompt');
     this.applyInputRequest(tool ? (editor.tools.getInputRequest?.() ?? null) : null);
@@ -222,10 +224,14 @@ export class OlcadInputBar extends OlcadPanel {
     const editor = this.boundEditor;
     if ('fieldValue' in result) {
       const value = result.fieldValue;
+      const target = editor?.dimensions.inputTarget();
+      const angular = editor && target ? editor.dimensions.values(target)?.unit === 'deg' : false;
       this.show(
         value === null
           ? 'Field value cleared'
-          : `Field value ${editor ? editor.units.formatLength(value) : `${value} m`}`,
+          : angular && editor && target
+            ? `Field value ${formatDimensionAngle(value, this.angleUnit(editor, target), '.')}`
+            : `Field value ${editor ? editor.units.formatLength(value) : `${value} m`}`,
         'info',
       );
       return;
@@ -242,6 +248,19 @@ export class OlcadInputBar extends OlcadPanel {
     const decimals = editor?.map.getView().getProjection().getUnits() === 'degrees' ? 6 : 2;
     const [x, y] = result.coordinate;
     this.show(`${result.text} → ${x!.toFixed(decimals)}, ${y!.toFixed(decimals)}`, 'info');
+  }
+
+  /** The unit the selected dimension's field value is typed in. */
+  private dimensionUnit(editor: Editor, dimension: Feature): string {
+    if (editor.dimensions.values(dimension)?.unit === 'deg') {
+      return this.angleUnit(editor, dimension) === 'gon' ? 'gon' : '°';
+    }
+    return lengthUnitInfo(editor.units.getLength()).symbol;
+  }
+
+  private angleUnit(editor: Editor, dimension: Feature): 'deg' | 'gon' {
+    const layer = editor.layers.layerOf(dimension);
+    return (layer && editor.layers.getConfig(layer).dimension?.angleUnit) || 'deg';
   }
 
   private unbind(): void {

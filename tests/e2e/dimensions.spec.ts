@@ -486,3 +486,135 @@ test.describe('dimension references', () => {
     expect(refs.stale).toBe(false);
   });
 });
+
+test.describe('angular and radial dimensions', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await request.post('/reset');
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('parcels').featureCount))
+      .toBe(2);
+    await page.evaluate(() => {
+      const parcel = window.editor.layers.getFeatures('parcels').find((f) => f.getId() === 2)!;
+      window.editor.map
+        .getView()
+        .fit(parcel.getGeometry()!.getExtent(), { padding: [150, 150, 150, 150] });
+    });
+    await editLayer(page, 'Dimensions');
+  });
+
+  test('an angle at a parcel corner by three points, shown in degrees in the table', async ({
+    page,
+  }) => {
+    const ring = await parcelRing(page, 2);
+    const angle = await page.evaluate(
+      ([se, sw, nw]) => {
+        const e = window.editor;
+        e.tools.activate('dimension-angular');
+        for (const c of [se!, sw!, nw!]) e.input(`${c[0]},${c[1]}`);
+        e.input('20 m'); // the arc radius
+        e.tools.finish();
+        const dim = e.selection.get()[0]!;
+        return { gis: dim.get('gisValue') as number, type: dim.get('dimType') as string };
+      },
+      [ring[1]!, ring[0]!, ring[3]!],
+    );
+    expect(angle.type).toBe('angular');
+    expect(angle.gis).toBeCloseTo(90, 1);
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement & { show(id: string): void }>('olcad-feature-table')!
+        .show('dimensions'),
+    );
+    await expect(page.locator('olcad-feature-table tbody')).toContainText('90.0°');
+  });
+
+  test('the angle between two edges picked with the pointer', async ({ page }) => {
+    await page.evaluate(() =>
+      window.editor.tools.activate('dimension-angular', { method: 'segments' }),
+    );
+    const ring = await parcelRing(page, 2);
+    const mid = (a: number[], b: number[]) => [(a[0]! + b[0]!) / 2, (a[1]! + b[1]!) / 2];
+    const bottom = await screenPoint(page, mid(ring[0]!, ring[1]!));
+    const left = await screenPoint(page, mid(ring[0]!, ring[3]!));
+    await page.mouse.click(bottom.x, bottom.y);
+    await page.mouse.click(left.x, left.y);
+    await page.mouse.move(bottom.x, left.y); // inside the parcel's south-west corner
+    await page.mouse.click(bottom.x, left.y);
+    await page.locator('olcad-input-bar .olcad-input-bar__input').press('Enter');
+    const gis = await page.evaluate(
+      () => window.editor.selection.get()[0]!.get('gisValue') as number,
+    );
+    expect(gis).toBeCloseTo(90, 1);
+  });
+
+  test('a radius on a circle drawn with the circle tool', async ({ page }) => {
+    const ring = await parcelRing(page, 2);
+    const centre = [(ring[0]![0]! + ring[2]![0]!) / 2, (ring[0]![1]! + ring[2]![1]!) / 2];
+    const edge = await page.evaluate((c) => {
+      const e = window.editor;
+      e.layers.setActive(null); // the circle goes into the draft layer
+      e.tools.activate('circle');
+      e.input(`${c[0]},${c[1]}`);
+      e.input('25');
+      const circle = e.layers.getFeatures(e.layers.getDraft()!)[0]!;
+      e.layers.setActive('dimensions');
+      e.tools.activate('dimension-radial');
+      const ring = (
+        circle.getGeometry() as unknown as { getCoordinates(): number[][][] }
+      ).getCoordinates()[0]!;
+      const [a, b] = [ring[3]!, ring[4]!];
+      return [(a[0]! + b[0]!) / 2, (a[1]! + b[1]!) / 2];
+    }, centre);
+    const at = await screenPoint(page, edge);
+    await page.mouse.click(at.x, at.y);
+    const input = page.locator('olcad-input-bar .olcad-input-bar__input');
+    await input.fill('5');
+    await input.press('Enter');
+    await input.press('Enter');
+    const radius = await page.evaluate(() => {
+      const dim = window.editor.selection.get()[0]!;
+      return { type: dim.get('dimType') as string, gis: dim.get('gisValue') as number };
+    });
+    expect(radius.type).toBe('radius');
+    expect(radius.gis).toBeCloseTo(25, 1);
+  });
+
+  test('a surveying layer writes angles in gon', async ({ page }) => {
+    const ring = await parcelRing(page, 2);
+    const label = await page.evaluate(
+      ([se, sw, nw]) => {
+        const e = window.editor;
+        const id = e.localLayers.create({
+          title: 'Survey',
+          geometryType: 'LineString',
+          fields: [],
+          dimension: { preset: 'surveying' },
+        });
+        e.layers.setActive(id);
+        e.tools.activate('dimension-angular');
+        for (const c of [se!, sw!, nw!]) e.input(`${c[0]},${c[1]}`);
+        e.input('20 m');
+        e.input('100.002');
+        const dim = e.layers.getFeatures(id)[0]!;
+        const layer = e.map
+          .getLayers()
+          .getArray()
+          .find((l) => l.get('olcad:layer') === id) as unknown as {
+          getStyleFunction(): (
+            f: unknown,
+            r: number,
+          ) => { getText(): { getText(): string } | null }[];
+        };
+        return layer
+          .getStyleFunction()(dim, 0.05)
+          .find((s) => s.getText())!
+          .getText()!
+          .getText();
+      },
+      [ring[1]!, ring[0]!, ring[3]!],
+    );
+    expect(label).toBe('100.0020 gon');
+  });
+});

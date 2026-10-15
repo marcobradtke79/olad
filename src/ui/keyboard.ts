@@ -11,6 +11,8 @@ const STEPPING_TOOLS = [
   'parallel',
   'text',
   'dimension-linear',
+  'dimension-angular',
+  'dimension-radial',
   'move',
   'modify',
   'rotate',

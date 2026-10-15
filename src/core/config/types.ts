@@ -310,6 +310,9 @@ export type DimensionPreset = 'architecture' | 'surveying' | 'landscape';
 /** Mark at the ends of the dimension line. */
 export type DimensionTerminator = 'tick' | 'arrow' | 'dot' | 'none';
 
+/** Unit of angular dimensions: degrees or gon (400 per full circle, surveying). */
+export type DimensionAngleUnit = 'deg' | 'gon';
+
 /** How a dimension layer draws its dimensions. Sizes are paper millimetres at `referenceScale`. */
 export interface DimensionConfig {
   /**
@@ -333,6 +336,10 @@ export interface DimensionConfig {
   deviationColor?: string;
   /** CSS font family. Default `'sans-serif'`. */
   font?: string;
+  /** Unit in which angles are shown and typed. Default per preset: `'gon'` for surveying, else `'deg'`. */
+  angleUnit?: DimensionAngleUnit;
+  /** Largest difference between field and GIS angle, in `angleUnit`, before it deviates. Default `0.1`. */
+  angleTolerance?: number;
 }
 
 export type ResolvedDimensionConfig = Required<DimensionConfig>;

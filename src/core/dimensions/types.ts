@@ -21,7 +21,16 @@ export const SUPPORTED_DIMENSION_TYPES: readonly DimensionType[] = [
   'rotated',
   'running',
   'tie',
+  'angular',
+  'radius',
+  'diameter',
+  'arc',
 ];
+
+/** How many definition points a dimension type has: angle and arc three, the others two. */
+export function dimensionPointCount(type: DimensionType): number {
+  return type === 'angular' || type === 'arc' ? 3 : 2;
+}
 
 /** `stale`: a measured object changed (planned); `deviates`: field and GIS value differ beyond the tolerance. */
 export type DimensionStatus = 'ok' | 'stale' | 'deviates';

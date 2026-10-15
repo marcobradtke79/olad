@@ -34,6 +34,23 @@ export {
   type RectangleTarget,
 } from './rectangle';
 export {
+  DimensionAngularTool,
+  DIMENSION_ANGULAR_METHODS,
+  DIMENSION_ANGULAR_PROMPTS,
+  dimensionAngularMethod,
+  type DimensionAngularMethod,
+  type DimensionAngularStep,
+} from './dimensionAngular';
+export {
+  DimensionRadialTool,
+  DIMENSION_RADIAL_METHODS,
+  DIMENSION_RADIAL_PROMPTS,
+  dimensionRadialMethod,
+  type DimensionRadialMethod,
+  type DimensionRadialStep,
+} from './dimensionRadial';
+export { DimensionToolBase } from './dimensionBase';
+export {
   DimensionLinearTool,
   DIMENSION_LINEAR_METHODS,
   DIMENSION_LINEAR_PROMPTS,

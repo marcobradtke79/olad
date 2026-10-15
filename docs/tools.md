@@ -3,7 +3,7 @@
 Tools wrap OpenLayers interactions. Exactly one tool is active at a time, tools require edit mode (`editor.setEditMode(true)`), and every change a tool makes goes through `editor.execute` as a command, so validation, undo / redo and the change set see it (see [change-set.md](change-set.md)).
 
 ```ts
-editor.tools.list(); // ['select', 'draw', 'rectangle', 'circle', 'ellipse', 'regular-polygon', 'curve', 'parallel', 'text', 'dimension-linear', 'modify', 'move', 'rotate', 'scale', 'offset', 'trim', 'extend', 'mirror', 'template-copy', 'template-insert', 'measure-distance', 'measure-area', 'measure-angle']
+editor.tools.list(); // ['select', 'draw', 'rectangle', 'circle', 'ellipse', 'regular-polygon', 'curve', 'parallel', 'text', 'dimension-linear', 'dimension-angular', 'dimension-radial', 'modify', 'move', 'rotate', 'scale', 'offset', 'trim', 'extend', 'mirror', 'template-copy', 'template-insert', 'measure-distance', 'measure-area', 'measure-angle']
 editor.tools.canActivate('draw'); // preconditions: edit mode, a layer to insert into ...
 editor.tools.activate('draw'); // into the active layer, or the draft layer when none is active
 editor.tools.activate('draw', { type: 'Polygon' }); // the type on a layer accepting any geometry
@@ -202,6 +202,28 @@ Purpose: draw linear dimensions into the active dimension layer ([`layers[].dime
 Each dimension is one `insertFeature` command with `dimType`, `offset`, `gisValue` (metres, rounded to millimetres), `fieldValue`, `text`, `refs` (for each point snapped onto an object with an id: the object and its vertex, segment midpoint or the point on the segment; a later change of that object makes the dimension stale, see [api.md](api.md#editordimensions)), `rotation` (rotated, chain, baseline, running), `chain` (the set's id, `c-…`) and the layer's schema defaults, and is selected; no attribute popup opens. A chain span's offset is chosen so its line coincides with the first span's line. The tool stays active and follows the active layer. Escape drops the dimension in progress, Backspace steps back one step. Toolbar: one flyout button with the six variants, see [ui.md](ui.md#olcad-toolbar).
 
 **Field value of an existing dimension**: select one dimension (edit mode on, no tool running) and type a length in the command line; `-` clears it. The attribute form of a dimension layer always offers **Field value** and **Text** ([ui.md](ui.md#olcad-attribute-form)); `editor.dimensions.setFieldValue` does the same headless ([api.md](api.md#editordimensions)).
+
+## `dimension-angular`
+
+Purpose: dimension an angle in the active dimension layer. Precondition: as `dimension-linear`. Two variants (`{ method }`, default `points`):
+
+| `method`   | Steps                                                                                                                                                                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `points`   | A point on the **first leg**, the **vertex**, a point on the **second leg** (clicks snapped and recorded as `refs`, or typed; relative input from the vertex).                                                                      |
+| `segments` | The **first edge** and the **second edge**: clicks on segments of visible objects (lines and polygon edges, picked with the raw pointer). The vertex is where their lines meet, also outside the edges; parallel edges are ignored. |
+
+Then the **arc**: the pointer chooses which angle is dimensioned (the sector it is in: inner or reflex for points, one of the four angles between two lines for edges) and the arc radius; a click fixes it, a typed length sets the radius. Then the **field angle**: Enter keeps the GIS angle, a plain number is the field angle in the layer's `angleUnit` (degrees or gon), `t <text>` a free text. Stored as `dimType: 'angular'`, geometry [leg, vertex, leg] counter-clockwise, `offset` = arc radius in metres, angles in degrees.
+
+## `dimension-radial`
+
+Purpose: dimension a circle or arc in the active dimension layer. Three variants (`{ method }`, default `radius`): `radius` (R), `diameter` (Ø), `arc` (arc length, ⌒).
+
+1. **Curve**: click a circle, an arc or a curved edge. The circle is fitted to the evenly turning vertices around the click (linearized circles and circular arcs inside lines and rings; an ellipse's turns vary too much to fit, use three points there). Where no circle is found the prompt asks for **three points on the arc** (snapped), and their circumcircle is used.
+2. `arc` only: **start** and **end** on the curve (projected onto the circle); the arc is the one holding the picked point (or the middle of the three points).
+3. **Place**: the pointer sets the direction of the leader (radius, diameter) or the distance of the dimension arc outside the circle (arc); a click fixes it, a typed length sets the offset.
+4. **Value**: Enter keeps the GIS value, a typed length is the field value, `t <text>` a free text.
+
+Stored as `dimType` `radius` / `diameter` with [centre, point on the circle], `arc` with [centre, start, end] counter-clockwise; `offset` in metres. Radial dimensions carry no references yet.
 
 ## `modify` (vertex edit)
 

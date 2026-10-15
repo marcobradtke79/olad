@@ -48,7 +48,10 @@ export function resolveText(text: LayerConfig['text']): ResolvedTextConfig | und
 }
 
 /** Defaults of a dimension layer that every preset shares (`layers[].dimension`). */
-export const DIMENSION_DEFAULTS: Omit<ResolvedDimensionConfig, 'referenceScale' | 'terminator'> = {
+export const DIMENSION_DEFAULTS: Omit<
+  ResolvedDimensionConfig,
+  'referenceScale' | 'terminator' | 'angleUnit'
+> = {
   preset: 'surveying',
   textSize: 2.5,
   tolerance: 0.05,
@@ -56,16 +59,17 @@ export const DIMENSION_DEFAULTS: Omit<ResolvedDimensionConfig, 'referenceScale' 
   color: '#111827',
   deviationColor: '#dc2626',
   font: 'sans-serif',
+  angleTolerance: 0.1,
 };
 
 /** Per-preset defaults: the typical plan scale and end mark of each discipline. */
 export const DIMENSION_PRESETS: Record<
   DimensionPreset,
-  Pick<ResolvedDimensionConfig, 'referenceScale' | 'terminator'>
+  Pick<ResolvedDimensionConfig, 'referenceScale' | 'terminator' | 'angleUnit'>
 > = {
-  architecture: { referenceScale: 100, terminator: 'tick' },
-  surveying: { referenceScale: 500, terminator: 'arrow' },
-  landscape: { referenceScale: 250, terminator: 'dot' },
+  architecture: { referenceScale: 100, terminator: 'tick', angleUnit: 'deg' },
+  surveying: { referenceScale: 500, terminator: 'arrow', angleUnit: 'gon' },
+  landscape: { referenceScale: 250, terminator: 'dot', angleUnit: 'deg' },
 };
 
 /** The resolved dimension settings, or `undefined` for a layer that is not a dimension layer. */
