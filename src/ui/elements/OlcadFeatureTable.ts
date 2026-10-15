@@ -4,7 +4,7 @@ import type LineString from 'ol/geom/LineString';
 import type MultiLineString from 'ol/geom/MultiLineString';
 import type MultiPolygon from 'ol/geom/MultiPolygon';
 import type Polygon from 'ol/geom/Polygon';
-import { formatDimensionAngle } from '../../core/dimensions/format';
+import { formatDimensionAngle, formatLevel, formatSlope } from '../../core/dimensions/format';
 import type { Editor } from '../../core/Editor';
 import type { ChangeSet } from '../../core/changes/exportChangeSet';
 import { measureArea, measureLength } from '../../core/measure/measurements';
@@ -418,29 +418,37 @@ export class OlcadFeatureTable extends HTMLElement {
     if (config.dimension) {
       // GIS value, field value, their difference and the status (dimensionValues).
       const values = (f: Feature) => editor.dimensions.values(f);
-      // Lengths in the default unit, angles in the layer's angle unit.
+      // Lengths in the default unit, angles in the layer's angle unit, slopes in percent,
+      // heights with their sign.
       const angleUnit = config.dimension.angleUnit;
-      const format = (f: Feature, value: number | null | undefined) =>
-        value === null || value === undefined
-          ? ''
-          : values(f)?.unit === 'deg'
-            ? formatDimensionAngle(value, angleUnit, '.')
-            : editor.units.formatLength(value);
+      const format = (f: Feature, value: number | null | undefined) => {
+        if (value === null || value === undefined) return '';
+        const v = values(f);
+        if (v?.unit === 'deg') return formatDimensionAngle(value, angleUnit, '.');
+        if (v?.unit === '%') return formatSlope(value, '.');
+        if (v?.type === 'level') return formatLevel(value, '.');
+        return editor.units.formatLength(value);
+      };
+      /** A value and, for a station, its offset: `12.47 m / 3.05 m`. */
+      const pair = (f: Feature, main: number | null | undefined, second?: number | null) =>
+        second === undefined || second === null
+          ? format(f, main)
+          : `${format(f, main)} / ${format(f, second)}`;
       const difference = (f: Feature): number | null => {
         const v = values(f);
-        return v && v.field !== null ? v.field - v.gis : null;
+        return v && v.field !== null && v.gis !== null ? v.field - v.gis : null;
       };
       columns.push(
         {
           key: '#gis',
           label: 'GIS value',
-          text: (f) => format(f, values(f)?.gis),
+          text: (f) => pair(f, values(f)?.gis, values(f)?.second?.gis),
           sortValue: (f) => values(f)?.gis ?? null,
         },
         {
           key: '#field',
           label: 'Field value',
-          text: (f) => format(f, values(f)?.field),
+          text: (f) => pair(f, values(f)?.field, values(f)?.second?.field),
           sortValue: (f) => values(f)?.field ?? null,
         },
         {

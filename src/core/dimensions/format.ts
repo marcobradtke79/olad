@@ -44,6 +44,20 @@ export interface DimensionFormatOptions {
   angle?: 'deg' | 'gon';
   /** Symbol written before the number: `R`, `Ø`, `⌒` for radial dimensions. */
   prefix?: string;
+  /** Format as a height with its sign (`+112,45`) or as a slope in percent (`2,5 %`). */
+  kind?: 'level' | 'slope';
+}
+
+/** A height in metres with its sign and centimetres: `+112,45`, `−0,15`, `±0,00`. */
+export function formatLevel(metres: number, decimal: ',' | '.' = ','): string {
+  const rounded = Math.round(metres * 100) / 100;
+  const number = Math.abs(rounded).toFixed(2).replace('.', decimal);
+  return rounded === 0 ? `±${number}` : `${rounded > 0 ? '+' : '−'}${number}`;
+}
+
+/** A slope in percent with one decimal: `2,5 %`. */
+export function formatSlope(percent: number, decimal: ',' | '.' = ','): string {
+  return `${percent.toFixed(1).replace('.', decimal)} %`;
 }
 
 /**
@@ -69,9 +83,15 @@ export function formatDimension(
   preset: DimensionPreset,
   options: DimensionFormatOptions = {},
 ): string {
-  let value = options.angle
-    ? formatDimensionAngle(metres, options.angle, options.decimal ?? ',')
-    : formatDimensionNumber(metres, preset, options.decimal ?? ',');
+  const decimal = options.decimal ?? ',';
+  let value =
+    options.kind === 'level'
+      ? formatLevel(metres, decimal)
+      : options.kind === 'slope'
+        ? formatSlope(metres, decimal)
+        : options.angle
+          ? formatDimensionAngle(metres, options.angle, decimal)
+          : formatDimensionNumber(metres, preset, decimal);
   if (options.computed && (options.showComputed ?? 'brackets') === 'brackets') value = `(${value})`;
   if (options.prefix) value = `${options.prefix} ${value}`;
   if (options.text) return options.text.split('{value}').join(value);

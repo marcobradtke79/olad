@@ -136,3 +136,61 @@ describe('dimensionValues: angular and radial', () => {
     expect(dimensionValues(dim('arc', [at(0, 0), at(5, 0)]), config, 'EPSG:25832')).toBeNull();
   });
 });
+
+describe('dimensionValues: station, level and slope', () => {
+  const o = [457000, 5428000];
+  const at = (x: number, y: number) => [o[0]! + x, o[1]! + y];
+  const dim = (type: string, points: number[][], properties: Record<string, unknown> = {}) =>
+    new Feature({ geometry: new LineString(points), dimType: type, ...properties });
+
+  it('measures the station along the line and the signed offset', () => {
+    const left = dimensionValues(
+      dim('station', [at(0, 0), at(30, 0), at(12, 3)]),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(left.gis).toBeCloseTo(12, 9);
+    expect(left.second!.gis).toBeCloseTo(3, 9);
+    const right = dimensionValues(
+      dim('station', [at(0, 0), at(30, 0), at(12, -4)]),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(right.second!.gis).toBeCloseTo(-4, 9);
+    const end = dimensionValues(
+      dim('station', [at(0, 0), at(30, 0), at(30, 0)]),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(end.gis).toBeCloseTo(30, 9);
+    expect(end.second!.gis).toBeCloseTo(0, 9);
+    const offsetOff = dimensionValues(
+      dim('station', [at(0, 0), at(30, 0), at(12, 3)], { fieldValue: 12, fieldOffset: 3.2 }),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(offsetOff.status).toBe('deviates');
+  });
+
+  it('shows typed heights and slopes; a derived slope keeps its stored GIS value', () => {
+    const level = dimensionValues(
+      dim('level', [at(0, 0), at(1, 1)], { fieldValue: -0.15 }),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(level).toMatchObject({ gis: null, field: -0.15, value: -0.15, computed: false });
+    expect(dimensionValues(dim('level', [at(0, 0), at(1, 1)]), config, 'EPSG:25832')).toBeNull();
+    const derived = dimensionValues(
+      dim('slope', [at(0, 0), at(10, 0)], { gisValue: 2.5 }),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(derived).toMatchObject({ unit: '%', gis: 2.5, value: 2.5, computed: true });
+    const free = dimensionValues(
+      dim('slope', [at(0, 0), at(10, 0)], { fieldValue: 4 }),
+      config,
+      'EPSG:25832',
+    )!;
+    expect(free).toMatchObject({ gis: null, value: 4, computed: false });
+  });
+});

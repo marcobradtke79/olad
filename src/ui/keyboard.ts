@@ -13,6 +13,7 @@ const STEPPING_TOOLS = [
   'dimension-linear',
   'dimension-angular',
   'dimension-radial',
+  'dimension-survey',
   'move',
   'modify',
   'rotate',

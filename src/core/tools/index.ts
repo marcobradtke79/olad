@@ -49,6 +49,14 @@ export {
   type DimensionRadialMethod,
   type DimensionRadialStep,
 } from './dimensionRadial';
+export {
+  DimensionSurveyTool,
+  DIMENSION_SURVEY_METHODS,
+  DIMENSION_SURVEY_PROMPTS,
+  dimensionSurveyMethod,
+  type DimensionSurveyMethod,
+  type DimensionSurveyStep,
+} from './dimensionSurvey';
 export { DimensionToolBase } from './dimensionBase';
 export {
   DimensionLinearTool,

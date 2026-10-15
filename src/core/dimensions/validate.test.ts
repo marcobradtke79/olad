@@ -23,9 +23,8 @@ describe('validateDimensionFeature', () => {
     ).toBeNull();
   });
 
-  it('rejects unknown and not yet supported types', () => {
+  it('rejects unknown types', () => {
     expect(validateDimensionFeature(line, { dimType: 'fancy' })?.code).toBe('dimension-type');
-    expect(validateDimensionFeature(line, { dimType: 'station' })?.code).toBe('dimension-type');
   });
 
   it('needs two distinct points', () => {
@@ -105,5 +104,35 @@ describe('validateDimensionFeature: angular and radial', () => {
       [5, 0],
     ]);
     expect(validateDimensionFeature(fullArc, { dimType: 'arc' })?.code).toBe('dimension-points');
+  });
+});
+
+describe('validateDimensionFeature: station, level and slope', () => {
+  it('checks heights, kinds, offsets and the survey point rules', () => {
+    const level = new LineString([
+      [0, 0],
+      [0, 0],
+    ]);
+    expect(validateDimensionFeature(level, { dimType: 'level', fieldValue: -0.15 })).toBeNull();
+    expect(validateDimensionFeature(level, { dimType: 'level' })?.params.property).toBe(
+      'fieldValue',
+    );
+    expect(
+      validateDimensionFeature(level, { dimType: 'level', fieldValue: 1, levelKind: 'roof' })
+        ?.params.property,
+    ).toBe('levelKind');
+    const end = new LineString([
+      [0, 0],
+      [30, 0],
+      [30, 0],
+    ]);
+    expect(validateDimensionFeature(end, { dimType: 'station', fieldOffset: -2 })).toBeNull();
+    expect(
+      validateDimensionFeature(end, { dimType: 'station', fieldOffset: 'x' })?.params.property,
+    ).toBe('fieldOffset');
+    expect(validateDimensionFeature(line, { dimType: 'slope', fieldValue: -3 })).toBeNull();
+    expect(validateDimensionFeature(line, { dimType: 'aligned', fieldValue: -3 })?.code).toBe(
+      'dimension-value',
+    );
   });
 });

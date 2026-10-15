@@ -9,6 +9,7 @@ import {
   decimalSeparator,
   formatDimensionAngle,
   formatDimensionNumber,
+  formatSlope,
 } from '../dimensions/format';
 import { dimensionValues } from '../dimensions/values';
 import { dimensionStyleFunction } from '../layers/dimension';
@@ -112,27 +113,34 @@ export abstract class DimensionToolBase extends BaseTool {
     const feature = this.dimension();
     if (!ctx || !target || !feature) return '';
     const values = dimensionValues(feature, target.layer.dimension, ctx.getProjection());
-    if (!values) return '';
+    if (!values || values.gis === null) return '';
     const decimal = decimalSeparator(ctx.getLocale());
     const config = target.layer.dimension;
+    if (values.unit === '%') return formatSlope(values.gis, decimal);
     return values.unit === 'deg'
       ? formatDimensionAngle(values.gis, config.angleUnit, decimal)
       : formatDimensionNumber(values.gis, config.preset, decimal);
   }
 
   /** Insert the dimension in progress as one command, select it and start over. */
-  protected insert(fieldValue: number | null, text: string | null): void {
+  protected insert(
+    fieldValue: number | null,
+    text: string | null,
+    extra: Record<string, unknown> = {},
+  ): void {
     const ctx = this.ctx;
     const target = this.target();
     const drawn = this.dimension();
+    if (!ctx || !target || !drawn) return;
+    // Levels and free slopes have no GIS value; the others store theirs.
     const gis = this.gisValue();
-    if (!ctx || !target || !drawn || gis === null) return;
     const feature = new Feature({
       ...defaultProperties(target.layer),
       ...drawn.getProperties(),
-      gisValue: Math.round(gis * 1e6) / 1e6,
+      ...(gis === null ? {} : { gisValue: Math.round(gis * 1e6) / 1e6 }),
       fieldValue,
       text,
+      ...extra,
     });
     this.reset();
     if (ctx.execute(insertFeature(target.layerId, feature))) ctx.selection.set([feature]);

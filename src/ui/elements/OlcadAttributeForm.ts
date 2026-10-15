@@ -240,7 +240,7 @@ export class OlcadAttributeForm extends HTMLElement {
       );
       return;
     }
-    const fields = layerFormFields(config);
+    const fields = layerFormFields(config, feature);
     if (fields.length === 0) {
       target.append(hint(`No attributes configured for ${info.title}.`));
       if (this.popup) target.append(this.laterButton('Close'));

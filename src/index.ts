@@ -36,6 +36,10 @@ export {
   formatDimension,
   formatDimensionNumber,
   formatDimensionAngle,
+  formatLevel,
+  formatSlope,
+  finiteOf,
+  LEVEL_KINDS,
   sweepAngle,
   toAngleUnit,
   fromAngleUnit,
@@ -63,6 +67,7 @@ export type {
   DimensionIssue,
   DimensionReference,
   DimensionRefs,
+  LevelKind,
   SnapSource,
 } from './core/dimensions';
 export {

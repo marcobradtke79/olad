@@ -25,12 +25,19 @@ export const SUPPORTED_DIMENSION_TYPES: readonly DimensionType[] = [
   'radius',
   'diameter',
   'arc',
+  'station',
+  'level',
+  'slope',
 ];
 
-/** How many definition points a dimension type has: angle and arc three, the others two. */
+/** How many definition points a dimension type has: angle, arc and station three, the others two. */
 export function dimensionPointCount(type: DimensionType): number {
-  return type === 'angular' || type === 'arc' ? 3 : 2;
+  return type === 'angular' || type === 'arc' || type === 'station' ? 3 : 2;
 }
+
+/** Kind of a spot level: the mark the presets draw (filled ▼ structural / planned, open ▽ finished / existing). */
+export const LEVEL_KINDS = ['finished', 'structural', 'existing', 'planned'] as const;
+export type LevelKind = (typeof LEVEL_KINDS)[number];
 
 /** `stale`: a measured object changed (planned); `deviates`: field and GIS value differ beyond the tolerance. */
 export type DimensionStatus = 'ok' | 'stale' | 'deviates';

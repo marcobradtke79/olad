@@ -3,7 +3,7 @@
 Tools wrap OpenLayers interactions. Exactly one tool is active at a time, tools require edit mode (`editor.setEditMode(true)`), and every change a tool makes goes through `editor.execute` as a command, so validation, undo / redo and the change set see it (see [change-set.md](change-set.md)).
 
 ```ts
-editor.tools.list(); // ['select', 'draw', 'rectangle', 'circle', 'ellipse', 'regular-polygon', 'curve', 'parallel', 'text', 'dimension-linear', 'dimension-angular', 'dimension-radial', 'modify', 'move', 'rotate', 'scale', 'offset', 'trim', 'extend', 'mirror', 'template-copy', 'template-insert', 'measure-distance', 'measure-area', 'measure-angle']
+editor.tools.list(); // ['select', 'draw', 'rectangle', 'circle', 'ellipse', 'regular-polygon', 'curve', 'parallel', 'text', 'dimension-linear', 'dimension-angular', 'dimension-radial', 'dimension-survey', 'modify', 'move', 'rotate', 'scale', 'offset', 'trim', 'extend', 'mirror', 'template-copy', 'template-insert', 'measure-distance', 'measure-area', 'measure-angle']
 editor.tools.canActivate('draw'); // preconditions: edit mode, a layer to insert into ...
 editor.tools.activate('draw'); // into the active layer, or the draft layer when none is active
 editor.tools.activate('draw', { type: 'Polygon' }); // the type on a layer accepting any geometry
@@ -224,6 +224,18 @@ Purpose: dimension a circle or arc in the active dimension layer. Three variants
 4. **Value**: Enter keeps the GIS value, a typed length is the field value, `t <text>` a free text.
 
 Stored as `dimType` `radius` / `diameter` with [centre, point on the circle], `arc` with [centre, start, end] counter-clockwise; `offset` in metres. Radial dimensions carry no references yet.
+
+## `dimension-survey`
+
+Purpose: survey and landscape dimensions in the active dimension layer. Three variants (`{ method }`, default `station`):
+
+| `method`  | Steps                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `station` | Orthogonal survey. **Start** and **end** of the measuring line (snapped, referenced), then each **point** to record (click or typed) and its **field values**: `station offset` in one entry separated by a space (`12.47 3.05`), a single number for the station only, or Enter for the GIS values. The typed offset takes the side of the measured one. Enter while waiting for a point writes the **end measure** (the line's length at its end, with its own value step); Escape ends the line. |
+| `level`   | Spot level. The **point** (snapped), the **label position** (a click; Enter puts it beside the point), then the **height** in metres (`112.45`, `-0.15`).                                                                                                                                                                                                                                                                                                                                           |
+| `slope`   | Slope. Click the **upper** and the **lower spot level** of the active layer: the percentage is their height difference over the horizontal GIS distance, the arrow points downhill, both levels are referenced; Enter keeps it, a typed number is the field value. Clicking elsewhere draws a free arrow (start, end) whose percentage must be typed.                                                                                                                                               |
+
+Stored as `dimType` `station` ([line start, line end, point]; the end measure repeats the line end; `fieldValue` station, `fieldOffset` signed offset, `gisOffset`; all points of one line share `chain`), `level` ([point, label position]; `fieldValue` height, `levelKind` `finished` / `structural` / `existing` / `planned`, default `finished` for architecture, else `existing`) and `slope` ([start, end] downhill; `gisValue` % when derived, `fieldValue` %). Levels are drawn with an open triangle (finished, existing) or a filled one (structural, planned), a cross in the surveying preset — check the legend against DIN 1356-1 / DIN 18702 for your plans. A selected level or slope takes a typed number in the command line (negative allowed), a selected station `station offset`.
 
 ## `modify` (vertex edit)
 

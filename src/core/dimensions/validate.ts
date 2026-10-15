@@ -5,6 +5,7 @@ import { isRefs } from './references';
 import {
   DIMENSION_TYPES,
   dimensionPointCount,
+  LEVEL_KINDS,
   SUPPORTED_DIMENSION_TYPES,
   type DimensionType,
 } from './types';
@@ -37,18 +38,36 @@ export function validateDimensionFeature(
   const same = (a: number[], b: number[]) => a[0] === b[0] && a[1] === b[1];
   // Consecutive points differ; the vertex of an angle and the centre of an arc differ from
   // both other points.
+  // A station's point may be the line's end (the end measure); a level's label may sit on
+  // its point.
+  const mayRepeat = (i: number) => (type === 'station' && i === 2) || type === 'level';
   const distinct =
     points.length === expected &&
-    points.every((point, i) => i === 0 || !same(point, points[i - 1]!)) &&
-    (expected < 3 || !same(points[0]!, points[2]!) || type === 'arc');
+    points.every((point, i) => i === 0 || mayRepeat(i) || !same(point, points[i - 1]!)) &&
+    (expected < 3 || !same(points[0]!, points[2]!) || type === 'arc' || type === 'station');
   const centreApart =
     type !== 'arc' || (!same(points[0]!, points[1]!) && !same(points[0]!, points[2]!));
   if (!distinct || !centreApart) {
     return { code: 'dimension-points', params: { expected, actual: points.length } };
   }
   const field = properties.fieldValue;
-  if (!isNullish(field) && !(typeof field === 'number' && Number.isFinite(field) && field >= 0)) {
+  const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+  // Heights and slopes may be negative; a level needs its height.
+  const signed = type === 'level' || type === 'slope';
+  if (
+    (type === 'level' && !finite(field)) ||
+    (!isNullish(field) && !(finite(field) && (signed || (field as number) >= 0)))
+  ) {
     return { code: 'dimension-value', params: { property: 'fieldValue' } };
+  }
+  if (!isNullish(properties.fieldOffset) && !finite(properties.fieldOffset)) {
+    return { code: 'dimension-value', params: { property: 'fieldOffset' } };
+  }
+  if (
+    !isNullish(properties.levelKind) &&
+    !(LEVEL_KINDS as readonly unknown[]).includes(properties.levelKind)
+  ) {
+    return { code: 'dimension-value', params: { property: 'levelKind' } };
   }
   const rotation = properties.rotation;
   const directed = type === 'rotated' || type === 'running';
@@ -58,7 +77,7 @@ export function validateDimensionFeature(
   if (type === 'angular' && !(typeof properties.offset === 'number' && properties.offset > 0)) {
     return { code: 'dimension-value', params: { property: 'offset' } };
   }
-  for (const name of ['offset', 'textPosition', 'gisValue', 'rotation']) {
+  for (const name of ['offset', 'textPosition', 'gisValue', 'gisOffset', 'rotation']) {
     const value = properties[name];
     if (!isNullish(value) && !(typeof value === 'number' && Number.isFinite(value))) {
       return { code: 'dimension-value', params: { property: name } };

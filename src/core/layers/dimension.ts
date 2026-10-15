@@ -8,11 +8,17 @@ import Point from 'ol/geom/Point';
 import type { FlatStyleLike } from 'ol/style/flat';
 import CircleStyle from 'ol/style/Circle';
 import Fill from 'ol/style/Fill';
+import RegularShape from 'ol/style/RegularShape';
 import Stroke from 'ol/style/Stroke';
 import Style, { type StyleFunction } from 'ol/style/Style';
 import Text from 'ol/style/Text';
 import type { ResolvedDimensionConfig } from '../config/types';
-import { decimalSeparator, formatDimension } from '../dimensions/format';
+import {
+  decimalSeparator,
+  formatDimension,
+  formatDimensionNumber,
+  type DimensionFormatOptions,
+} from '../dimensions/format';
 import { dimensionValues, sweepAngle, type DimensionValues } from '../dimensions/values';
 import type { Locale } from '../i18n';
 import { unitsPerMetre } from '../measure';
@@ -49,6 +55,184 @@ const add = (a: Coordinate, b: Coordinate, f = 1): Coordinate => [
 ];
 
 const ROUND_TYPES: readonly string[] = ['radius', 'diameter', 'arc'];
+const SURVEY_TYPES: readonly string[] = ['station', 'level', 'slope'];
+
+/** The level kinds drawn with a filled triangle; the others get an open one. */
+const FILLED_LEVELS: readonly string[] = ['structural', 'planned'];
+
+/**
+ * Station (orthogonal survey), level and slope dimensions. A station draws its measuring line,
+ * the perpendicular to the point with a right-angle mark, the station value at the foot along
+ * the perpendicular and the offset along it. A level draws its mark (open or filled triangle,
+ * a cross for surveying) with a leader to the height. A slope draws an arrow downhill with the
+ * percentage above it.
+ */
+function surveyStyles(
+  values: DimensionValues,
+  feature: Feature,
+  config: ResolvedDimensionConfig,
+  projection: string,
+  resolution: number,
+  decimal: ',' | '.',
+): Style[] {
+  const [first, second, third] = values.points as [Coordinate, Coordinate, Coordinate | undefined];
+  const perMetre = unitsPerMetre(projection, first);
+  const paper = (mm: number) => (mm / 1000) * config.referenceScale * perMetre;
+  const color = values.status === 'deviates' ? config.deviationColor : config.color;
+  const stale = values.status === 'stale';
+  const stroke = new Stroke({ color, width: LINE_WIDTH, ...(stale ? { lineDash: [8, 4] } : {}) });
+  const fill = new Fill({ color });
+  const styles: Style[] = [];
+  const pixels = paper(config.textSize) / resolution;
+  const size = Math.round(Math.min(pixels, MAX_TEXT_PIXELS) * 10) / 10;
+  const gap = paper(DIMENSION_PAPER_MM.textGap);
+  const label = (
+    text: string,
+    at: Coordinate,
+    direction: Coordinate,
+    options: { align?: CanvasTextAlign; below?: boolean; screen?: boolean } = {},
+  ) => {
+    if (pixels < MIN_TEXT_PIXELS) return;
+    const flip = direction[0]! < 0 || (direction[0] === 0 && direction[1]! < 0);
+    const read: Coordinate = flip ? [-direction[0]!, -direction[1]!] : direction;
+    let align = options.align ?? 'center';
+    if (flip && align !== 'center') align = align === 'left' ? 'right' : 'left';
+    styles.push(
+      new Style({
+        geometry: new Point(at),
+        text: new Text({
+          text: stale ? `⚠ ${text}` : text,
+          font: `${size}px ${config.font}`,
+          fill,
+          stroke: new Stroke({
+            color: 'rgba(255, 255, 255, 0.85)',
+            width: Math.min(Math.max(size / 8, 1), 4),
+          }),
+          rotation: options.screen ? 0 : -Math.atan2(read[1]!, read[0]!),
+          rotateWithView: !options.screen,
+          textAlign: align,
+          textBaseline: options.below !== undefined && options.below !== flip ? 'top' : 'bottom',
+          overflow: true,
+        }),
+      }),
+    );
+  };
+  const format = (value: number, computed: boolean, extra: Partial<DimensionFormatOptions> = {}) =>
+    formatDimension(value, config.preset, {
+      decimal,
+      computed,
+      showComputed: config.showComputed,
+      ...extra,
+    });
+
+  if (values.type === 'station') {
+    const [a, b, p] = [first, second, third!];
+    const length = Math.hypot(b[0]! - a[0]!, b[1]! - a[1]!);
+    const u: Coordinate = [(b[0]! - a[0]!) / length, (b[1]! - a[1]!) / length];
+    const n: Coordinate = [-u[1]!, u[0]!];
+    const t = (p[0]! - a[0]!) * u[0]! + (p[1]! - a[1]!) * u[1]!;
+    const foot = add(a, u, t);
+    const across = (p[0]! - a[0]!) * n[0]! + (p[1]! - a[1]!) * n[1]!;
+    styles.push(new Style({ geometry: new LineString([a, b]), stroke }));
+    // Station values stand on the side away from the point (on the line's left when on it).
+    const outward: Coordinate = across > 0 ? [-n[0]!, -n[1]!] : n;
+    // The line's zero always on its right, so the stations of one line draw it once.
+    const right: Coordinate = [-n[0]!, -n[1]!];
+    label(formatDimensionNumber(0, config.preset, decimal), add(a, right, gap), right, {
+      align: 'left',
+    });
+    if (Math.abs(across) > gap) {
+      const side = Math.sign(across);
+      const mark = paper(1.5);
+      styles.push(
+        new Style({ geometry: new LineString([foot, p]), stroke }),
+        new Style({
+          geometry: new LineString([
+            add(foot, u, mark),
+            add(add(foot, u, mark), n, mark * side),
+            add(foot, n, mark * side),
+          ]),
+          stroke,
+        }),
+      );
+      const offset = values.second!;
+      const towards: Coordinate = [n[0]! * side, n[1]! * side];
+      label(
+        format(Math.abs(offset.value), offset.computed, { text: null }),
+        add(foot, towards, Math.abs(across) / 2),
+        towards,
+      );
+    }
+    label(
+      format(values.value, values.computed, {
+        text: (feature.get('text') as string | null | undefined) ?? null,
+      }),
+      add(foot, outward, gap),
+      outward,
+      { align: 'left' },
+    );
+    return styles;
+  }
+
+  if (values.type === 'level') {
+    const [point, at] = [first, second];
+    const radius = Math.max(paper(1.5) / resolution, 3);
+    const kind = (feature.get('levelKind') as string | undefined) ?? '';
+    styles.push(
+      new Style({
+        geometry: new Point(point),
+        image:
+          config.preset === 'surveying'
+            ? new RegularShape({ points: 4, radius, radius2: 0, angle: Math.PI / 4, stroke })
+            : new RegularShape({
+                points: 3,
+                radius,
+                rotation: Math.PI,
+                displacement: [0, radius / 2],
+                ...(FILLED_LEVELS.includes(kind) ? { fill } : {}),
+                stroke,
+              }),
+      }),
+    );
+    if (Math.hypot(at[0]! - point[0]!, at[1]! - point[1]!) > gap) {
+      styles.push(new Style({ geometry: new LineString([point, at]), stroke }));
+    }
+    label(
+      format(values.value, false, {
+        kind: 'level',
+        text: (feature.get('text') as string | null | undefined) ?? null,
+      }),
+      at,
+      [1, 0],
+      { align: 'left', screen: true },
+    );
+    return styles;
+  }
+
+  // Slope: an arrow downhill from the first to the second point.
+  const [start, end] = [first, second];
+  const length = Math.hypot(end[0]! - start[0]!, end[1]! - start[1]!);
+  const u: Coordinate = [(end[0]! - start[0]!) / length, (end[1]! - start[1]!) / length];
+  const n: Coordinate = [-u[1]!, u[0]!];
+  const back = add(end, u, -paper(DIMENSION_PAPER_MM.arrowLength));
+  const across = paper(DIMENSION_PAPER_MM.arrowWidth) / 2;
+  styles.push(
+    new Style({ geometry: new LineString([start, end]), stroke }),
+    new Style({
+      geometry: new MultiPolygon([[[end, add(back, n, across), add(back, n, -across), end]]]),
+      fill,
+    }),
+  );
+  label(
+    format(values.value, values.computed, {
+      kind: 'slope',
+      text: (feature.get('text') as string | null | undefined) ?? null,
+    }),
+    add(add(start, u, length / 2), n, gap),
+    u,
+  );
+  return styles;
+}
 const PREFIX: Record<string, string> = { radius: 'R', diameter: 'Ø', arc: '⌒' };
 
 const unit = (angle: number): Coordinate => [Math.cos(angle), Math.sin(angle)];
@@ -257,6 +441,9 @@ export function dimensionStyleFunction(
     );
     if (!values) return baseStyle(feature, resolution);
     if (!(resolution > 0)) return undefined;
+    if (SURVEY_TYPES.includes(values.type)) {
+      return surveyStyles(values, feature as Feature, config, projection, resolution, decimal);
+    }
     if (values.type === 'angular' || ROUND_TYPES.includes(values.type)) {
       return roundStyles(values, feature as Feature, config, projection, resolution, decimal);
     }

@@ -618,3 +618,104 @@ test.describe('angular and radial dimensions', () => {
     expect(label).toBe('100.0020 gon');
   });
 });
+
+test.describe('survey dimensions', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await request.post('/reset');
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('parcels').featureCount))
+      .toBe(2);
+    await page.evaluate(() => {
+      const parcel = window.editor.layers.getFeatures('parcels').find((f) => f.getId() === 2)!;
+      window.editor.map
+        .getView()
+        .fit(parcel.getGeometry()!.getExtent(), { padding: [150, 150, 150, 150] });
+    });
+    await editLayer(page, 'Dimensions');
+  });
+
+  test('a measuring line records corners by station and offset, then the end measure', async ({
+    page,
+  }) => {
+    const ring = await parcelRing(page, 2);
+    const result = await page.evaluate(
+      ([sw, se, nw]) => {
+        const e = window.editor;
+        const at = (c: number[]) => e.input(`${c[0]},${c[1]}`);
+        e.tools.activate('dimension-survey');
+        at(sw!);
+        at(se!);
+        at(nw!); // station 0, offset = the parcel's height
+        e.tools.finish();
+        at(se!); // station = the edge length, offset 0
+        e.input('131.45 0');
+        e.tools.finish(); // end measure
+        e.tools.finish();
+        const stations = e.layers
+          .getFeatures('dimensions')
+          .filter((f) => f.get('dimType') === 'station');
+        return stations.map((f) => {
+          const v = e.dimensions.values(f)!;
+          return {
+            gis: v.gis!,
+            offset: v.second!.gis,
+            field: v.field,
+            chain: f.get('chain') as string,
+          };
+        });
+      },
+      [ring[0]!, ring[1]!, ring[3]!],
+    );
+    expect(result).toHaveLength(3);
+    expect(result[0]!.gis).toBeCloseTo(0, 3);
+    expect(Math.abs(result[0]!.offset)).toBeGreaterThan(100);
+    expect(result[1]!.gis).toBeCloseTo(131.43, 1);
+    expect(result[1]!.field).toBe(131.45);
+    expect(result[2]!.gis).toBeCloseTo(result[1]!.gis, 6); // the end measure
+    expect(new Set(result.map((r) => r.chain)).size).toBe(1);
+  });
+
+  test('two spot levels and the slope between them, picked with the pointer', async ({ page }) => {
+    const ring = await parcelRing(page, 2);
+    await page.evaluate(
+      ([sw, se]) => {
+        const e = window.editor;
+        const at = (c: number[]) => e.input(`${c[0]},${c[1]}`);
+        e.tools.activate('dimension-survey', { method: 'level' });
+        at(sw!);
+        e.tools.finish();
+        e.input('112.45');
+        at(se!);
+        e.tools.finish();
+        e.input('110');
+        e.tools.activate('dimension-survey', { method: 'slope' });
+      },
+      [ring[0]!, ring[1]!],
+    );
+    const low = await screenPoint(page, ring[1]!);
+    const high = await screenPoint(page, ring[0]!);
+    await page.mouse.click(low.x, low.y);
+    await page.mouse.click(high.x, high.y);
+    await page.locator('olcad-input-bar .olcad-input-bar__input').press('Enter');
+    const slope = await page.evaluate(() => {
+      const e = window.editor;
+      const dim = e.layers.getFeatures('dimensions').find((f) => f.get('dimType') === 'slope')!;
+      const [from, to] = (
+        dim.getGeometry() as unknown as { getCoordinates(): number[][] }
+      ).getCoordinates();
+      return { gis: dim.get('gisValue') as number, from: from!, to: to! };
+    });
+    // 2.45 m over the 131.43 m edge, from the higher (south-west) corner downhill.
+    expect(slope.gis).toBeCloseTo((2.45 / 131.43) * 100, 1);
+    expect(slope.from).toEqual(ring[0]);
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement & { show(id: string): void }>('olcad-feature-table')!
+        .show('dimensions'),
+    );
+    await expect(page.locator('olcad-feature-table tbody')).toContainText('1.9 %');
+    await expect(page.locator('olcad-feature-table tbody')).toContainText('+112.45');
+  });
+});

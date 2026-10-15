@@ -164,6 +164,16 @@ export const ICONS = {
   dimensionArc: svg(
     '<path d="M4 18a10 10 0 0 1 16 0"/><path d="M2 12a12 12 0 0 1 20 0" stroke-dasharray="0"/><path d="m1 13 2-2M21 13l2-2"/>',
   ),
+  // Orthogonal survey: a measuring line with a perpendicular to a point.
+  dimensionStation: svg(
+    '<path d="M2 18h20"/><path d="M14 18V6"/><circle cx="14" cy="6" r="1.8"/><path d="M14 15.5h2.5V18"/><path d="M2 15v6"/>',
+  ),
+  // Spot level: a triangle with its tip on a point and a leader to the height.
+  dimensionLevel: svg('<path d="M3 9h7l-3.5 6z"/><path d="M6.5 15 14 7h7"/>'),
+  // Slope: an arrow downhill with a percent sign.
+  dimensionSlope: svg(
+    '<path d="M3 6 19 16"/><path d="m19 16-5.2-0.3 2.4-3.9z" fill="currentColor"/><path d="M18 4 22 8"/><circle cx="18.2" cy="5" r="1"/><circle cx="21.6" cy="7.4" r="1"/>',
+  ),
   measureDistance: svg('<path d="M3 16 16 3l5 5L8 21z"/><path d="m7 12 2 2M10 9l2 2M13 6l2 2"/>'),
   measureArea: svg(
     '<path d="M4 6 13 3l7 7-4 10H6z" stroke-dasharray="2 2"/><path d="M9 10h6M9 14h6"/>',

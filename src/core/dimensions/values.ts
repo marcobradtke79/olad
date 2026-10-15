@@ -22,14 +22,14 @@ export interface DimensionValues {
    * for angular and radial dimensions.
    */
   direction: Coordinate;
-  /** `'m'` for lengths, `'deg'` for angles (`angular`). */
-  unit: 'm' | 'deg';
+  /** `'m'` for lengths and heights, `'deg'` for angles (`angular`), `'%'` for slopes. */
+  unit: 'm' | 'deg' | '%';
   /**
    * GIS value: metres, computed from the geometry as the measure tools do (the planar grid
    * distance in true-to-scale projected CRS, scale-corrected in Web Mercator); degrees for an
    * angle (counter-clockwise from the first to the second leg).
    */
-  gis: number;
+  gis: number | null;
   /** Field value in the same unit, or `null`. */
   field: number | null;
   /** The value shown: the field value if set, else the GIS value. */
@@ -37,6 +37,13 @@ export interface DimensionValues {
   /** Whether the shown value is computed (no field value). */
   computed: boolean;
   status: DimensionStatus;
+  /** The perpendicular offset of a `station` (metres, left of the measuring line positive). */
+  second?: { gis: number; field: number | null; value: number; computed: boolean };
+}
+
+/** A finite number of any sign, else `null` (heights, slopes, offsets). */
+export function finiteOf(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /** A finite number at least 0, else `null`. */
@@ -84,7 +91,9 @@ export function dimensionValues(
   const points = geometry.getCoordinates();
   if (points.length !== dimensionPointCount(type)) return null;
   let direction: Coordinate = [1, 0];
-  let gis: number;
+  let gis: number | null;
+  let second: { gis: number; field: number | null } | null = null;
+  let field = fieldValueOf(feature.get('fieldValue'));
   if (LINEAR.includes(type)) {
     const [p1, p2] = points as [Coordinate, Coordinate];
     const dx = p2[0]! - p1[0]!;
@@ -106,6 +115,30 @@ export function dimensionValues(
   } else if (type === 'angular') {
     const [leg1, vertex, leg2] = points as [Coordinate, Coordinate, Coordinate];
     gis = (sweepAngle(vertex, leg1, leg2) * 180) / Math.PI;
+  } else if (type === 'station') {
+    // Orthogonal survey: station along A → B to the foot of P, and the signed offset.
+    const [a, b, p] = points as [Coordinate, Coordinate, Coordinate];
+    const ab = [b[0]! - a[0]!, b[1]! - a[1]!];
+    const length2 = ab[0]! ** 2 + ab[1]! ** 2;
+    if (!(length2 > 0)) return null;
+    const t = ((p[0]! - a[0]!) * ab[0]! + (p[1]! - a[1]!) * ab[1]!) / length2;
+    const foot: Coordinate = [a[0]! + ab[0]! * t, a[1]! + ab[1]! * t];
+    const side = Math.sign(ab[0]! * (p[1]! - a[1]!) - ab[1]! * (p[0]! - a[0]!));
+    gis = Math.sign(t) * measureLength(projection, [a, foot]).total;
+    second = {
+      gis: side * measureLength(projection, [foot, p]).total,
+      field: finiteOf(feature.get('fieldOffset')),
+    };
+  } else if (type === 'level') {
+    // A height, typed: no GIS value; negative heights are fine.
+    gis = null;
+    field = finiteOf(feature.get('fieldValue'));
+    if (field === null) return null;
+  } else if (type === 'slope') {
+    // Derived from two levels (stored when drawn) or typed only.
+    gis = finiteOf(feature.get('gisValue'));
+    field = finiteOf(feature.get('fieldValue'));
+    if (gis === null && field === null) return null;
   } else {
     const [centre, first] = points as [Coordinate, Coordinate];
     const radius = measureLength(projection, [centre, first]).total;
@@ -117,13 +150,16 @@ export function dimensionValues(
           ? 2 * radius
           : radius * sweepAngle(centre, first, points[2]!);
   }
-  const unit = type === 'angular' ? 'deg' : 'm';
+  const unit = type === 'angular' ? 'deg' : type === 'slope' ? '%' : 'm';
   const tolerance =
     unit === 'deg'
       ? fromAngleUnit(config.angleTolerance ?? 0.1, config.angleUnit ?? 'deg')
       : config.tolerance;
-  const field = fieldValueOf(feature.get('fieldValue'));
-  const deviates = field !== null && Math.abs(field - gis) > tolerance;
+  const off = (f: number | null, g: number | null) =>
+    f !== null && g !== null && Math.abs(f - g) > tolerance;
+  // Slopes are not checked: a percentage has no length tolerance.
+  const deviates =
+    unit !== '%' && (off(field, gis) || (second !== null && off(second.field, second.gis)));
   return {
     type,
     points,
@@ -131,8 +167,18 @@ export function dimensionValues(
     unit,
     gis,
     field,
-    value: field ?? gis,
+    value: (field ?? gis)!,
     computed: field === null,
     status: stale ? 'stale' : deviates ? 'deviates' : 'ok',
+    ...(second
+      ? {
+          second: {
+            gis: second.gis,
+            field: second.field,
+            value: second.field ?? second.gis,
+            computed: second.field === null,
+          },
+        }
+      : {}),
   };
 }

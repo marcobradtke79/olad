@@ -290,12 +290,15 @@ export class Editing {
         : atomic.type === 'updateGeometry'
           ? atomic.geometry
           : undefined;
-    if (atomic.type === 'insert' || atomic.type === 'updateGeometry') {
+    // A dimension's points follow their own rules (a station may end at the line's end, a
+    // level's label may sit on its point): `validateDimensionFeature` below checks them.
+    const dimensionLayer = Boolean(this.layers.getConfig(layer).dimension);
+    if ((atomic.type === 'insert' || atomic.type === 'updateGeometry') && !dimensionLayer) {
       const issue = validateGeometry(geometry, this.layers.getConfig(layer).geometryType);
       if (issue) return fail(issue.code, issue.params, layer, featureId);
     }
     // Dimension layers: the object must be a dimension this version draws, with valid values.
-    if (atomic.type !== 'delete' && this.layers.getConfig(layer).dimension) {
+    if (atomic.type !== 'delete' && dimensionLayer) {
       const properties = featureProperties(feature);
       if (atomic.type === 'updateProperties') {
         for (const [name, value] of Object.entries(atomic.properties)) {

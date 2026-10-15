@@ -272,6 +272,36 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
       },
     ],
   },
+  'dimension-survey': {
+    label: 'Survey dimension',
+    title:
+      'Orthogonal survey, spot levels and slopes in the active dimension layer; the triangle opens the variants',
+    icon: 'dimensionStation',
+    variants: [
+      {
+        id: 'station',
+        label: 'Orthogonal survey',
+        title:
+          'A measuring line, then each point by station and offset (type both: 12.47 3.05); Enter writes the end measure',
+        icon: 'dimensionStation',
+        options: { method: 'station' },
+      },
+      {
+        id: 'level',
+        label: 'Spot level',
+        title: 'A height at a point: the point, the label position, the height in metres',
+        icon: 'dimensionLevel',
+        options: { method: 'level' },
+      },
+      {
+        id: 'slope',
+        label: 'Slope',
+        title: 'A slope between two spot levels (or a free arrow with a typed percentage)',
+        icon: 'dimensionSlope',
+        options: { method: 'slope' },
+      },
+    ],
+  },
   modify: {
     label: 'Vertices',
     title:

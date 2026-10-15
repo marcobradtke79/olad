@@ -239,6 +239,60 @@ describe('dimensionStyleFunction', () => {
     ]);
   });
 
+  it('draws a station with the measuring line, the perpendicular and both values', () => {
+    const feature = new Feature({
+      geometry: new LineString([at(0, 0), at(30, 0), at(12, 3)]),
+      dimType: 'station',
+      fieldValue: 12.02,
+    });
+    const styles = draw({ preset: 'surveying' }, feature) as Style[];
+    expect((styles[0]!.getGeometry() as LineString).getCoordinates().map(rel)).toEqual([
+      [0, 0],
+      [30, 0],
+    ]);
+    const lines = styles
+      .filter((s) => s.getGeometry() instanceof LineString)
+      .map((s) => (s.getGeometry() as LineString).getCoordinates().map(rel));
+    expect(lines).toContainEqual([
+      [12, 0],
+      [12, 3],
+    ]);
+    const texts = styles.filter((s) => s.getText()).map((s) => s.getText()!.getText());
+    expect(texts).toEqual(['0,00', '(3,00)', '12,02']);
+  });
+
+  it('draws a level mark, open or filled by kind, and the height with its sign', () => {
+    const level = (kind: string) =>
+      new Feature({
+        geometry: new LineString([at(0, 0), at(2, 2)]),
+        dimType: 'level',
+        fieldValue: 112.45,
+        levelKind: kind,
+      });
+    const mark = (kind: string) =>
+      (draw({ preset: 'architecture' }, level(kind)) as Style[])
+        .find((s) => s.getImage())!
+        .getImage() as unknown as { getFill(): unknown };
+    expect(mark('finished').getFill()).toBeNull();
+    expect(mark('structural').getFill()).not.toBeNull();
+    const texts = (draw({ preset: 'architecture' }, level('finished')) as Style[])
+      .filter((s) => s.getText())
+      .map((s) => s.getText()!.getText());
+    expect(texts).toEqual(['+112,45']);
+  });
+
+  it('draws a slope as an arrow downhill with the percentage', () => {
+    const feature = new Feature({
+      geometry: new LineString([at(0, 0), at(10, 0)]),
+      dimType: 'slope',
+      gisValue: 2.5,
+    });
+    const styles = draw({ preset: 'landscape' }, feature) as Style[];
+    const head = styles.find((s) => s.getGeometry() instanceof MultiPolygon)!;
+    expect(rel((head.getGeometry() as MultiPolygon).getCoordinates()[0]![0]![0]!)).toEqual([10, 0]);
+    expect(parts(styles).text.getText()!.getText()).toBe('(2,5 %)');
+  });
+
   it('leaves out the value below one pixel and draws other features with the base style', () => {
     const tiny = draw({ preset: 'architecture' }, dim([0, 0], [10, 0]), 10) as Style[];
     expect(tiny.some((s) => s.getText())).toBe(false);

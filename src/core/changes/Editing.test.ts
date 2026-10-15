@@ -612,6 +612,11 @@ describe('Editing: dimension layers', () => {
     );
     expect(dim.get('fieldValue')).toBeUndefined();
     expect(editing.execute(updateProperties(dim, { fieldValue: 7.31 }))).toBe(true);
+    // A station at the end of its measuring line repeats the end point (the end measure).
+    const a = fromLonLat([8, 49]);
+    const b = fromLonLat([8.001, 49]);
+    const end = new Feature({ geometry: new LineString([a, b, b]), dimType: 'station' });
+    expect(editing.execute(insertFeature('dims', end))).toBe(true);
     // Other layers are not checked as dimensions.
     const road = new Feature(line());
     expect(editing.execute(insertFeature('lines', road))).toBe(true);

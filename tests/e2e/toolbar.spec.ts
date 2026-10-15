@@ -103,6 +103,7 @@ test.describe('toolbar and dock', () => {
       'dimension-linear',
       'dimension-angular',
       'dimension-radial',
+      'dimension-survey',
     ]);
     expect(await tools('trim')).toEqual(['trim', 'extend']);
     expect(await label('measure')).toBe('Measure');

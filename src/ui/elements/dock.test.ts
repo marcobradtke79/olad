@@ -455,6 +455,7 @@ describe('<olcad-toolbar>', () => {
       'dimension-linear',
       'dimension-angular',
       'dimension-radial',
+      'dimension-survey',
       'modify',
       'move',
       'rotate',

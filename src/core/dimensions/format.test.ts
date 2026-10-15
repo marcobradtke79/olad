@@ -4,6 +4,8 @@ import {
   formatDimension,
   formatDimensionAngle,
   formatDimensionNumber,
+  formatLevel,
+  formatSlope,
 } from './format';
 
 describe('formatDimensionNumber', () => {
@@ -54,5 +56,15 @@ describe('formatDimensionAngle and prefixes', () => {
     );
     expect(formatDimension(4.5, 'landscape', { prefix: 'R' })).toBe('R 4,50');
     expect(formatDimension(9, 'architecture', { prefix: 'Ø', computed: true })).toBe('Ø (9,00)');
+  });
+});
+
+describe('formatLevel and formatSlope', () => {
+  it('writes heights with their sign and slopes in percent', () => {
+    expect(formatLevel(112.454)).toBe('+112,45');
+    expect(formatLevel(-0.15)).toBe('−0,15');
+    expect(formatLevel(0.001)).toBe('±0,00');
+    expect(formatSlope(2.46, '.')).toBe('2.5 %');
+    expect(formatDimension(2.5, 'landscape', { kind: 'slope', computed: true })).toBe('(2,5 %)');
   });
 });

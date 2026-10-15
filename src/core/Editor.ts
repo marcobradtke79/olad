@@ -106,6 +106,7 @@ import {
   DimensionAngularTool,
   DimensionLinearTool,
   DimensionRadialTool,
+  DimensionSurveyTool,
   EllipseTool,
   CurveTool,
   ParallelTool,
@@ -361,7 +362,7 @@ export interface ChangesApi {
 }
 
 export interface ToolsApi {
-  /** Registered tool ids: `select`, `draw`, `rectangle`, `circle`, `ellipse`, `regular-polygon`, `curve`, `parallel`, `text`, `dimension-linear`, `dimension-angular`, `dimension-radial`, `modify`, `move`, `rotate`, `scale`, `offset`, `trim`, `extend`, `mirror`, `template-copy`, `template-insert`. */
+  /** Registered tool ids: `select`, `draw`, `rectangle`, `circle`, `ellipse`, `regular-polygon`, `curve`, `parallel`, `text`, `dimension-linear`, `dimension-angular`, `dimension-radial`, `dimension-survey`, `modify`, `move`, `rotate`, `scale`, `offset`, `trim`, `extend`, `mirror`, `template-copy`, `template-insert`. */
   list(): string[];
   getActive(): string | null;
   /** The options the active tool works with, for example `{ type: 'LineString' }` for `draw`. */
@@ -437,6 +438,7 @@ const LAYER_BOUND_TOOLS = [
   'dimension-linear',
   'dimension-angular',
   'dimension-radial',
+  'dimension-survey',
 ];
 
 /**
@@ -867,6 +869,7 @@ class EditorImpl implements Editor {
       new DimensionLinearTool(),
       new DimensionAngularTool(),
       new DimensionRadialTool(),
+      new DimensionSurveyTool(),
       new ModifyTool(),
       new MoveTool(),
       new RotateTool(),
@@ -1416,6 +1419,32 @@ class EditorImpl implements Editor {
         ? { ok: true, text, fieldValue: null }
         : fail('input-not-accepted');
     }
+    // Survey dimensions: a height or a slope may be negative; a station takes `station offset`.
+    if (dimension) {
+      const values = this.dimensions.values(dimension);
+      const number = '([+-]?\\d+(?:[.,]\\d+)?)';
+      const toNumber = (raw: string) => Number(raw.replace(',', '.'));
+      const single = new RegExp(`^\\s*${number}\\s*$`).exec(text);
+      if (single && (values?.type === 'level' || values?.type === 'slope')) {
+        const value = toNumber(single[1]!);
+        return this.dimensions.setFieldValue(dimension, value)
+          ? { ok: true, text, fieldValue: value }
+          : fail('input-not-accepted');
+      }
+      const pair = new RegExp(`^\\s*${number}\\s+${number}\\s*$`).exec(text);
+      if (pair && values?.type === 'station' && this.editing.canEdit('update', dimension)) {
+        const station = toNumber(pair[1]!);
+        const side = Math.sign(values.second?.gis ?? 1) || 1;
+        return this.editing.execute(
+          updateProperties(dimension, {
+            fieldValue: station,
+            fieldOffset: side * Math.abs(toNumber(pair[2]!)),
+          }),
+        )
+          ? { ok: true, text, fieldValue: station }
+          : fail('input-not-accepted');
+      }
+    }
     const parsed = parseInput(text, this.lengthUnit());
     if (!parsed) return fail('input-invalid');
     if (dimension && parsed.kind === 'length') {
@@ -1600,7 +1629,7 @@ class EditorImpl implements Editor {
     return composite(
       [
         updateGeometry(feature, geometry),
-        ...(gis === undefined
+        ...(gis === undefined || gis === null
           ? []
           : [updateProperties(feature, { gisValue: Math.round(gis * 1000) / 1000 })]),
       ],

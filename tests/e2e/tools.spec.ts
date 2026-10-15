@@ -64,6 +64,7 @@ test.describe('tools', () => {
       'dimension-linear',
       'dimension-angular',
       'dimension-radial',
+      'dimension-survey',
       'modify',
       'move',
       'rotate',
