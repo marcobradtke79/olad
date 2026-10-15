@@ -9,7 +9,7 @@ CAD-style drawing and editing tools for [OpenLayers](https://openlayers.org/). F
 ol-cad is released on GitHub, not on npm. Each [release](https://github.com/marcobradtke79/olad/releases) has the package file attached; install it by URL:
 
 ```sh
-pnpm add https://github.com/marcobradtke79/olad/releases/download/v0.1.0/ol-cad-0.1.0.tgz ol
+pnpm add https://github.com/marcobradtke79/olad/releases/download/v0.1.1/ol-cad-0.1.1.tgz ol
 # optional, for custom projections
 pnpm add proj4
 ```
@@ -66,7 +66,7 @@ with this markup, where the dock places the toolbar at the top, the layer list o
 - **Toolbar:** `tools` lists the tool buttons the toolbar shows. Without it a toolbar shows every tool, about 30 buttons. `tools=""` gives a toolbar with only the controls (edit mode, layer, undo / redo), which `controls` selects. Several toolbars can share one editor ([docs/ui.md](docs/ui.md#olcad-toolbar)).
 - **Theme:** `ol-cad/ui.css` is a dark theme by default and sets `color-scheme` and its colours on the whole page (`:root`), which also changes your own form controls and default text colours. On a light page add `<html olcad-theme="light">`. See [Theme](docs/ui.md#theme).
 - **Local layers** that users create with the layer list's New layer button are kept in memory and lost on reload, unless the page calls `persistLocalLayers(editor)` from `ol-cad/ui` ([docs/ui.md](docs/ui.md#persistlocallayerseditor-storage-options)).
-- **Angular, React, Vue:** see [docs/frameworks.md](docs/frameworks.md).
+- **Angular, React, Vue:** see [docs/frameworks.md](docs/frameworks.md): a complete component for each, plus JSX typings for React and `shallowRef` for Vue.
 
 ## Quick start (script tag)
 

@@ -95,7 +95,7 @@ Copies inserted from a template (`editor.templates.insert`, the `template-insert
 
 - Loaded features without an id can only be the target of inserts (new features always get a `tempId`). Set `idProperty` on the layer or make sure the format carries ids.
 - Removing a layer (`editor.layers.remove`) drops its tracked changes and clears the whole history.
-- The draft layer (config `draft`) is never exported: objects drawn without an active layer stay local, `hasChanges()` ignores them and `accept` / `discard` leave them in place.
+- **Local layers and the draft layer are not part of the change set.** Objects in the draft layer (config `draft`, where objects drawn without an active layer go) and in local layers (`editor.localLayers`, the layer list's New layer) stay in the client: they never appear in `get()`, `hasChanges()` ignores them and `accept` / `discard` leave them in place. Their edits still go through commands, so undo / redo work and `change` fires, but with a change set that does not contain them. A count of unsaved changes therefore stays at 0 while a user only draws into local layers.
 - A projection switch keeps edits, snapshots and the history consistent; layers with `strategy: 'bbox'` reload after a switch and skip features deleted locally.
 
 ## Saving
