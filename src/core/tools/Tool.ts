@@ -125,6 +125,12 @@ export interface Tool {
    * bar focuses and highlights itself while a step asks.
    */
   getInputRequest?(): InputRequest;
+  /**
+   * Whether the tool has nothing in progress (its first step), so the editor may give a click
+   * to something else first: a click on a dimension's value opens the value editor instead of
+   * starting a construction. Tools that leave it out never yield a click.
+   */
+  isIdle?(): boolean;
   /** Temporarily disable the interactions, for example during a straightedge reference pick. */
   setSuspended(suspended: boolean): void;
   /** Last fixed vertex of an operation in progress (perpendicular snapping), or `null`. */
@@ -196,6 +202,10 @@ export abstract class BaseTool implements Tool {
   }
 
   handleText(_text: string): boolean {
+    return false;
+  }
+
+  isIdle(): boolean {
     return false;
   }
 

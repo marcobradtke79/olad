@@ -6,3 +6,4 @@ export * from './form';
 export * from './references';
 export * from './grips';
 export * from './drawn';
+export * from './labels';

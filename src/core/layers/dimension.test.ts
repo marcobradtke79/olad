@@ -47,7 +47,7 @@ const parts = (styles: Style[]) => ({
 });
 
 describe('dimensionStyleFunction', () => {
-  it('draws an aligned dimension at its offset with extension lines and a bracketed value', () => {
+  it('draws an aligned dimension at its offset with extension lines and the value', () => {
     // UTM: one metre is one map unit; architecture 1:100, so 1 mm on paper is 0.1 m.
     const styles = draw({ preset: 'architecture' }, dim([0, 0], [10, 0], { offset: 2 })) as Style[];
     const { line, extensions, text } = parts(styles);
@@ -58,7 +58,7 @@ describe('dimensionStyleFunction', () => {
     const [left] = extensions!.getCoordinates();
     expect(rel(left![0]!)).toEqual([0, 0.1]); // 1 mm gap
     expect(rel(left![1]!)).toEqual([0, 2.2]); // 2 mm overrun
-    expect(text.getText()!.getText()).toBe('(10,00)');
+    expect(text.getText()!.getText()).toBe('10,00');
     expect(text.getText()!.getRotation()).toBeCloseTo(0);
     expect(rel((text.getGeometry() as Point).getCoordinates())).toEqual([5, 2.1]);
     // 2.5 mm text at 1:100 is 0.25 m, at 0.05 m per pixel 5 px.
@@ -73,12 +73,20 @@ describe('dimensionStyleFunction', () => {
     expect(rel((text.getGeometry() as Point).getCoordinates())[1]).toBe(-1.5); // 1 mm at 1:500
   });
 
-  it('shows field values plain, deviating ones in the deviation colour', () => {
+  it('colours computed values, field values and deviating ones differently', () => {
+    const computed = parts(draw({}, dim([0, 0], [10, 0])) as Style[]).text;
+    expect(computed.getText()!.getFill()!.getColor()).toBe('#6b7280');
     const ok = parts(draw({}, dim([0, 0], [10, 0], { fieldValue: 10.03 })) as Style[]).text;
     expect(ok.getText()!.getText()).toBe('10,03');
     expect(ok.getText()!.getFill()!.getColor()).toBe('#111827');
     const off = parts(draw({}, dim([0, 0], [10, 0], { fieldValue: 10.2 })) as Style[]).text;
     expect(off.getText()!.getFill()!.getColor()).toBe('#dc2626');
+    // Brackets stay an option; the computed colour applies either way.
+    const bracketed = parts(
+      draw({ showComputed: 'brackets', computedColor: '#888' }, dim([0, 0], [10, 0])) as Style[],
+    ).text;
+    expect(bracketed.getText()!.getText()).toBe('(10,00)');
+    expect(bracketed.getText()!.getFill()!.getColor()).toBe('#888');
   });
 
   it('draws the preset terminators', () => {
@@ -120,7 +128,7 @@ describe('dimensionStyleFunction', () => {
       [8, 5.9],
       [8, 1.8],
     ]);
-    expect(text.getText()!.getText()).toBe('(8,00)');
+    expect(text.getText()!.getText()).toBe('8,00');
   });
 
   it('draws a tie distance as a dashed line with the value in the middle, no terminators', () => {
@@ -144,8 +152,8 @@ describe('dimensionStyleFunction', () => {
       dim([0, 0], [10, 3], { dimType: 'running', rotation: 0, offset: -2 }),
     ) as Style[];
     const texts = styles.filter((s) => s.getText()).map((s) => s.getText()!.getText());
-    expect(texts).toEqual(['(10,00)', '0']);
-    const value = styles.find((s) => s.getText()?.getText() === '(10,00)')!;
+    expect(texts).toEqual(['10,00', '0']);
+    const value = styles.find((s) => s.getText()?.getText() === '10,00')!;
     // Written along the extension line, outward (south) from the line at the point's foot,
     // turned to read upwards: right-aligned, so it ends 1 mm (0.5 m) beyond the line.
     expect(value.getText()!.getTextAlign()).toBe('right');
@@ -169,7 +177,7 @@ describe('dimensionStyleFunction', () => {
     );
     const styles = style(feature, 0.05) as Style[];
     expect(styles[0]!.getStroke()!.getLineDash()).toEqual([8, 4]);
-    expect(parts(styles).text.getText()!.getText()).toBe('⚠ (10,00)');
+    expect(parts(styles).text.getText()!.getText()).toBe('⚠ 10,00');
   });
 
   it('draws an angle as an arc around the vertex with the value outside', () => {
@@ -183,7 +191,7 @@ describe('dimensionStyleFunction', () => {
     expect(arc[0]).toEqual([4, 0]);
     expect(arc[arc.length - 1]).toEqual([0, 4]);
     const text = parts(styles).text;
-    expect(text.getText()!.getText()).toBe('(90,0°)');
+    expect(text.getText()!.getText()).toBe('90,0°');
     const [x, y] = rel((text.getGeometry() as Point).getCoordinates());
     expect(Math.hypot(x!, y!)).toBeGreaterThan(4); // outside the arc
   });
@@ -206,7 +214,7 @@ describe('dimensionStyleFunction', () => {
           [5, 0],
         ]),
       ),
-    ).toBe('R (5,00)');
+    ).toBe('R 5,00');
     expect(
       label(
         radial('diameter', [
@@ -214,7 +222,7 @@ describe('dimensionStyleFunction', () => {
           [5, 0],
         ]),
       ),
-    ).toBe('Ø (10,00)');
+    ).toBe('Ø 10,00');
     expect(
       label(
         radial('arc', [
@@ -223,7 +231,7 @@ describe('dimensionStyleFunction', () => {
           [0, 5],
         ]),
       ),
-    ).toBe('⌒ (7,85)');
+    ).toBe('⌒ 7,85');
     const leader = (
       draw(
         { preset: 'landscape' },
@@ -258,7 +266,7 @@ describe('dimensionStyleFunction', () => {
       [12, 3],
     ]);
     const texts = styles.filter((s) => s.getText()).map((s) => s.getText()!.getText());
-    expect(texts).toEqual(['0,00', '(3,00)', '12,02']);
+    expect(texts).toEqual(['0,00', '3,00', '12,02']);
   });
 
   it('draws a level mark, open or filled by kind, and the height with its sign', () => {
@@ -290,7 +298,7 @@ describe('dimensionStyleFunction', () => {
     const styles = draw({ preset: 'landscape' }, feature) as Style[];
     const head = styles.find((s) => s.getGeometry() instanceof MultiPolygon)!;
     expect(rel((head.getGeometry() as MultiPolygon).getCoordinates()[0]![0]![0]!)).toEqual([10, 0]);
-    expect(parts(styles).text.getText()!.getText()).toBe('(2,5 %)');
+    expect(parts(styles).text.getText()!.getText()).toBe('2,5 %');
   });
 
   it('leaves out the value below one pixel and draws other features with the base style', () => {

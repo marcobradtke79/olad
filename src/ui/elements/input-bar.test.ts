@@ -33,9 +33,9 @@ function fakeEditor(units = 'm') {
         : text === '5'
           ? { ok: true, text, value: 5 }
           : text === '12.5'
-            ? { ok: true, text, fieldValue: 12.5 }
+            ? { ok: true, text, fieldValue: 12.5, unit: 'm' }
             : text === '-'
-              ? { ok: true, text, fieldValue: null }
+              ? { ok: true, text, fieldValue: null, unit: 'm' }
               : { ok: true, text, coordinate: [1.2345, 6.789] };
     emitter.emit('input', result);
     return result;

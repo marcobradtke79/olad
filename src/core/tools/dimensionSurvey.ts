@@ -18,8 +18,6 @@ export type DimensionSurveyStep =
   | 'lineStart'
   | 'lineEnd'
   | 'point'
-  | 'value'
-  | 'endValue'
   | 'levelPoint'
   | 'levelLabel'
   | 'height'
@@ -27,21 +25,18 @@ export type DimensionSurveyStep =
   | 'slopeEnd'
   | 'slopeValue';
 
-/** Prompt shown by the input bar for each step; `{gis}` is the measured value. */
+/** Prompt shown by the input bar for each step. */
 export const DIMENSION_SURVEY_PROMPTS: Record<DimensionSurveyStep, string> = {
   lineStart: 'Start of the measuring line: click (snaps to boundary marks and corners) or type x,y',
   lineEnd: 'End of the measuring line',
   point:
     'Point to record by station and offset: click or type; Enter writes the end measure, Escape ends',
-  value:
-    'Field values: station and offset in {unit} (e.g. 12.47 3.05), or the station only [Enter keeps {gis}]',
-  endValue: 'End measure: field value in {unit} [Enter keeps {gis}]',
   levelPoint: 'Point of the spot level: click or type x,y',
   levelLabel: 'Position of the height label: click [Enter puts it beside the point]',
   height: 'Height in metres (e.g. 112.45 or -0.15)',
   slopeStart: 'Click the upper spot level, or the start of a slope arrow',
   slopeEnd: 'Click the lower spot level, or the end of the arrow (downhill)',
-  slopeValue: 'Slope in % [Enter keeps {gis}]',
+  slopeValue: 'Slope in % (e.g. 2.5)',
 };
 
 /** The method named by the options (the default when none), or `null` for an unknown one. */
@@ -63,10 +58,11 @@ interface PickedLevel {
 
 /**
  * Survey and landscape dimensions in the active dimension layer. `station`: a measuring line
- * (start, end), then every point by its station along the line and its perpendicular offset,
- * with both field values typed in one entry; Enter writes the end measure. `level`: a spot
- * level (point, label position, height). `slope`: from two spot levels (the percentage from
- * their heights and distance; the arrow points downhill) or a free arrow with a typed
+ * (start, end), then every clicked point is recorded at once by its station along the line and
+ * its perpendicular offset (the field values are typed later by clicking the value, both in
+ * one entry); Enter writes the end measure. `level`: a spot level (point, label position,
+ * height typed). `slope`: from two spot levels (the percentage from their heights and distance;
+ * the arrow points downhill; inserted with the second level) or a free arrow with a typed
  * percentage.
  */
 export class DimensionSurveyTool extends DimensionToolBase {
@@ -88,11 +84,16 @@ export class DimensionSurveyTool extends DimensionToolBase {
   }
 
   override getInputRequest(): InputRequest {
-    return ['value', 'endValue', 'height', 'slopeValue'].includes(this.step) ? 'value' : null;
+    return this.step === 'height' || this.step === 'slopeValue' ? 'value' : null;
   }
 
   override getPrompt(): string {
-    return DIMENSION_SURVEY_PROMPTS[this.step].replace('{gis}', this.formattedGis());
+    return DIMENSION_SURVEY_PROMPTS[this.step];
+  }
+
+  /** Nothing in progress, or a measuring line waiting for its next point. */
+  override isIdle(): boolean {
+    return ['lineStart', 'point', 'levelPoint', 'slopeStart'].includes(this.step);
   }
 
   override activate(ctx: ToolContext, options?: ToolOptions): void {
@@ -118,25 +119,16 @@ export class DimensionSurveyTool extends DimensionToolBase {
     this.reset();
   }
 
-  /** Enter: keeps the GIS value, writes the end measure, or puts a level's label beside it. */
+  /** Enter: writes the end measure (the station of the line's end), or puts a level's label beside it. */
   override finish(): void {
     switch (this.step) {
-      case 'value':
-        this.insertStation(null, null);
-        return;
       case 'point':
         this.points = [this.points[0]!, this.points[1]!, this.points[1]!];
         this.refs = [this.refs[0] ?? null, this.refs[1] ?? null, this.refs[1] ?? null];
-        this.goTo('endValue');
-        return;
-      case 'endValue':
-        this.insert(null, null, this.stationExtras());
+        this.insert(null, this.stationExtras());
         return;
       case 'levelLabel':
         this.setLabel(null);
-        return;
-      case 'slopeValue':
-        if (this.levels.length === 2) this.insert(null, null, this.slopeExtras());
         return;
       default:
     }
@@ -153,12 +145,6 @@ export class DimensionSurveyTool extends DimensionToolBase {
         this.points = [this.points[0]!];
         this.refs = [this.refs[0] ?? null];
         this.goTo('lineEnd');
-        return true;
-      case 'value':
-      case 'endValue':
-        this.points = this.points.slice(0, 2);
-        this.refs = this.refs.slice(0, 2);
-        this.goTo('point');
         return true;
       case 'height':
         this.points = this.points.slice(0, 1);
@@ -180,51 +166,23 @@ export class DimensionSurveyTool extends DimensionToolBase {
     return true;
   }
 
-  /** A plain number: the station, the end measure, a height or a slope. */
+  /** A plain number: a level's height or a free slope's percentage (both have no GIS value). */
   override handleValue(value: number): boolean {
     switch (this.step) {
-      case 'value':
-        this.insertStation(value, null);
-        return true;
-      case 'endValue':
-        this.insert(value, null, this.stationExtras());
-        return true;
       case 'height':
-        this.insert(value, null, { levelKind: this.defaultKind() });
+        this.insert(value, { levelKind: this.defaultKind() });
         return true;
       case 'slopeValue':
-        this.insert(value, null, this.slopeExtras());
+        this.insert(value, this.slopeExtras());
         return true;
       default:
         return false;
     }
   }
 
-  /** A length with a unit: the station, the end measure or a height, in metres. */
+  /** A length with a unit: a height in metres. */
   override handleLength(metres: number): boolean {
-    return ['value', 'endValue', 'height'].includes(this.step) && this.handleValue(metres);
-  }
-
-  /** `station offset` in one entry (space separated), or `t <text>`. */
-  override handleText(text: string): boolean {
-    if (this.step === 'value') {
-      const pair = /^\s*(-?\d+(?:[.,]\d+)?)\s+(-?\d+(?:[.,]\d+)?)\s*$/.exec(text);
-      if (pair) {
-        this.insertStation(Number(pair[1]!.replace(',', '.')), Number(pair[2]!.replace(',', '.')));
-        return true;
-      }
-    }
-    if (this.getInputRequest() === null) return false;
-    const free = this.freeText(text);
-    if (free === null) return false;
-    if (this.step === 'value') {
-      const line = this.keepLine();
-      this.insert(null, free, this.stationExtras());
-      line();
-    } else if (this.step === 'endValue') {
-      this.insert(null, free, this.stationExtras());
-    } else this.insert(null, free, this.method === 'slope' ? this.slopeExtras() : {});
-    return true;
+    return this.step === 'height' && this.handleValue(metres);
   }
 
   /** Relative input from the measuring line's start, the level's point or the arrow's start. */
@@ -278,7 +236,7 @@ export class DimensionSurveyTool extends DimensionToolBase {
       case 'point':
         this.points = [this.points[0]!, this.points[1]!, coordinate];
         this.refs = [this.refs[0] ?? null, this.refs[1] ?? null, ref];
-        this.goTo('value');
+        this.insertStation();
         return;
       case 'levelLabel':
         this.setLabel(coordinate);
@@ -299,11 +257,12 @@ export class DimensionSurveyTool extends DimensionToolBase {
           const [high, low] = a.height >= b.height ? [a, b] : [b, a];
           this.levels = [high, low];
           this.points = [high.point, low.point];
-        } else {
-          const start = this.points[0]!;
-          if (start[0] === coordinate[0] && start[1] === coordinate[1]) return;
-          this.points = [start, coordinate];
+          this.insert(null, this.slopeExtras()); // the GIS percentage; typed later if measured
+          return;
         }
+        const start = this.points[0]!;
+        if (start[0] === coordinate[0] && start[1] === coordinate[1]) return;
+        this.points = [start, coordinate];
         this.goTo('slopeValue');
         return;
       }
@@ -326,19 +285,17 @@ export class DimensionSurveyTool extends DimensionToolBase {
     };
   }
 
-  /** Insert a station point; a typed offset takes the side of the measured one. */
-  private insertStation(station: number | null, offset: number | null): void {
+  /** Insert the recorded point as a station with its GIS offset, and keep the measuring line. */
+  private insertStation(): void {
     const ctx = this.ctx;
     const target = this.target();
     const drawn = this.dimension();
     if (!ctx || !target || !drawn) return;
     const values = dimensionValues(drawn, target.layer.dimension, ctx.getProjection());
-    const side = Math.sign(values?.second?.gis ?? 1) || 1;
     const line = this.keepLine();
-    this.insert(station, null, {
+    this.insert(null, {
       ...this.stationExtras(),
       gisOffset: values?.second ? Math.round(values.second.gis * 1e6) / 1e6 : null,
-      ...(offset === null ? {} : { fieldOffset: side * Math.abs(offset) }),
     });
     line();
   }

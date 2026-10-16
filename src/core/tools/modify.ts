@@ -199,7 +199,12 @@ export class ModifyTool extends BaseTool {
     if (!dimension || !this.ctx || !this.feature) return null;
     let best: DimensionGrip | null = null;
     let bestDistance = this.tolerance();
-    for (const grip of dimensionGrips(this.feature, dimension.values, this.ctx.getProjection())) {
+    for (const grip of dimensionGrips(
+      this.feature,
+      dimension.values,
+      this.ctx.getProjection(),
+      dimension.config,
+    )) {
       const distance = Math.hypot(grip.at[0]! - raw[0]!, grip.at[1]! - raw[1]!);
       if (distance <= bestDistance) {
         bestDistance = distance;
@@ -301,7 +306,12 @@ export class ModifyTool extends BaseTool {
       this.hoveredGrip = this.gripAt(raw);
       this.previewSource.clear(true);
       this.previewSource.addFeatures(
-        dimensionGrips(this.feature, dimension.values, this.ctx.getProjection()).map((grip) =>
+        dimensionGrips(
+          this.feature,
+          dimension.values,
+          this.ctx.getProjection(),
+          dimension.config,
+        ).map((grip) =>
           marker(
             grip.at,
             grip === this.hoveredGrip || sameGrip(grip, this.hoveredGrip) ? 'hover' : 'picked',

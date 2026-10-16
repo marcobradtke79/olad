@@ -98,7 +98,7 @@ describe('DimensionLinearTool', () => {
     expect(new DimensionLinearTool().canActivate(setup(null).ctx)).toBe(false);
   });
 
-  it('measures two points, takes the line position from a click and keeps the GIS value on Enter', () => {
+  it('measures two points and inserts with the GIS value when the line is placed', () => {
     const { tool, ctx, event, inserted, selection, layers } = setup('dims');
     const before = layers.getLength(); // the selection overlay
     tool.activate(ctx);
@@ -108,12 +108,11 @@ describe('DimensionLinearTool', () => {
     expect(tool.referencePoint()).toEqual([0, 0]);
     event('click', [0, 0]); // equal to the first point: ignored
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.second);
+    expect(tool.isIdle()).toBe(false);
     event('click', [12.47, 0]);
     expect(tool.getInputRequest()).toBe('value');
     event('pointermove', [6, -3]);
-    event('click', [6, -3]); // three metres right of p1 → p2
-    expect(tool.getPrompt()).toContain('Enter keeps 12,47');
-    tool.finish();
+    event('click', [6, -3]); // three metres right of p1 → p2: inserts
     const feature = inserted();
     expect((feature.getGeometry() as LineString).getCoordinates()).toEqual([
       [0, 0],
@@ -129,31 +128,29 @@ describe('DimensionLinearTool', () => {
     expect(feature.get('gisValue')).toBeCloseTo(12.47, 2);
     expect(selection.get()).toEqual([feature]);
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.first); // ready for the next one
+    expect(tool.isIdle()).toBe(true);
   });
 
-  it('takes a typed offset on the pointer side and a typed field value', () => {
+  it('takes a typed offset on the pointer side and inserts', () => {
     const { tool, ctx, event, inserted } = setup('dims');
     tool.activate(ctx);
     event('click', [0, 0]);
     tool.handleInput([10, 0]);
     event('pointermove', [5, -1]);
     expect(tool.handleLength(2.5)).toBe(true);
-    expect(tool.handleLength(0)).toBe(false); // a field value must be greater than 0
-    expect(tool.handleLength(10.04)).toBe(true);
-    expect(inserted().getProperties()).toMatchObject({ offset: -2.5, fieldValue: 10.04 });
+    expect(inserted().getProperties()).toMatchObject({ offset: -2.5, fieldValue: null });
+    expect(tool.handleLength(10.04)).toBe(false); // the field value is not typed into the tool
+    expect(tool.handleText('t later')).toBe(false);
   });
 
-  it('inserts a free text with t <text> and passes other text on', () => {
+  it('places the line left of the measured direction with a positive offset', () => {
     const { tool, ctx, event, inserted } = setup('dims');
     tool.activate(ctx);
-    expect(tool.handleText('t later')).toBe(false); // not in the value step
     event('click', [0, 0]);
     event('click', [0, 8]);
     event('click', [-2, 4]);
-    expect(tool.handleText('12.5')).toBe(false);
-    expect(tool.handleText('t {value} lt. Bestand')).toBe(true);
     expect(inserted().getProperties()).toMatchObject({
-      text: '{value} lt. Bestand',
+      text: null,
       fieldValue: null,
       offset: 2, // left of p1 → p2 (northwards) is west
     });
@@ -168,7 +165,6 @@ describe('DimensionLinearTool', () => {
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.second);
     event('click', [8, 6]);
     event('click', [4, 9]);
-    tool.finish();
     const feature = inserted();
     expect(feature.getProperties()).toMatchObject({ dimType: 'rotated', rotation: 0, offset: 9 });
     expect(feature.get('gisValue')).toBeCloseTo(8, 2); // horizontal distance only
@@ -180,8 +176,6 @@ describe('DimensionLinearTool', () => {
     expect(tool.removeLastPoint()).toBe(false);
     event('click', [0, 0]);
     event('click', [10, 0]);
-    event('click', [5, 2]);
-    expect(tool.removeLastPoint()).toBe(true);
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.line);
     expect(tool.removeLastPoint()).toBe(true);
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.second);
@@ -196,15 +190,13 @@ describe('DimensionLinearTool', () => {
     tool.activate(ctx, { method: 'chain' });
     event('click', [0, 0]);
     event('click', [10, 0]);
-    event('click', [5, -4]); // the chain's line 4 m south
-    tool.finish(); // first span: keeps the GIS value
+    event('click', [5, -4]); // the chain's line 4 m south: the first span is inserted
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.next);
+    expect(tool.isIdle()).toBe(false);
     expect(tool.referencePoint()).toEqual([10, 0]);
     event('click', [16, 2]); // a bent outline: measured along the chain's line
-    tool.finish();
     expect(tool.handleLength(9.98)).toBe(false); // waiting for a point, not a value
     event('click', [20, -1]);
-    expect(tool.handleLength(4.02)).toBe(true);
     tool.finish(); // Enter while waiting for a point ends the chain
     expect(tool.getPrompt()).toBe(DIMENSION_LINEAR_PROMPTS.first);
     const spans = [0, 1, 2].map((i) => inserted(i));
@@ -216,7 +208,7 @@ describe('DimensionLinearTool', () => {
     // Every span's line lies 4 m south of the first point: offset = -4 - (start y).
     expect(spans.map((f) => f.get('offset'))).toEqual([-4, -4, -6]);
     expect(spans.map((f) => Math.round(f.get('gisValue') as number))).toEqual([10, 6, 4]);
-    expect(spans[2]!.get('fieldValue')).toBe(4.02);
+    expect(spans.map((f) => f.get('fieldValue'))).toEqual([null, null, null]);
   });
 
   it('stacks baseline dimensions from the origin by the spacing', () => {
@@ -226,12 +218,9 @@ describe('DimensionLinearTool', () => {
     event('click', [0, 0]);
     event('click', [5, 0]);
     event('click', [2, 3]);
-    tool.finish();
     expect(tool.referencePoint()).toEqual([0, 0]);
     event('click', [9, 1]);
-    tool.finish();
     event('click', [14, 0]);
-    tool.finish();
     tool.cancel();
     // Surveying preset at 1:500: 8 mm spacing is 4 m on the ground.
     expect([0, 1, 2].map((i) => inserted(i).get('offset'))).toEqual([3, 7, 11]);
@@ -247,9 +236,7 @@ describe('DimensionLinearTool', () => {
     event('click', [0, 0]);
     event('click', [5, 0]);
     event('click', [2, 3]);
-    tool.finish();
     event('click', [12, 2]);
-    tool.finish();
     expect(tool.removeLastPoint()).toBe(true); // Backspace while waiting ends the set too
     const [first, second] = [inserted(0), inserted(1)];
     expect(first.getProperties()).toMatchObject({ dimType: 'running', offset: 3, rotation: 0 });
@@ -262,14 +249,13 @@ describe('DimensionLinearTool', () => {
     const { tool, ctx, event, inserted } = setup('dims');
     tool.activate(ctx, { method: 'tie' });
     event('click', [0, 0]);
-    event('click', [3, 4]);
-    expect(tool.getInputRequest()).toBe('value');
-    expect(tool.handleLength(5.01)).toBe(true);
+    event('click', [3, 4]); // inserts at once
     expect(inserted().getProperties()).toMatchObject({
       dimType: 'tie',
       offset: 0,
-      fieldValue: 5.01,
+      fieldValue: null,
     });
+    expect(inserted().get('gisValue')).toBeCloseTo(5, 2);
     expect(inserted().get('rotation')).toBeUndefined();
     expect(inserted().get('chain')).toBeUndefined();
   });
@@ -298,9 +284,7 @@ describe('DimensionLinearTool', () => {
     event('click', [10, 0]);
     snap = null;
     event('click', [5, -3]);
-    tool.finish();
     event('click', [16, 0]); // a free point: no reference
-    tool.finish();
     expect(inserted(0).get('refs')).toEqual([
       { layer: 'parcels', id: 4, kind: 'vertex', path: [0, 0] },
       { layer: 'parcels', id: 4, kind: 'vertex', path: [0, 1] },

@@ -36,7 +36,7 @@ export interface DimensionFormatOptions {
   decimal?: ',' | '.';
   /** Whether the value is computed (no field value). */
   computed?: boolean;
-  /** `'brackets'` writes computed values in brackets. Default `'brackets'`. */
+  /** `'brackets'` writes computed values in brackets. Default `'plain'`. */
   showComputed?: 'brackets' | 'plain';
   /** Free text replacing the value; `{value}` inserts the formatted value. */
   text?: string | null;
@@ -76,7 +76,7 @@ export function formatDimensionAngle(
 
 /**
  * The label of a dimension: formatted number (metres, or degrees with `angle`), brackets for
- * computed values, a radial prefix, free text.
+ * computed values when asked, a radial prefix, free text.
  */
 export function formatDimension(
   metres: number,
@@ -92,7 +92,7 @@ export function formatDimension(
         : options.angle
           ? formatDimensionAngle(metres, options.angle, decimal)
           : formatDimensionNumber(metres, preset, decimal);
-  if (options.computed && (options.showComputed ?? 'brackets') === 'brackets') value = `(${value})`;
+  if (options.computed && options.showComputed === 'brackets') value = `(${value})`;
   if (options.prefix) value = `${options.prefix} ${value}`;
   if (options.text) return options.text.split('{value}').join(value);
   return value;

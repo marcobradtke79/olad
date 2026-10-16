@@ -1466,6 +1466,59 @@
   outline-offset: 1px;
 }
 
+/* Dimension value editor: a small box the map overlay places at the clicked value. */
+
+.olcad-dimension-input {
+  display: contents;
+}
+
+.olcad-dimension-input__box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  font-family: var(--olcad-font-family);
+  font-size: var(--olcad-font-size);
+  color: var(--olcad-color-fg);
+  background: var(--olcad-color-surface-raised);
+  border: 1px solid var(--olcad-color-accent);
+  border-radius: var(--olcad-radius);
+  box-shadow: var(--olcad-shadow);
+  white-space: nowrap;
+}
+
+.olcad-dimension-input__box[hidden] {
+  display: none;
+}
+
+.olcad-dimension-input__field {
+  width: 7em;
+  font: inherit;
+  font-family: var(--olcad-font-mono);
+  color: inherit;
+  background: var(--olcad-color-surface);
+  border: 1px solid var(--olcad-color-border);
+  border-radius: var(--olcad-radius);
+  padding: 1px 4px;
+}
+
+.olcad-dimension-input__field:focus-visible {
+  outline: 2px solid var(--olcad-color-focus);
+  outline-offset: 1px;
+}
+
+.olcad-dimension-input__box[data-error] {
+  border-color: var(--olcad-color-error);
+}
+
+.olcad-dimension-input__box[data-error] .olcad-dimension-input__field {
+  border-color: var(--olcad-color-error);
+}
+
+.olcad-dimension-input__unit {
+  color: var(--olcad-color-muted);
+}
+
 /* Menu bar: a row of menu buttons, each with a popup of the host's own items. */
 
 .olcad-menubar {

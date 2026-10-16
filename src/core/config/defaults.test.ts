@@ -156,7 +156,8 @@ describe('resolveDimension', () => {
     expect(resolveDimension({ preset: 'architecture' })).toMatchObject({
       referenceScale: 100,
       terminator: 'tick',
-      showComputed: 'brackets',
+      showComputed: 'plain',
+      computedColor: '#6b7280',
     });
     expect(resolveDimension({ preset: 'landscape', terminator: 'arrow' })).toMatchObject({
       referenceScale: 250,

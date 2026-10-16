@@ -13,10 +13,9 @@ import type { InputRequest, ToolContext, ToolOptions } from './Tool';
 export const DIMENSION_RADIAL_METHODS = ['radius', 'diameter', 'arc'] as const;
 export type DimensionRadialMethod = (typeof DIMENSION_RADIAL_METHODS)[number];
 
-export type DimensionRadialStep =
-  'curve' | 'p1' | 'p2' | 'p3' | 'start' | 'end' | 'place' | 'value';
+export type DimensionRadialStep = 'curve' | 'p1' | 'p2' | 'p3' | 'start' | 'end' | 'place';
 
-/** Prompt shown by the input bar for each step; `{gis}` is the measured value. */
+/** Prompt shown by the input bar for each step. */
 export const DIMENSION_RADIAL_PROMPTS: Record<DimensionRadialStep, string> = {
   curve: 'Click a circle, an arc or a curved edge',
   p1: 'No circle there: click three points on the arc, the first',
@@ -25,7 +24,6 @@ export const DIMENSION_RADIAL_PROMPTS: Record<DimensionRadialStep, string> = {
   start: 'Start of the arc to dimension: click on the curve',
   end: 'End of the arc: click on the curve',
   place: 'Place the dimension with the pointer: click, or type the offset in {unit}',
-  value: 'Field value in {unit} [Enter keeps {gis}], or t <text>; Backspace steps back',
 };
 
 /** The method named by the options (the default when none), or `null` for an unknown one. */
@@ -46,7 +44,8 @@ const ccw = (from: number, to: number) =>
  * Dimension a circle or an arc in the active dimension layer: click the curve (its circle is
  * fitted from the vertices of linearized circles and arcs; three clicked points on the arc
  * otherwise), for `arc` also its start and end, then place the dimension with the pointer (the
- * radius' direction, or the distance of the arc dimension) and type the field value. `radius`
+ * radius' direction, or the distance of the arc dimension), which inserts it with its GIS
+ * value; the field value is typed later by clicking the value. `radius`
  * and `diameter` store [centre, point on the circle], `arc` [centre, start, end] counter-
  * clockwise.
  */
@@ -75,11 +74,15 @@ export class DimensionRadialTool extends DimensionToolBase {
   }
 
   override getInputRequest(): InputRequest {
-    return this.step === 'place' || this.step === 'value' ? 'value' : null;
+    return this.step === 'place' ? 'value' : null;
   }
 
   override getPrompt(): string {
-    return DIMENSION_RADIAL_PROMPTS[this.step].replace('{gis}', this.formattedGis());
+    return DIMENSION_RADIAL_PROMPTS[this.step];
+  }
+
+  override isIdle(): boolean {
+    return this.step === 'curve';
   }
 
   override activate(ctx: ToolContext, options?: ToolOptions): void {
@@ -99,15 +102,8 @@ export class DimensionRadialTool extends DimensionToolBase {
     this.reset();
   }
 
-  override finish(): void {
-    if (this.step === 'value') this.insert(null, null);
-  }
-
   override removeLastPoint(): boolean {
     switch (this.step) {
-      case 'value':
-        this.goTo('place');
-        return true;
       case 'place':
       case 'start':
       case 'p1':
@@ -128,30 +124,16 @@ export class DimensionRadialTool extends DimensionToolBase {
   }
 
   override handleInput(coordinate: number[]): boolean {
-    if (this.step === 'curve' || this.step === 'value') return false;
+    if (this.step === 'curve') return false;
     this.onClick(coordinate, coordinate);
     return true;
   }
 
-  /** The place step takes the offset, the value step the field value (metres). */
+  /** The place step takes the offset (metres) and inserts. */
   override handleLength(metres: number): boolean {
-    if (this.step === 'place' && metres >= 0) {
-      this.offset = metres;
-      this.goTo('value');
-      return true;
-    }
-    if (this.step === 'value' && metres > 0) {
-      this.insert(metres, null);
-      return true;
-    }
-    return false;
-  }
-
-  override handleText(text: string): boolean {
-    if (this.step !== 'value') return false;
-    const free = this.freeText(text);
-    if (free === null) return false;
-    this.insert(null, free);
+    if (this.step !== 'place' || !(metres >= 0)) return false;
+    this.offset = metres;
+    this.insert();
     return true;
   }
 
@@ -165,7 +147,7 @@ export class DimensionRadialTool extends DimensionToolBase {
 
   protected dimension(): Feature | null {
     const circle = this.circle;
-    if (!circle || (this.step !== 'place' && this.step !== 'value')) return null;
+    if (!circle || this.step !== 'place') return null;
     const { center, radius } = circle;
     const on = (angle: number): Coordinate => [
       center[0]! + radius * Math.cos(angle),
@@ -232,7 +214,7 @@ export class DimensionRadialTool extends DimensionToolBase {
         return;
       case 'place':
         this.place(coordinate);
-        this.goTo('value');
+        this.insert();
         return;
       default:
     }

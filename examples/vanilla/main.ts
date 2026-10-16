@@ -1,6 +1,7 @@
 import 'ol/ol.css';
 import 'ol-cad/ui.css';
 import { createEditor } from 'ol-cad';
+import type { OlcadDimensionInput } from 'ol-cad/ui';
 import {
   bindPanelMenu,
   persistLayerStyles,
@@ -68,14 +69,19 @@ const editor = createEditor({
       },
     },
     {
-      // A dimension layer: aligned dimensions after DIN 1356-1, the GIS value in brackets
-      // until a field value is set.
+      // A dimension layer: aligned dimensions after DIN 1356-1, the GIS value in grey until a
+      // field value is set (click the value on the map).
       id: 'dimensions',
       title: 'Dimensions',
       geometryType: 'LineString',
       editable: true,
       snappable: false,
-      dimension: { preset: 'architecture', referenceScale: 2500, textSize: 3.5 },
+      dimension: {
+        preset: 'architecture',
+        referenceScale: 2500,
+        textSize: 3.5,
+        computedColor: '#9ca3af',
+      },
       source: {
         features: [
           {
@@ -110,6 +116,8 @@ const editor = createEditor({
 
 document.querySelector<OlcadLayerList>('olcad-layer-list')!.editor = editor;
 document.querySelector<OlcadUnitSelect>('olcad-unit-select')!.editor = editor;
+// Clicking a dimension's value on the map opens this inline editor for the field value.
+document.querySelector<OlcadDimensionInput>('olcad-dimension-input')!.editor = editor;
 // View → Layer styles…: order, colours, labels and zoom range, kept in this browser.
 persistLayerStyles(editor);
 const styleDialog = document.querySelector<OlcadLayerStyleDialog>('olcad-layer-style-dialog')!;

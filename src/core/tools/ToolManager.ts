@@ -41,6 +41,11 @@ export class ToolManager {
     return id !== null && this.tools.get(id)?.readOnly === true;
   }
 
+  /** Whether the active tool has nothing in progress (`Tool.isIdle`); `false` with no tool. */
+  isIdle(): boolean {
+    return this.active?.isIdle?.() ?? false;
+  }
+
   /** The options the active tool works with (`{}` when no tool is active). */
   getActiveOptions(): ToolOptions {
     return this.active?.getOptions?.() ?? { ...this.activeOptions };

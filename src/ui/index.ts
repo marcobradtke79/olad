@@ -6,6 +6,7 @@ import { OlcadGridSettings } from './elements/OlcadGridSettings';
 import { OlcadInputBar, type InputBarMessageKind } from './elements/OlcadInputBar';
 import { OlcadProjectionSelect, projectionOptions } from './elements/OlcadProjectionSelect';
 import { OlcadUnitSelect } from './elements/OlcadUnitSelect';
+import { OlcadDimensionInput } from './elements/OlcadDimensionInput';
 import { OlcadLayerList } from './elements/OlcadLayerList';
 import { OlcadLayerEditor } from './elements/OlcadLayerEditor';
 import { OlcadLayerStyleDialog } from './elements/OlcadLayerStyleDialog';
@@ -87,6 +88,7 @@ export {
   OlcadProjectionSelect,
   projectionOptions,
   OlcadUnitSelect,
+  OlcadDimensionInput,
   OlcadPanel,
   OlcadSnapSettings,
   OlcadStraightedge,
@@ -133,6 +135,7 @@ const ELEMENTS: [string, CustomElementConstructor][] = [
   ['olcad-input-bar', OlcadInputBar],
   ['olcad-projection-select', OlcadProjectionSelect],
   ['olcad-unit-select', OlcadUnitSelect],
+  ['olcad-dimension-input', OlcadDimensionInput],
   ['olcad-menu', OlcadMenu],
   ['olcad-menubar', OlcadMenubar],
   ['olcad-layer-list', OlcadLayerList],
@@ -162,6 +165,7 @@ declare global {
     'olcad-input-bar': OlcadInputBar;
     'olcad-projection-select': OlcadProjectionSelect;
     'olcad-unit-select': OlcadUnitSelect;
+    'olcad-dimension-input': OlcadDimensionInput;
     'olcad-menu': OlcadMenu;
     'olcad-menubar': OlcadMenubar;
     'olcad-layer-list': OlcadLayerList;

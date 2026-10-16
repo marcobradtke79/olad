@@ -34,11 +34,10 @@ test.describe('dimension layer', () => {
       .toBe(4);
   });
 
-  test('draws computed values in brackets, field values plain and deviations in colour', async ({
-    page,
-  }) => {
+  test('colours computed values, field values and deviations differently', async ({ page }) => {
     const drawn = await labels(page);
-    expect(drawn['1001']!.text).toMatch(/^\(146\.0\d[⁰¹²³⁴⁵⁶⁷⁸⁹]?\)$/);
+    expect(drawn['1001']!.text).toMatch(/^146\.0\d[⁰¹²³⁴⁵⁶⁷⁸⁹]?$/);
+    expect(drawn['1001']!.color).toBe('#9ca3af'); // computed: no field value yet
     expect(drawn['1002']).toEqual({ text: '166.98', color: '#fde68a' });
     expect(drawn['1003']).toEqual({ text: '131.63', color: '#f87171' });
     expect(drawn['1004']).toEqual({ text: '2.01⁵ lt. Bestand', color: '#fde68a' });
@@ -126,7 +125,7 @@ test.describe('linear dimension tool', () => {
     });
   });
 
-  test('snaps two corners, places the line, keeps the GIS value on Enter and types a field value', async ({
+  test('snaps two corners and inserts when the line is placed; the field value comes afterwards', async ({
     page,
   }) => {
     await editLayer(page, 'Dimensions');
@@ -142,12 +141,8 @@ test.describe('linear dimension tool', () => {
     await page.mouse.click(a.x + 4, a.y - 3);
     await page.mouse.click(b.x - 3, b.y + 4);
     await page.mouse.move((a.x + b.x) / 2, a.y + 40);
-    await page.mouse.click((a.x + b.x) / 2, a.y + 40);
-    await expect
-      .poll(() => page.evaluate(() => window.editor.tools.getPrompt()))
-      .toContain('Enter keeps');
-    const input = page.locator('olcad-input-bar .olcad-input-bar__input');
-    await input.press('Enter');
+    await page.mouse.click((a.x + b.x) / 2, a.y + 40); // places the line and inserts
+    await expect.poll(() => dimensionInserts(page).then((i) => i.length)).toBe(1);
     let inserts = await dimensionInserts(page);
     expect(inserts).toHaveLength(1);
     const first = inserts[0] as unknown as {
@@ -161,14 +156,17 @@ test.describe('linear dimension tool', () => {
     expect(first.geometry.coordinates[0]![0]).toBeCloseTo(8.4012, 7);
     expect(first.geometry.coordinates[1]![0]).toBeCloseTo(8.403, 7);
 
-    // A second dimension: a typed offset, then a typed field value.
+    // A second dimension: a typed offset inserts it; the field value is set on the selected one.
+    const input = page.locator('olcad-input-bar .olcad-input-bar__input');
     await page.mouse.click(a.x, a.y);
     await page.mouse.click(b.x, b.y);
     await page.mouse.move((a.x + b.x) / 2, a.y + 20);
     await input.fill('3');
     await input.press('Enter');
-    await input.fill('131.5');
-    await input.press('Enter');
+    await page.evaluate(() => {
+      const e = window.editor;
+      e.dimensions.input(e.selection.get()[0]!, '131.5');
+    });
     inserts = await dimensionInserts(page);
     expect(inserts).toHaveLength(2);
     expect(
@@ -185,8 +183,7 @@ test.describe('linear dimension tool', () => {
         window.editor.tools.activate('dimension-linear', { method: 'rotated' });
         window.editor.input(`${sw![0]},${sw![1]}`);
         window.editor.input(`${ne![0]},${ne![1]}`);
-        window.editor.input('5');
-        window.editor.tools.finish();
+        window.editor.input('5'); // the offset: inserts
         const projection = window.editor.map.getView().getProjection().getCode();
         const horizontal = window.olcad.measureLength(projection, [sw!, [ne![0]!, sw![1]!]]).total;
         const feature = window.editor.selection.get()[0]!;
@@ -245,8 +242,8 @@ test.describe('linear dimension tool', () => {
         window.editor.tools.activate('dimension-linear');
         window.editor.input(`${sw![0]},${sw![1]}`);
         window.editor.input(`${se![0]},${se![1]}`);
-        window.editor.input('2');
-        window.editor.input('131.45');
+        window.editor.input('2'); // the offset: inserts
+        window.editor.dimensions.input(window.editor.layers.getFeatures(id)[0]!, '131.45');
         return {
           count: window.editor.layers.get(id).featureCount,
           changes: window.editor.changes.get().changes.length,
@@ -268,12 +265,10 @@ test.describe('linear dimension tool', () => {
       const at = (c: number[]) => e.input(`${c[0]},${c[1]}`);
       at(corners[0]!);
       at(corners[1]!);
-      e.input('6');
-      e.tools.finish(); // first span keeps its GIS value
+      e.input('6'); // the first span's line: inserted
       at(corners[2]!);
-      e.tools.finish();
       at(corners[3]!);
-      e.input('131.4');
+      e.dimensions.input(e.selection.get()[0]!, '131.4'); // the last span's field value
       e.tools.finish(); // ends the chain
       return e.layers
         .getFeatures('dimensions')
@@ -304,15 +299,12 @@ test.describe('linear dimension tool', () => {
         e.tools.activate('dimension-linear', { method: 'running' });
         at(origin!);
         at(a!);
-        e.input('5');
-        e.tools.finish();
+        e.input('5'); // the line: inserted
         at(b!);
-        e.tools.finish();
         e.tools.cancel();
         e.tools.activate('dimension-linear', { method: 'tie' });
         at(tieFrom!);
-        at(tieTo!);
-        e.tools.finish();
+        at(tieTo!); // inserted with the second point
         const features = e.layers.getFeatures('dimensions');
         const running = features.filter((f) => f.get('dimType') === 'running');
         const tie = features.find((f) => f.get('dimType') === 'tie')!;
@@ -403,7 +395,7 @@ test.describe('dimension references', () => {
     expect(await staleIds(page)).toEqual([]);
     await moveParcelCorner(page, 1, 3);
     await expect.poll(() => staleIds(page)).toEqual([1001]);
-    expect((await labels(page))['1001']!.text).toMatch(/^⚠ \(/);
+    expect((await labels(page))['1001']!.text).toMatch(/^⚠ 146/);
     const updated = await page.evaluate(() => {
       const e = window.editor;
       const dim = e.layers.getFeatures('dimensions').find((f) => f.getId() === 1001)!;
@@ -513,8 +505,7 @@ test.describe('angular and radial dimensions', () => {
         const e = window.editor;
         e.tools.activate('dimension-angular');
         for (const c of [se!, sw!, nw!]) e.input(`${c[0]},${c[1]}`);
-        e.input('20 m'); // the arc radius
-        e.tools.finish();
+        e.input('20 m'); // the arc radius: inserts
         const dim = e.selection.get()[0]!;
         return { gis: dim.get('gisValue') as number, type: dim.get('dimType') as string };
       },
@@ -536,13 +527,14 @@ test.describe('angular and radial dimensions', () => {
     );
     const ring = await parcelRing(page, 2);
     const mid = (a: number[], b: number[]) => [(a[0]! + b[0]!) / 2, (a[1]! + b[1]!) / 2];
-    const bottom = await screenPoint(page, mid(ring[0]!, ring[1]!));
+    // The south edge near its west end: the value of seed dimension 1003 sits at its middle and
+    // a click there would open the value editor instead.
+    const bottom = await screenPoint(page, mid(ring[0]!, mid(ring[0]!, ring[1]!)));
     const left = await screenPoint(page, mid(ring[0]!, ring[3]!));
     await page.mouse.click(bottom.x, bottom.y);
     await page.mouse.click(left.x, left.y);
     await page.mouse.move(bottom.x, left.y); // inside the parcel's south-west corner
-    await page.mouse.click(bottom.x, left.y);
-    await page.locator('olcad-input-bar .olcad-input-bar__input').press('Enter');
+    await page.mouse.click(bottom.x, left.y); // inserts
     const gis = await page.evaluate(
       () => window.editor.selection.get()[0]!.get('gisValue') as number,
     );
@@ -570,8 +562,7 @@ test.describe('angular and radial dimensions', () => {
     const at = await screenPoint(page, edge);
     await page.mouse.click(at.x, at.y);
     const input = page.locator('olcad-input-bar .olcad-input-bar__input');
-    await input.fill('5');
-    await input.press('Enter');
+    await input.fill('5'); // the leader offset: inserts
     await input.press('Enter');
     const radius = await page.evaluate(() => {
       const dim = window.editor.selection.get()[0]!;
@@ -595,9 +586,9 @@ test.describe('angular and radial dimensions', () => {
         e.layers.setActive(id);
         e.tools.activate('dimension-angular');
         for (const c of [se!, sw!, nw!]) e.input(`${c[0]},${c[1]}`);
-        e.input('20 m');
-        e.input('100.002');
+        e.input('20 m'); // the arc radius: inserts
         const dim = e.layers.getFeatures(id)[0]!;
+        e.dimensions.input(dim, '100.002'); // the field angle, typed in gon
         const layer = e.map
           .getLayers()
           .getArray()
@@ -647,12 +638,10 @@ test.describe('survey dimensions', () => {
         e.tools.activate('dimension-survey');
         at(sw!);
         at(se!);
-        at(nw!); // station 0, offset = the parcel's height
-        e.tools.finish();
+        at(nw!); // station 0, offset = the parcel's height: recorded at once
         at(se!); // station = the edge length, offset 0
-        e.input('131.45 0');
+        e.dimensions.input(e.selection.get()[0]!, '131.45 0');
         e.tools.finish(); // end measure
-        e.tools.finish();
         const stations = e.layers
           .getFeatures('dimensions')
           .filter((f) => f.get('dimType') === 'station');
@@ -697,8 +686,7 @@ test.describe('survey dimensions', () => {
     const low = await screenPoint(page, ring[1]!);
     const high = await screenPoint(page, ring[0]!);
     await page.mouse.click(low.x, low.y);
-    await page.mouse.click(high.x, high.y);
-    await page.locator('olcad-input-bar .olcad-input-bar__input').press('Enter');
+    await page.mouse.click(high.x, high.y); // the derived slope is inserted
     const slope = await page.evaluate(() => {
       const e = window.editor;
       const dim = e.layers.getFeatures('dimensions').find((f) => f.get('dimType') === 'slope')!;
@@ -799,7 +787,12 @@ test.describe('dimension grips, associative mode and drawn export', () => {
       e.map.getView().fit(dim.getGeometry()!.getExtent(), { padding: [200, 200, 200, 200] });
       e.selection.set([dim]);
       const values = e.dimensions.values(dim)!;
-      const grips = window.olcad.dimensionGrips(dim, values, e.map.getView().getProjection());
+      const grips = window.olcad.dimensionGrips(
+        dim,
+        values,
+        e.map.getView().getProjection(),
+        e.layers.getConfig('dimensions').dimension!,
+      );
       return { at: grips.find((g) => g.kind === 'line')!.at, offset: dim.get('offset') as number };
     });
     await page.evaluate(() => window.editor.tools.activate('modify'));
@@ -857,5 +850,83 @@ test.describe('dimension grips, associative mode and drawn export', () => {
     expect(texts.every((t: { geometry: { type: string } }) => t.geometry.type === 'Point')).toBe(
       true,
     );
+  });
+});
+
+test.describe('dimension value editor', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await request.post('/reset');
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('dimensions').featureCount))
+      .toBe(4);
+    await page.evaluate(() => {
+      const e = window.editor;
+      e.setEditMode(true);
+      const dim = e.layers.getFeatures('dimensions').find((f) => f.getId() === 1001)!;
+      e.map.getView().fit(dim.getGeometry()!.getExtent(), { padding: [200, 200, 200, 200] });
+    });
+  });
+
+  /** Page position of the value of seed dimension 1001. */
+  async function valuePoint(page: Page): Promise<{ x: number; y: number }> {
+    const at = await page.evaluate(() => {
+      const e = window.editor;
+      const dim = e.layers.getFeatures('dimensions').find((f) => f.getId() === 1001)!;
+      return e.dimensions.labels(dim)[0]!.at;
+    });
+    return screenPoint(page, at);
+  }
+
+  test('clicking a value opens the inline box; the typed field value changes the colour', async ({
+    page,
+  }) => {
+    const p = await valuePoint(page);
+    await page.mouse.click(p.x, p.y);
+    const box = page.locator('.olcad-dimension-input__box');
+    const field = box.locator('.olcad-dimension-input__field');
+    await expect(box).toBeVisible();
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue('');
+    await expect(field).toHaveAttribute('placeholder', /^146\.0/);
+    expect(await page.evaluate(() => window.editor.selection.get().map((f) => f.getId()))).toEqual([
+      1001,
+    ]);
+    await field.fill('146.05');
+    await field.press('Enter');
+    await expect(box).toBeHidden();
+    expect((await labels(page))['1001']).toEqual({ text: '146.05', color: '#fde68a' });
+    // Again: the field value is pre-filled; `-` clears it and the GIS colour returns.
+    await page.mouse.click(p.x, p.y);
+    await expect(field).toHaveValue('146.05');
+    await field.fill('-');
+    await field.press('Enter');
+    await expect(box).toBeHidden();
+    expect((await labels(page))['1001']!.color).toBe('#9ca3af');
+    // Escape closes without a change; the dimension stays selected.
+    await page.mouse.click(p.x, p.y);
+    await field.fill('150');
+    await field.press('Escape');
+    await expect(box).toBeHidden();
+    expect((await labels(page))['1001']!.color).toBe('#9ca3af');
+  });
+
+  test('a value click is taken while a dimension tool waits for its first point', async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      window.editor.layers.setActive('dimensions');
+      window.editor.tools.activate('dimension-linear');
+    });
+    const p = await valuePoint(page);
+    await page.mouse.click(p.x, p.y);
+    const box = page.locator('.olcad-dimension-input__box');
+    await expect(box).toBeVisible();
+    // The tool did not take the click as a point: still at its first step.
+    expect(await page.evaluate(() => window.editor.tools.getPrompt())).toContain('First point');
+    await box.locator('.olcad-dimension-input__field').press('Escape');
+    await expect(box).toBeHidden();
+    expect(await page.evaluate(() => window.editor.tools.getActive())).toBe('dimension-linear');
   });
 });

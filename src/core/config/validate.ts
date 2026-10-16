@@ -356,6 +356,7 @@ const DIMENSION_KEYS = [
   'tolerance',
   'showComputed',
   'color',
+  'computedColor',
   'deviationColor',
   'font',
   'angleUnit',
@@ -374,7 +375,7 @@ function checkDimension(dimension: unknown, path: string): void {
   optional(oneOf(['brackets', 'plain']))(d.showComputed, `${path}.showComputed`);
   optional(oneOf(['deg', 'gon']))(d.angleUnit, `${path}.angleUnit`);
   optional(boolean)(d.associative, `${path}.associative`);
-  for (const key of ['color', 'deviationColor', 'font']) {
+  for (const key of ['color', 'computedColor', 'deviationColor', 'font']) {
     optional(string)(d[key], `${path}.${key}`);
   }
   for (const key of ['referenceScale', 'textSize']) {

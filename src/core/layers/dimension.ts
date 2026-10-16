@@ -13,12 +13,13 @@ import Stroke from 'ol/style/Stroke';
 import Style, { type StyleFunction } from 'ol/style/Style';
 import Text from 'ol/style/Text';
 import type { ResolvedDimensionConfig } from '../config/types';
+import { decimalSeparator } from '../dimensions/format';
 import {
-  decimalSeparator,
-  formatDimension,
-  formatDimensionNumber,
-  type DimensionFormatOptions,
-} from '../dimensions/format';
+  dimensionLabels,
+  labelColor,
+  TEXT_GAP_MM,
+  type DimensionLabel,
+} from '../dimensions/labels';
 import { dimensionValues, sweepAngle, type DimensionValues } from '../dimensions/values';
 import type { Locale } from '../i18n';
 import { unitsPerMetre } from '../measure';
@@ -39,7 +40,7 @@ export const DIMENSION_PAPER_MM = {
   /** Radius of a dot. */
   dotRadius: 0.5,
   /** Gap between the dimension line and the bottom of the value. */
-  textGap: 1,
+  textGap: TEXT_GAP_MM,
   /** Distance between the stacked lines of a baseline dimension set. */
   baselineSpacing: 8,
   /** Radius of the origin circle of running dimensions. */
@@ -55,6 +56,40 @@ const add = (a: Coordinate, b: Coordinate, f = 1): Coordinate => [
 ];
 
 const ROUND_TYPES: readonly string[] = ['radius', 'diameter', 'arc'];
+
+/**
+ * The texts of a dimension as styles: one per label, at `pixels` text height (left out below
+ * one pixel, capped), coloured by what the text is (computed, field or deviating value).
+ */
+function textStyles(
+  labels: DimensionLabel[],
+  pixels: number,
+  config: ResolvedDimensionConfig,
+  status: DimensionValues['status'],
+): Style[] {
+  if (pixels < MIN_TEXT_PIXELS) return [];
+  const size = Math.round(Math.min(pixels, MAX_TEXT_PIXELS) * 10) / 10;
+  return labels.map(
+    (label) =>
+      new Style({
+        geometry: new Point(label.at),
+        text: new Text({
+          text: label.text,
+          font: `${size}px ${config.font}`,
+          fill: new Fill({ color: labelColor(label, status, config) }),
+          stroke: new Stroke({
+            color: 'rgba(255, 255, 255, 0.85)',
+            width: Math.min(Math.max(size / 8, 1), 4),
+          }),
+          rotation: label.screen ? 0 : -Math.atan2(label.direction[1]!, label.direction[0]!),
+          rotateWithView: !label.screen,
+          textAlign: label.align,
+          textBaseline: label.baseline,
+          overflow: true,
+        }),
+      }),
+  );
+}
 const SURVEY_TYPES: readonly string[] = ['station', 'level', 'slope'];
 
 /** The level kinds drawn with a filled triangle; the others get an open one. */
@@ -83,47 +118,13 @@ function surveyStyles(
   const stroke = new Stroke({ color, width: LINE_WIDTH, ...(stale ? { lineDash: [8, 4] } : {}) });
   const fill = new Fill({ color });
   const styles: Style[] = [];
-  const pixels = paper(config.textSize) / resolution;
-  const size = Math.round(Math.min(pixels, MAX_TEXT_PIXELS) * 10) / 10;
   const gap = paper(DIMENSION_PAPER_MM.textGap);
-  const label = (
-    text: string,
-    at: Coordinate,
-    direction: Coordinate,
-    options: { align?: CanvasTextAlign; below?: boolean; screen?: boolean } = {},
-  ) => {
-    if (pixels < MIN_TEXT_PIXELS) return;
-    const flip = direction[0]! < 0 || (direction[0] === 0 && direction[1]! < 0);
-    const read: Coordinate = flip ? [-direction[0]!, -direction[1]!] : direction;
-    let align = options.align ?? 'center';
-    if (flip && align !== 'center') align = align === 'left' ? 'right' : 'left';
-    styles.push(
-      new Style({
-        geometry: new Point(at),
-        text: new Text({
-          text: stale ? `⚠ ${text}` : text,
-          font: `${size}px ${config.font}`,
-          fill,
-          stroke: new Stroke({
-            color: 'rgba(255, 255, 255, 0.85)',
-            width: Math.min(Math.max(size / 8, 1), 4),
-          }),
-          rotation: options.screen ? 0 : -Math.atan2(read[1]!, read[0]!),
-          rotateWithView: !options.screen,
-          textAlign: align,
-          textBaseline: options.below !== undefined && options.below !== flip ? 'top' : 'bottom',
-          overflow: true,
-        }),
-      }),
-    );
-  };
-  const format = (value: number, computed: boolean, extra: Partial<DimensionFormatOptions> = {}) =>
-    formatDimension(value, config.preset, {
-      decimal,
-      computed,
-      showComputed: config.showComputed,
-      ...extra,
-    });
+  const texts = textStyles(
+    dimensionLabels(feature, values, config, projection, decimal),
+    paper(config.textSize) / resolution,
+    config,
+    values.status,
+  );
 
   if (values.type === 'station') {
     const [a, b, p] = [first, second, third!];
@@ -134,13 +135,6 @@ function surveyStyles(
     const foot = add(a, u, t);
     const across = (p[0]! - a[0]!) * n[0]! + (p[1]! - a[1]!) * n[1]!;
     styles.push(new Style({ geometry: new LineString([a, b]), stroke }));
-    // Station values stand on the side away from the point (on the line's left when on it).
-    const outward: Coordinate = across > 0 ? [-n[0]!, -n[1]!] : n;
-    // The line's zero always on its right, so the stations of one line draw it once.
-    const right: Coordinate = [-n[0]!, -n[1]!];
-    label(formatDimensionNumber(0, config.preset, decimal), add(a, right, gap), right, {
-      align: 'left',
-    });
     if (Math.abs(across) > gap) {
       const side = Math.sign(across);
       const mark = paper(1.5);
@@ -155,23 +149,8 @@ function surveyStyles(
           stroke,
         }),
       );
-      const offset = values.second!;
-      const towards: Coordinate = [n[0]! * side, n[1]! * side];
-      label(
-        format(Math.abs(offset.value), offset.computed, { text: null }),
-        add(foot, towards, Math.abs(across) / 2),
-        towards,
-      );
     }
-    label(
-      format(values.value, values.computed, {
-        text: (feature.get('text') as string | null | undefined) ?? null,
-      }),
-      add(foot, outward, gap),
-      outward,
-      { align: 'left' },
-    );
-    return styles;
+    return [...styles, ...texts];
   }
 
   if (values.type === 'level') {
@@ -197,16 +176,7 @@ function surveyStyles(
     if (Math.hypot(at[0]! - point[0]!, at[1]! - point[1]!) > gap) {
       styles.push(new Style({ geometry: new LineString([point, at]), stroke }));
     }
-    label(
-      format(values.value, false, {
-        kind: 'level',
-        text: (feature.get('text') as string | null | undefined) ?? null,
-      }),
-      at,
-      [1, 0],
-      { align: 'left', screen: true },
-    );
-    return styles;
+    return [...styles, ...texts];
   }
 
   // Slope: an arrow downhill from the first to the second point.
@@ -223,17 +193,8 @@ function surveyStyles(
       fill,
     }),
   );
-  label(
-    format(values.value, values.computed, {
-      kind: 'slope',
-      text: (feature.get('text') as string | null | undefined) ?? null,
-    }),
-    add(add(start, u, length / 2), n, gap),
-    u,
-  );
-  return styles;
+  return [...styles, ...texts];
 }
-const PREFIX: Record<string, string> = { radius: 'R', diameter: 'Ø', arc: '⌒' };
 
 const unit = (angle: number): Coordinate => [Math.cos(angle), Math.sin(angle)];
 
@@ -306,11 +267,6 @@ function roundStyles(
     }
   };
 
-  // Where the value goes: a point, the direction it is written along, and whether it sits on
-  // the left of that direction (above) or on its right (below).
-  let anchor: Coordinate;
-  let along: Coordinate;
-  let outwardIsLeft = true;
   if (values.type === 'angular' || values.type === 'arc') {
     const from = values.type === 'angular' ? first : second;
     const to = values.type === 'angular' ? third! : third!;
@@ -341,10 +297,6 @@ function roundStyles(
     // Terminators point along the arc, into it.
     terminator(add(centre, unit(a1), radius), [-Math.sin(a1), Math.cos(a1)]);
     terminator(add(centre, unit(a2), radius), [Math.sin(a2), -Math.cos(a2)]);
-    const middle = a1 + sweep / 2;
-    anchor = add(centre, unit(middle), radius + paper(DIMENSION_PAPER_MM.textGap));
-    along = [-Math.sin(middle), Math.cos(middle)]; // tangent; its left side is the centre
-    outwardIsLeft = false;
   } else {
     const r = Math.hypot(second[0]! - centre[0]!, second[1]! - centre[1]!);
     const u: Coordinate = [(second[0]! - centre[0]!) / r, (second[1]! - centre[1]!) / r];
@@ -363,54 +315,22 @@ function roundStyles(
           stroke,
         }),
       );
-      anchor = add(second, u, leader / 2);
     } else {
       const opposite = add(centre, u, -r);
       styles.push(new Style({ geometry: new LineString([opposite, second]), stroke }));
       const kind = config.terminator === 'none' ? 'none' : 'arrow';
       terminator(second, [-u[0]!, -u[1]!], kind);
       terminator(opposite, u, kind);
-      anchor = add(centre, u, r / 2);
     }
-    anchor = add(anchor, [-u[1]!, u[0]!], paper(DIMENSION_PAPER_MM.textGap));
-    along = u;
   }
-
-  const pixels = paper(config.textSize) / resolution;
-  if (pixels >= MIN_TEXT_PIXELS) {
-    const flip = along[0]! < 0 || (along[0] === 0 && along[1]! < 0);
-    const read: Coordinate = flip ? [-along[0]!, -along[1]!] : along;
-    // `bottom` puts the text on the left of the reading direction.
-    const left = flip ? !outwardIsLeft : outwardIsLeft;
-    const formatted = formatDimension(values.value, config.preset, {
-      decimal,
-      computed: values.computed,
-      showComputed: config.showComputed,
-      text: (feature.get('text') as string | null | undefined) ?? null,
-      ...(values.unit === 'deg' ? { angle: config.angleUnit } : {}),
-      ...(PREFIX[values.type] ? { prefix: PREFIX[values.type] } : {}),
-    });
-    const size = Math.round(Math.min(pixels, MAX_TEXT_PIXELS) * 10) / 10;
-    styles.push(
-      new Style({
-        geometry: new Point(anchor),
-        text: new Text({
-          text: stale ? `⚠ ${formatted}` : formatted,
-          font: `${size}px ${config.font}`,
-          fill,
-          stroke: new Stroke({
-            color: 'rgba(255, 255, 255, 0.85)',
-            width: Math.min(Math.max(size / 8, 1), 4),
-          }),
-          rotation: -Math.atan2(read[1]!, read[0]!),
-          rotateWithView: true,
-          textAlign: 'center',
-          textBaseline: left ? 'bottom' : 'top',
-          overflow: true,
-        }),
-      }),
-    );
-  }
+  styles.push(
+    ...textStyles(
+      dimensionLabels(feature, values, config, projection, decimal),
+      paper(config.textSize) / resolution,
+      config,
+      values.status,
+    ),
+  );
   return styles;
 }
 
@@ -549,71 +469,14 @@ export function dimensionStyleFunction(
       );
     }
 
-    // The value above the dimension line, turned to stay readable (never upside down).
-    const pixels = paper(config.textSize) / resolution;
-    if (pixels >= MIN_TEXT_PIXELS) {
-      const flip = u[0]! < 0 || (u[0] === 0 && u[1]! < 0);
-      const read: Coordinate = flip ? [-u[0]!, -u[1]!] : u;
-      const up: Coordinate = [-read[1]!, read[0]!];
-      const shift = (Number(feature.get('textPosition')) || 0) * perMetre;
-      const gapUp = paper(DIMENSION_PAPER_MM.textGap);
-      // A running value is written along its extension line, outward from the dimension line at
-      // the point's foot (DIN 406), so the values of close points stand side by side; other
-      // values sit above the middle of the dimension line.
-      let centre = add(add(d1, u, length / 2 + shift), up, gapUp);
-      let rotationOf = read;
-      let align: CanvasTextAlign = 'center';
-      if (running) {
-        const outward: Coordinate = offset < 0 ? [-n[0]!, -n[1]!] : n;
-        const turn = outward[0]! < 0 || (outward[0] === 0 && outward[1]! < 0);
-        rotationOf = turn ? [-outward[0]!, -outward[1]!] : outward;
-        align = turn ? 'right' : 'left';
-        centre = add(d2, outward, gapUp);
-      }
-      const formatted = formatDimension(values.value, config.preset, {
-        decimal,
-        computed: values.computed,
-        showComputed: config.showComputed,
-        text: (feature.get('text') as string | null | undefined) ?? null,
-      });
-      const label = stale ? `⚠ ${formatted}` : formatted;
-      const size = Math.round(Math.min(pixels, MAX_TEXT_PIXELS) * 10) / 10;
-      styles.push(
-        new Style({
-          geometry: new Point(centre),
-          text: new Text({
-            text: label,
-            font: `${size}px ${config.font}`,
-            fill,
-            stroke: new Stroke({
-              color: 'rgba(255, 255, 255, 0.85)',
-              width: Math.min(Math.max(size / 8, 1), 4),
-            }),
-            rotation: -Math.atan2(rotationOf[1]!, rotationOf[0]!),
-            rotateWithView: true,
-            textAlign: align,
-            textBaseline: 'bottom',
-            overflow: true,
-          }),
-        }),
-      );
-      if (running) {
-        styles.push(
-          new Style({
-            geometry: new Point(add(d1, up, gapUp)),
-            text: new Text({
-              text: '0',
-              font: `${size}px ${config.font}`,
-              fill,
-              rotation: -Math.atan2(read[1]!, read[0]!),
-              rotateWithView: true,
-              textAlign: 'center',
-              textBaseline: 'bottom',
-            }),
-          }),
-        );
-      }
-    }
+    styles.push(
+      ...textStyles(
+        dimensionLabels(feature as Feature, values, config, projection, decimal),
+        paper(config.textSize) / resolution,
+        config,
+        values.status,
+      ),
+    );
     return styles;
   };
 }

@@ -97,23 +97,23 @@ describe('DimensionSurveyTool: orthogonal survey', () => {
     const { ctx, click, inserted } = setup();
     const tool = new DimensionSurveyTool();
     tool.activate(ctx);
+    expect(tool.isIdle()).toBe(true);
     click([0, 0]);
+    expect(tool.isIdle()).toBe(false);
     click([30, 0]);
-    click([12, -3]); // right of the line
-    expect(tool.getPrompt()).toContain('12.00');
-    expect(tool.handleText('12.02 3.01')).toBe(true);
+    expect(tool.isIdle()).toBe(true); // the line waits for points: a value click may edit
+    click([12, -3]); // right of the line: recorded at once
     const first = inserted();
-    expect(first.getProperties()).toMatchObject({ dimType: 'station', fieldValue: 12.02 });
-    expect(first.get('fieldOffset')).toBeCloseTo(-3.01, 9); // the side of the measured offset
+    expect(first.getProperties()).toMatchObject({ dimType: 'station', fieldValue: null });
+    expect(first.get('gisValue')).toBeCloseTo(12, 6);
     expect(first.get('gisOffset')).toBeCloseTo(-3, 6);
-    // The same line takes the next point; a single number is the station only.
+    expect(tool.handleValue(20)).toBe(false); // the field values are typed on the value later
+    // The same line takes the next point.
     expect(tool.referencePoint()).toEqual([0, 0]);
     click([20, 4]);
-    expect(tool.handleValue(20)).toBe(true);
-    expect(inserted(1).get('fieldOffset')).toBeUndefined();
     expect(inserted(1).get('chain')).toBe(first.get('chain'));
+    expect(inserted(1).get('gisOffset')).toBeCloseTo(4, 6);
     // Enter writes the end measure at the line's end, then the tool starts over.
-    tool.finish();
     tool.finish();
     const end = inserted(2);
     expect((end.getGeometry() as LineString).getCoordinates()).toEqual([
@@ -148,10 +148,9 @@ describe('DimensionSurveyTool: levels and slopes', () => {
     const tool = new DimensionSurveyTool();
     tool.activate(ctx, { method: 'slope' });
     click([40, 0.5]); // the lower level (100 m) first
-    click([0, 0.5]); // the upper level (101 m)
-    expect(tool.getPrompt()).toContain('2.5 %');
-    tool.finish();
+    click([0, 0.5]); // the upper level (101 m): inserts the derived slope
     const slope = inserted();
+    expect(slope.get('fieldValue')).toBeNull();
     expect(slope.get('gisValue')).toBeCloseTo(2.5, 3); // 1 m over 40 m
     expect((slope.getGeometry() as LineString).getCoordinates()).toEqual([
       [0, 0],

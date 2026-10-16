@@ -222,16 +222,21 @@ export class OlcadInputBar extends OlcadPanel {
       return;
     }
     const editor = this.boundEditor;
+    if ('freeText' in result) {
+      this.show(`Text: ${result.freeText}`, 'info');
+      return;
+    }
     if ('fieldValue' in result) {
       const value = result.fieldValue;
       const target = editor?.dimensions.inputTarget();
-      const angular = editor && target ? editor.dimensions.values(target)?.unit === 'deg' : false;
       this.show(
         value === null
           ? 'Field value cleared'
-          : angular && editor && target
+          : result.unit === 'deg' && editor && target
             ? `Field value ${formatDimensionAngle(value, this.angleUnit(editor, target), '.')}`
-            : `Field value ${editor ? editor.units.formatLength(value) : `${value} m`}`,
+            : result.unit === '%'
+              ? `Field value ${value} %`
+              : `Field value ${editor ? editor.units.formatLength(value) : `${value} m`}`,
         'info',
       );
       return;

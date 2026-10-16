@@ -3,7 +3,6 @@ import type { Coordinate } from 'ol/coordinate';
 import { buffer, boundingExtent } from 'ol/extent';
 import LineString from 'ol/geom/LineString';
 import { referenceFor, type DimensionReference } from '../dimensions/references';
-import { fromAngleUnit } from '../dimensions/values';
 import { nearestEdge, segmentAt } from '../geometry/vertices';
 import { unitsPerMetre } from '../measure';
 import { DimensionToolBase } from './dimensionBase';
@@ -14,10 +13,9 @@ import type { InputRequest, ToolContext, ToolOptions } from './Tool';
 export const DIMENSION_ANGULAR_METHODS = ['points', 'segments'] as const;
 export type DimensionAngularMethod = (typeof DIMENSION_ANGULAR_METHODS)[number];
 
-export type DimensionAngularStep =
-  'leg1' | 'vertex' | 'leg2' | 'segment1' | 'segment2' | 'arc' | 'value';
+export type DimensionAngularStep = 'leg1' | 'vertex' | 'leg2' | 'segment1' | 'segment2' | 'arc';
 
-/** Prompt shown by the input bar for each step; `{gis}` is the measured angle. */
+/** Prompt shown by the input bar for each step. */
 export const DIMENSION_ANGULAR_PROMPTS: Record<DimensionAngularStep, string> = {
   leg1: 'A point on the first leg of the angle: click (snaps to objects) or type x,y',
   vertex: 'The vertex of the angle: click or type x,y',
@@ -25,8 +23,6 @@ export const DIMENSION_ANGULAR_PROMPTS: Record<DimensionAngularStep, string> = {
   segment1: 'Click the first edge (a segment of a line or polygon)',
   segment2: 'Click the second edge; Escape drops the angle',
   arc: 'Move the pointer into the angle to dimension; click, or type the arc radius in {unit}',
-  value:
-    'Field angle [Enter keeps {gis}], typed in the layer’s angle unit, or t <text>; Backspace steps back',
 };
 
 /** The method named by the options (the default when none), or `null` for an unknown one. */
@@ -56,9 +52,9 @@ function intersection(a: [Coordinate, Coordinate], b: [Coordinate, Coordinate]):
  * Dimension an angle in the active dimension layer: three points (a leg point, the vertex, a
  * leg point; snapped and recorded as references) or two picked edges (the vertex is where their
  * lines meet, also outside the edges). The pointer chooses which of the angles is dimensioned
- * and the radius of the dimension arc; then the field angle in the layer's angle unit (Enter
- * keeps the GIS angle, `t <text>` a free text). Stored in degrees, counter-clockwise from the
- * first to the second leg point.
+ * and the radius of the dimension arc; the click inserts the angle with its GIS value (the
+ * field angle is typed later by clicking the value). Stored in degrees, counter-clockwise from
+ * the first to the second leg point.
  */
 export class DimensionAngularTool extends DimensionToolBase {
   readonly id = 'dimension-angular';
@@ -84,11 +80,15 @@ export class DimensionAngularTool extends DimensionToolBase {
   }
 
   override getInputRequest(): InputRequest {
-    return this.step === 'arc' || this.step === 'value' ? 'value' : null;
+    return this.step === 'arc' ? 'value' : null;
   }
 
   override getPrompt(): string {
-    return DIMENSION_ANGULAR_PROMPTS[this.step].replace('{gis}', this.formattedGis());
+    return DIMENSION_ANGULAR_PROMPTS[this.step];
+  }
+
+  override isIdle(): boolean {
+    return this.step === 'leg1' || this.step === 'segment1';
   }
 
   override activate(ctx: ToolContext, options?: ToolOptions): void {
@@ -110,15 +110,8 @@ export class DimensionAngularTool extends DimensionToolBase {
     this.reset();
   }
 
-  override finish(): void {
-    if (this.step === 'value') this.insert(null, null);
-  }
-
   override removeLastPoint(): boolean {
     switch (this.step) {
-      case 'value':
-        this.goTo('arc');
-        return true;
       case 'arc':
         if (this.method === 'segments') {
           this.segments.pop();
@@ -147,33 +140,17 @@ export class DimensionAngularTool extends DimensionToolBase {
   }
 
   override handleInput(coordinate: number[]): boolean {
-    if (this.step === 'value' || this.step === 'segment1' || this.step === 'segment2') return false;
+    if (this.step === 'segment1' || this.step === 'segment2') return false;
     this.onClick(coordinate, coordinate);
     return true;
   }
 
-  /** The arc step takes the radius. */
+  /** The arc step takes the radius and inserts. */
   override handleLength(metres: number): boolean {
     if (this.step !== 'arc' || !(metres > 0)) return false;
     if (!this.legs) this.chooseSector(null);
     this.radius = metres;
-    this.goTo('value');
-    return true;
-  }
-
-  /** The value step takes the field angle, typed in the layer's angle unit. */
-  override handleValue(value: number): boolean {
-    const target = this.target();
-    if (this.step !== 'value' || !target || !(value > 0)) return false;
-    this.insert(fromAngleUnit(value, target.layer.dimension.angleUnit), null);
-    return true;
-  }
-
-  override handleText(text: string): boolean {
-    if (this.step !== 'value') return false;
-    const free = this.freeText(text);
-    if (free === null) return false;
-    this.insert(null, free);
+    this.insert();
     return true;
   }
 
@@ -240,7 +217,7 @@ export class DimensionAngularTool extends DimensionToolBase {
       }
       case 'arc':
         this.place(coordinate);
-        if (this.radius > 0) this.goTo('value');
+        if (this.radius > 0) this.insert();
         return;
       default:
     }

@@ -60,6 +60,10 @@ export {
   dimensionGrips,
   moveGrip,
   drawnDimensions,
+  dimensionLabels,
+  dimensionLabelAnchors,
+  labelColor,
+  TEXT_GAP_MM,
 } from './core/dimensions';
 export type {
   DimensionType,
@@ -71,6 +75,8 @@ export type {
   DimensionReference,
   DimensionRefs,
   DimensionGrip,
+  DimensionLabel,
+  DimensionLabelAnchor,
   LevelKind,
   SnapSource,
 } from './core/dimensions';

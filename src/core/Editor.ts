@@ -32,6 +32,8 @@ import {
   remapReferences,
 } from './dimensions/references';
 import { drawnDimensions } from './dimensions/drawn';
+import { decimalSeparator } from './dimensions/format';
+import { dimensionLabels, type DimensionLabel } from './dimensions/labels';
 import { dimensionValues, fromAngleUnit, type DimensionValues } from './dimensions/values';
 import type { ChangeSet } from './changes/exportChangeSet';
 import { applyEditCursor, Crosshair } from './crosshair';
@@ -95,6 +97,7 @@ import {
   type LocalLayerInfo,
   type LocalLayersJson,
 } from './layers/local';
+import { MAX_TEXT_PIXELS, MIN_TEXT_PIXELS } from './layers/text';
 import { offsetMetres, unitsPerMetre } from './measure';
 import {
   MeasurementStore,
@@ -153,6 +156,18 @@ export interface EditorEvents extends Record<string, unknown> {
    * dimension was updated or detached). `features` is the whole current set.
    */
   dimensionstale: { features: Feature[] };
+  /**
+   * The value of a dimension was clicked in edit mode (no tool, the select tool, or a tool with
+   * nothing in progress): the dimension is selected and the click reaches no interaction. The
+   * UI opens its value editor here; a host may call `dimensions.input(feature, text)`.
+   */
+  dimensionvalueclick: {
+    layer: string;
+    feature: Feature;
+    label: DimensionLabel;
+    coordinate: number[];
+    pixel: number[];
+  };
   /** A layer finished loading features. */
   layerload: { id: string; features: Feature[] };
   /** The active layer (target of inserts) changed. */
@@ -528,6 +543,17 @@ export interface DimensionsApi {
    * selected, updatable dimension. `null` otherwise.
    */
   inputTarget(): Feature | null;
+  /**
+   * Typed text for one dimension, as the command line and the value editor take it: a number is
+   * the field value (metres in the default length unit; degrees typed in the layer's angle unit;
+   * a signed height or percentage; `station offset` for a station), `-` clears the field value
+   * and the free text, `t <text>` sets the free text. One command; emits `input`.
+   */
+  input(feature: Feature, text: string): InputResult;
+  /** The texts of a dimension as drawn: anchors, reading directions and texts (`DimensionLabel`). */
+  labels(feature: Feature): DimensionLabel[];
+  /** The value text of an updatable dimension under a map pixel, or `null`. */
+  labelAt(pixel: number[]): { layer: string; feature: Feature; label: DimensionLabel } | null;
   /** Whether a measured object of the dimension changed or is gone (derived, never stored). */
   isStale(feature: Feature): boolean;
   /** The stale dimensions of all layers, or of one layer. */
@@ -618,8 +644,13 @@ export type InputResult =
   | { ok: true; text: string; length: number }
   /** Text taken by the tool's current step (`Tool.handleText`), for example a template name. */
   | { ok: true; text: string; kind: 'text' }
-  /** The field value (metres, `null` = cleared) of the selected dimension (`dimensions.inputTarget`). */
-  | { ok: true; text: string; fieldValue: number | null }
+  /**
+   * The field value of a dimension (`dimensions.input`, or the command line with
+   * `dimensions.inputTarget`): metres, degrees or percent after `unit`; `null` when cleared.
+   */
+  | { ok: true; text: string; fieldValue: number | null; unit: 'm' | 'deg' | '%' }
+  /** The free text of a dimension set with `t <text>`. */
+  | { ok: true; text: string; freeText: string }
   | { ok: false; text: string; code: string; error: string };
 
 /**
@@ -755,6 +786,15 @@ class EditorImpl implements Editor {
   private crosshair: Crosshair | null = null;
   private gridLayer: GridLayer | null = null;
   private pickHandler: ((event: MapBrowserEvent) => void) | null = null;
+  /** The pixel of the last click that hit a dimension value: its `singleclick` is swallowed too. */
+  private valueClickPixel: number[] | null = null;
+  private readonly valueClickHandler = (event: MapBrowserEvent): boolean =>
+    this.onValueClick(event);
+  private readonly valueSingleClickHandler = (event: MapBrowserEvent): boolean => {
+    const pixel = this.valueClickPixel;
+    this.valueClickPixel = null;
+    return !(pixel && pixel[0] === event.pixel[0] && pixel[1] === event.pixel[1]);
+  };
   private pickHoverHandler: ((event: MapBrowserEvent) => void) | null = null;
   /** Unmanaged layer showing the segment a reference pick would take. */
   private pickHighlight: VectorLayer<VectorSource<Feature>> | null = null;
@@ -1089,6 +1129,10 @@ class EditorImpl implements Editor {
       this.map.addInteraction(this.snapInteraction);
       this.updateInspect();
     });
+    // A click on a dimension's value (map listeners run before any interaction): the value
+    // editor, instead of a selection or a tool point.
+    this.map.on('click', this.valueClickHandler);
+    this.map.on('singleclick', this.valueSingleClickHandler);
 
     // The draw, rectangle, circle, ellipse, regular polygon and curve tools are bound to the active layer (or
     // the draft layer): follow it, keeping the options when the new layer allows them.
@@ -1268,6 +1312,26 @@ class EditorImpl implements Editor {
           updateProperties(feature, { fieldValue: metres === null ? undefined : metres }),
         );
       },
+      input: (feature, text) => {
+        const result = this.dimensionInput(feature, text);
+        this.emitter.emit('input', result);
+        return result;
+      },
+      labels: (feature) => {
+        const layer = this.layerManager.layerOf(feature);
+        const config =
+          layer === undefined ? undefined : this.layerManager.getConfig(layer).dimension;
+        const values = config && this.dimensions.values(feature);
+        if (!config || !values) return [];
+        return dimensionLabels(
+          feature,
+          values,
+          config,
+          this.getProjection(),
+          decimalSeparator(this.config.locale),
+        );
+      },
+      labelAt: (pixel) => this.labelAt(pixel),
       inputTarget: () => {
         if (!this.config.editMode || this.toolManager.getActive() !== null) return null;
         const selected = this.selectionManager.get();
@@ -1424,57 +1488,11 @@ class EditorImpl implements Editor {
     ) {
       return { ok: true, text, kind: 'text' };
     }
-    // No tool and one selected dimension: a length is its field value, `-` clears it.
+    // No tool and one selected dimension: the text is for it (its field value or free text).
     const dimension = this.dimensions.inputTarget();
-    if (dimension && text.trim() === '-') {
-      return this.dimensions.setFieldValue(dimension, null)
-        ? { ok: true, text, fieldValue: null }
-        : fail('input-not-accepted');
-    }
-    // Survey dimensions: a height or a slope may be negative; a station takes `station offset`.
-    if (dimension) {
-      const values = this.dimensions.values(dimension);
-      const number = '([+-]?\\d+(?:[.,]\\d+)?)';
-      const toNumber = (raw: string) => Number(raw.replace(',', '.'));
-      const single = new RegExp(`^\\s*${number}\\s*$`).exec(text);
-      if (single && (values?.type === 'level' || values?.type === 'slope')) {
-        const value = toNumber(single[1]!);
-        return this.dimensions.setFieldValue(dimension, value)
-          ? { ok: true, text, fieldValue: value }
-          : fail('input-not-accepted');
-      }
-      const pair = new RegExp(`^\\s*${number}\\s+${number}\\s*$`).exec(text);
-      if (pair && values?.type === 'station' && this.editing.canEdit('update', dimension)) {
-        const station = toNumber(pair[1]!);
-        const side = Math.sign(values.second?.gis ?? 1) || 1;
-        return this.editing.execute(
-          updateProperties(dimension, {
-            fieldValue: station,
-            fieldOffset: side * Math.abs(toNumber(pair[2]!)),
-          }),
-        )
-          ? { ok: true, text, fieldValue: station }
-          : fail('input-not-accepted');
-      }
-    }
+    if (dimension) return this.dimensionInput(dimension, text);
     const parsed = parseInput(text, this.lengthUnit());
     if (!parsed) return fail('input-invalid');
-    if (dimension && parsed.kind === 'length') {
-      // An angular dimension takes a plain number in its layer's angle unit, stored in degrees.
-      const values = this.dimensions.values(dimension);
-      if (values?.unit === 'deg') {
-        const layer = this.layerManager.layerOf(dimension)!;
-        const angleUnit = this.layerManager.getConfig(layer).dimension!.angleUnit;
-        if (parsed.unit !== null) return fail('input-not-accepted');
-        const degrees = fromAngleUnit(parsed.value, angleUnit);
-        return this.dimensions.setFieldValue(dimension, degrees)
-          ? { ok: true, text, fieldValue: degrees }
-          : fail('input-not-accepted');
-      }
-      return this.dimensions.setFieldValue(dimension, parsed.distance)
-        ? { ok: true, text, fieldValue: parsed.distance }
-        : fail('input-not-accepted');
-    }
     if (!this.toolsRunnable() || this.toolManager.getActive() === null)
       return fail('input-no-tool');
     if (parsed.kind === 'length') {
@@ -1767,6 +1785,160 @@ class EditorImpl implements Editor {
     this.map.getTargetElement()?.classList.toggle(EDIT_MODE_CLASS, on);
   }
 
+  /**
+   * Typed text for one dimension (`dimensions.input`, the command line): `-` clears the field
+   * value and the free text, `t <text>` sets the free text, a number is the field value in the
+   * dimension's unit; a station takes `station offset` in one entry.
+   */
+  private dimensionInput(feature: Feature, text: string): InputResult {
+    const fail = (code: string): InputResult => ({
+      ok: false,
+      text,
+      code,
+      error: formatMessage(this.config.locale, this.config.messages, code),
+    });
+    const values = this.dimensions.values(feature);
+    if (!values || !this.editing.canEdit('update', feature)) return fail('input-not-accepted');
+    const unit = values.unit;
+    const trimmed = text.trim();
+    const set = (properties: Record<string, unknown>, result: InputResult) =>
+      this.editing.execute(updateProperties(feature, properties))
+        ? result
+        : fail('input-not-accepted');
+    if (trimmed === '-') {
+      return set(
+        { fieldValue: undefined, text: undefined, fieldOffset: undefined },
+        { ok: true, text, fieldValue: null, unit },
+      );
+    }
+    const free = /^t\s+(.+)$/i.exec(trimmed);
+    if (free) return set({ text: free[1]! }, { ok: true, text, freeText: free[1]! });
+    // Survey dimensions: a height or a slope may be negative; a station takes `station offset`.
+    const number = '([+-]?\\d+(?:[.,]\\d+)?)';
+    const toNumber = (raw: string) => Number(raw.replace(',', '.'));
+    const single = new RegExp(`^${number}$`).exec(trimmed);
+    if (single && (values.type === 'level' || values.type === 'slope')) {
+      const value = toNumber(single[1]!);
+      return set({ fieldValue: value }, { ok: true, text, fieldValue: value, unit });
+    }
+    const pair = new RegExp(`^${number}\\s+${number}$`).exec(trimmed);
+    if (pair && values.type === 'station') {
+      const station = toNumber(pair[1]!);
+      const side = Math.sign(values.second?.gis ?? 1) || 1;
+      return set(
+        { fieldValue: station, fieldOffset: side * Math.abs(toNumber(pair[2]!)) },
+        { ok: true, text, fieldValue: station, unit },
+      );
+    }
+    const parsed = parseInput(text, this.lengthUnit());
+    if (!parsed) return fail('input-invalid');
+    if (parsed.kind !== 'length') return fail('input-not-accepted');
+    if (unit === 'deg') {
+      // An angular dimension takes a plain number in its layer's angle unit, stored in degrees.
+      const layer = this.layerManager.layerOf(feature)!;
+      const angleUnit = this.layerManager.getConfig(layer).dimension!.angleUnit;
+      if (parsed.unit !== null) return fail('input-not-accepted');
+      const degrees = fromAngleUnit(parsed.value, angleUnit);
+      return set({ fieldValue: degrees }, { ok: true, text, fieldValue: degrees, unit });
+    }
+    return set(
+      { fieldValue: parsed.distance },
+      { ok: true, text, fieldValue: parsed.distance, unit },
+    );
+  }
+
+  /**
+   * The value text of an updatable dimension under `pixel`: the nearest label whose drawn box
+   * (text height from the layer's paper size at the view resolution, width estimated from the
+   * text length) lies within the pick tolerance of the pixel.
+   */
+  private labelAt(
+    pixel: number[],
+  ): { layer: string; feature: Feature; label: DimensionLabel } | null {
+    const resolution = this.map.getView().getResolution();
+    if (!resolution) return null;
+    const projection = this.getProjection();
+    const decimal = decimalSeparator(this.config.locale);
+    const tolerance = Math.ceil(this.config.cursor.pickBoxSize / 2);
+    let best: { layer: string; feature: Feature; label: DimensionLabel } | null = null;
+    let bestDistance = Infinity;
+    for (const info of this.layerManager.list()) {
+      const config = this.layerManager.getConfig(info.id).dimension;
+      if (!info.visible || !config) continue;
+      for (const feature of this.layerManager.getSource(info.id).getFeatures()) {
+        if (!this.editing.canEdit('update', feature)) continue;
+        const values = dimensionValues(
+          feature,
+          config,
+          projection,
+          this.staleDimensions.has(feature),
+        );
+        if (!values) continue;
+        for (const label of dimensionLabels(feature, values, config, projection, decimal)) {
+          if (label.kind === 'zero') continue;
+          const fontPx = Math.min(
+            ((config.textSize / 1000) *
+              config.referenceScale *
+              unitsPerMetre(projection, label.at)) /
+              resolution,
+            MAX_TEXT_PIXELS,
+          );
+          if (fontPx < MIN_TEXT_PIXELS) continue;
+          const at = this.map.getPixelFromCoordinate(label.at);
+          // The reading direction on screen (y down), and the text's "up" from it.
+          let direction: number[] = [1, 0];
+          if (!label.screen) {
+            const ahead = this.map.getPixelFromCoordinate([
+              label.at[0]! + label.direction[0]! * resolution,
+              label.at[1]! + label.direction[1]! * resolution,
+            ]);
+            const length = Math.hypot(ahead[0]! - at[0]!, ahead[1]! - at[1]!) || 1;
+            direction = [(ahead[0]! - at[0]!) / length, (ahead[1]! - at[1]!) / length];
+          }
+          const up = [direction[1]!, -direction[0]!];
+          const dx = pixel[0]! - at[0]!;
+          const dy = pixel[1]! - at[1]!;
+          const along = dx * direction[0]! + dy * direction[1]!;
+          const above = dx * up[0]! + dy * up[1]!;
+          const halfWidth = 0.3 * fontPx * label.text.length;
+          const centreAlong =
+            label.align === 'left' ? halfWidth : label.align === 'right' ? -halfWidth : 0;
+          const centreAbove = label.baseline === 'bottom' ? fontPx / 2 : -fontPx / 2;
+          const distance = Math.hypot(
+            Math.max(0, Math.abs(along - centreAlong) - halfWidth),
+            Math.max(0, Math.abs(above - centreAbove) - fontPx / 2),
+          );
+          if (distance <= tolerance && distance < bestDistance) {
+            bestDistance = distance;
+            best = { layer: info.id, feature, label };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * A map click in edit mode while no tool, the select tool or an idle tool runs: when it hits
+   * a dimension's value, select the dimension, tell the UI and keep the click from the
+   * interactions (`false` stops OpenLayers from handing it on).
+   */
+  private onValueClick(event: MapBrowserEvent): boolean {
+    if (!this.config.editMode || this.pickHandler) return true;
+    const active = this.toolManager.getActive();
+    if (active !== null && active !== 'select' && !this.toolManager.isIdle()) return true;
+    const hit = this.labelAt(event.pixel);
+    if (!hit) return true;
+    this.selectionManager.set([hit.feature]);
+    this.valueClickPixel = event.pixel.slice();
+    this.emitter.emit('dimensionvalueclick', {
+      ...hit,
+      coordinate: event.coordinate.slice(),
+      pixel: event.pixel.slice(),
+    });
+    return false;
+  }
+
   /** The segment of the editor-layer feature under `pixel` that a reference pick would take. */
   private segmentAtPixel(pixel: number[], coordinate: number[]): Segment | undefined {
     // Walk every feature under the pointer (top-most first) and take the first one that has
@@ -1847,6 +2019,8 @@ class EditorImpl implements Editor {
     this.destroyed = true;
     this.emitter.emit('destroy', undefined);
     this.endPick();
+    this.map.un('click', this.valueClickHandler);
+    this.map.un('singleclick', this.valueSingleClickHandler);
     this.map.removeInteraction(this.snapInteraction);
     this.map.removeInteraction(this.inspectInteraction);
     this.pickHighlight?.setMap(null);

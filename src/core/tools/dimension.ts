@@ -6,7 +6,6 @@ import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { insertFeature } from '../changes/commands';
 import type { ResolvedDimensionConfig, ResolvedLayerConfig } from '../config/types';
-import { decimalSeparator, formatDimensionNumber } from '../dimensions/format';
 import { referenceFor, type DimensionReference } from '../dimensions/references';
 import { dimensionValues } from '../dimensions/values';
 import { DIMENSION_PAPER_MM, dimensionStyleFunction } from '../layers/dimension';
@@ -28,17 +27,15 @@ export const DIMENSION_LINEAR_METHODS = [
 export type DimensionLinearMethod = (typeof DIMENSION_LINEAR_METHODS)[number];
 export const DEFAULT_DIMENSION_LINEAR_METHOD: DimensionLinearMethod = 'aligned';
 
-export type DimensionLinearStep = 'first' | 'origin' | 'second' | 'line' | 'value' | 'next';
+export type DimensionLinearStep = 'first' | 'origin' | 'second' | 'line' | 'next';
 
-/** Prompt shown by the input bar for each step; `{gis}` is the measured value. */
+/** Prompt shown by the input bar for each step. */
 export const DIMENSION_LINEAR_PROMPTS: Record<DimensionLinearStep, string> = {
   first: 'First point of the dimension: click (snaps to objects) or type x,y',
   origin: 'Origin of the dimensions: click (snaps to objects) or type x,y',
   second:
     'Second point: click, or type x,y · @dx,dy · @distance<angle relative to the first point; Escape drops the dimension',
   line: 'Position of the dimension line: click, or type the offset in {unit}; Backspace steps back',
-  value:
-    'Field value in {unit} [Enter keeps {gis}], or t <text> for a free text; Backspace steps back',
   next: 'Next point: click or type (relative to the last point); Enter or Escape ends',
 };
 
@@ -101,13 +98,14 @@ interface DimensionSet {
 
 /**
  * Draw linear dimensions into the active dimension layer. Every dimension: its points (snapped
- * like every tool point), the position of the dimension line (pointer or typed offset), then the
- * field value (Enter keeps the GIS value, a typed length is the field value, `t <text>` a free
- * text). `aligned` measures the true distance, `rotated` the distance along the straightedge,
- * `tie` a survey tie distance without a dimension line. `chain`, `baseline` and `running` go on
- * after the first dimension: every further point adds a span from the last point (chain, all on
- * one line), a stacked dimension from the origin (baseline) or a value on the common line from
- * the origin (running), until Enter or Escape. Each dimension is one command and is selected.
+ * like every tool point), then the position of the dimension line (pointer or typed offset),
+ * which inserts it with its GIS value; the field value is set afterwards by clicking the value.
+ * `aligned` measures the true distance, `rotated` the distance along the straightedge, `tie` a
+ * survey tie distance without a dimension line (inserted with its second point). `chain`,
+ * `baseline` and `running` go on after the first dimension: every further point adds a span
+ * from the last point (chain, all on one line), a stacked dimension from the origin (baseline)
+ * or a value on the common line from the origin (running), until Enter or Escape. Each
+ * dimension is one command and is selected.
  */
 export class DimensionLinearTool extends BaseTool {
   readonly id = 'dimension-linear';
@@ -137,22 +135,18 @@ export class DimensionLinearTool extends BaseTool {
     return { ...this.options, method: this.method };
   }
 
-  /** The offset and the field value are typed. */
+  /** The offset may be typed. */
   override getInputRequest(): InputRequest {
-    return this.step === 'line' || this.step === 'value' ? 'value' : null;
+    return this.step === 'line' ? 'value' : null;
   }
 
   override getPrompt(): string {
-    const prompt = DIMENSION_LINEAR_PROMPTS[this.step];
-    if (this.step !== 'value' || !this.ctx) return prompt;
-    const target = dimensionTarget(this.ctx);
-    const gis = this.gisValue();
-    if (!target || gis === null) return prompt;
-    const decimal = decimalSeparator(this.ctx.getLocale());
-    return prompt.replace(
-      '{gis}',
-      formatDimensionNumber(gis, target.layer.dimension.preset, decimal),
-    );
+    return DIMENSION_LINEAR_PROMPTS[this.step];
+  }
+
+  /** Nothing in progress: the first point (or origin) is still to come. */
+  override isIdle(): boolean {
+    return this.step === 'first' || this.step === 'origin';
   }
 
   override activate(ctx: ToolContext, options?: ToolOptions): void {
@@ -204,10 +198,9 @@ export class DimensionLinearTool extends BaseTool {
     if (this.points.length > 0 || this.set) this.reset();
   }
 
-  /** Enter keeps the GIS value in the value step, and ends a set while it waits for a point. */
+  /** Enter ends a set while it waits for its next point. */
   override finish(): void {
-    if (this.step === 'value') this.insert(null, null);
-    else if (this.step === 'next') this.reset();
+    if (this.step === 'next') this.reset();
   }
 
   /** Backspace steps back one step; while a set waits for its next point it ends the set. */
@@ -215,17 +208,6 @@ export class DimensionLinearTool extends BaseTool {
     switch (this.step) {
       case 'next':
         this.reset();
-        return true;
-      case 'value':
-        if (this.set) {
-          this.points = [];
-          this.refs = [];
-          this.goTo('next');
-        } else if (this.method === 'tie') {
-          this.points.pop();
-          this.refs.pop();
-          this.goTo('second');
-        } else this.goTo('line');
         return true;
       case 'line':
         this.points.pop();
@@ -242,31 +224,15 @@ export class DimensionLinearTool extends BaseTool {
 
   /** A typed point is the next measured point, or (in the line step) the dimension line's position. */
   override handleInput(coordinate: number[]): boolean {
-    if (this.step === 'value') return false;
     this.take(coordinate);
     return true;
   }
 
-  /** The line step takes the offset, the value step the field value. */
+  /** The line step takes the offset (on the side the pointer last showed) and inserts. */
   override handleLength(metres: number): boolean {
-    if (this.step === 'line' && metres >= 0) {
-      this.offset = Math.sign(this.offset || 1) * metres;
-      this.goTo('value');
-      return true;
-    }
-    if (this.step === 'value' && metres > 0) {
-      this.insert(metres, null);
-      return true;
-    }
-    return false;
-  }
-
-  /** `t <text>` in the value step inserts the dimension with a free text. */
-  override handleText(text: string): boolean {
-    if (this.step !== 'value') return false;
-    const match = /^t\s+(.+)$/i.exec(text.trim());
-    if (!match) return false;
-    this.insert(null, match[1]!);
+    if (this.step !== 'line' || !(metres >= 0)) return false;
+    this.offset = Math.sign(this.offset || 1) * metres;
+    this.insert();
     return true;
   }
 
@@ -319,10 +285,11 @@ export class DimensionLinearTool extends BaseTool {
       }
       this.refs = [this.refs[0] ?? null, ref];
       this.offset = 0;
-      this.goTo(this.method === 'tie' ? 'value' : 'line');
+      if (this.method === 'tie') this.insert();
+      else this.goTo('line');
     } else if (this.step === 'line') {
       this.offset = this.offsetAt(coordinate);
-      this.goTo('value');
+      this.insert();
     } else if (this.step === 'next' && this.set) {
       this.takeNext(ctx, this.set, coordinate, ref);
     }
@@ -358,7 +325,7 @@ export class DimensionLinearTool extends BaseTool {
     } else {
       this.offset = set.offset;
     }
-    this.goTo('value');
+    this.insert();
   }
 
   /** Unit vector of the measured direction (map units). */
@@ -418,7 +385,8 @@ export class DimensionLinearTool extends BaseTool {
     return dimensionValues(feature, target.layer.dimension, ctx.getProjection())?.gis ?? null;
   }
 
-  private insert(fieldValue: number | null, text: string | null): void {
+  /** Insert the dimension in progress with its GIS value (the field value comes later). */
+  private insert(): void {
     const ctx = this.ctx;
     const target = ctx && dimensionTarget(ctx);
     if (!ctx || !target || this.points.length < 2) return;
@@ -442,8 +410,8 @@ export class DimensionLinearTool extends BaseTool {
       ...defaultProperties(target.layer),
       ...drawn.getProperties(),
       gisValue: round(gis, 3),
-      fieldValue,
-      text,
+      fieldValue: null,
+      text: null,
     });
     const set = this.set;
     if (set) {
@@ -471,7 +439,7 @@ export class DimensionLinearTool extends BaseTool {
   /** Draw the dimension in progress in the layer's own dimension style. */
   private drawDimension(): void {
     this.dimensionSource.clear(true);
-    const shown = this.step === 'line' || this.step === 'value' || this.method === 'tie';
+    const shown = this.step === 'line' || this.method === 'tie';
     const feature = shown ? this.feature() : null;
     if (feature) this.dimensionSource.addFeature(feature);
   }

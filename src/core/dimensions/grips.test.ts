@@ -8,11 +8,13 @@ import { dimensionValues } from './values';
 // Near the origin of Web Mercator one map unit is one metre.
 const projection = 'EPSG:3857';
 const config = { tolerance: 0.05 };
+/** 1 mm of paper is 0.1 m: the value label stands 0.1 m above the line. */
+const scale = { referenceScale: 100 };
 
 function setup(points: number[][], properties: Record<string, unknown>) {
   const feature = new Feature({ geometry: new LineString(points), ...properties });
   const values = dimensionValues(feature, config, projection)!;
-  return { feature, values, grips: dimensionGrips(feature, values, projection) };
+  return { feature, values, grips: dimensionGrips(feature, values, projection, scale) };
 }
 
 const close = (a: number[], b: number[]) => {
@@ -31,7 +33,7 @@ describe('dimensionGrips / moveGrip', () => {
     );
     expect(grips.map((g) => g.kind)).toEqual(['point', 'point', 'line', 'text']);
     close(grips[2]!.at, [2, 2]);
-    close(grips[3]!.at, [6, 2]);
+    close(grips[3]!.at, [6, 2.1]); // at the label: 0.1 m above the line
     expect(moveGrip(feature, values, grips[2]!, [3, -4], projection)!.properties).toEqual({
       offset: -4,
     });
@@ -69,7 +71,7 @@ describe('dimensionGrips / moveGrip', () => {
     const last = moveGrip(
       twice,
       again,
-      dimensionGrips(twice, again, projection)[1]!,
+      dimensionGrips(twice, again, projection, scale)[1]!,
       [8, 0],
       projection,
     )!;

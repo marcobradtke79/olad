@@ -328,11 +328,13 @@ export interface DimensionConfig {
   terminator?: DimensionTerminator;
   /** Largest difference between field and GIS value in metres before a dimension deviates. Default `0.05`. */
   tolerance?: number;
-  /** How a value without a field measurement is shown: `'brackets'` (computed) or `'plain'`. Default `'brackets'`. */
+  /** How a value without a field measurement is shown: `'plain'` (told apart by `computedColor`) or in `'brackets'`. Default `'plain'`. */
   showComputed?: 'brackets' | 'plain';
-  /** Line and text colour. Default `'#111827'`. */
+  /** Line colour, and text colour of field values. Default `'#111827'`. */
   color?: string;
-  /** Colour of dimensions whose field value deviates beyond `tolerance`. Default `'#dc2626'`. */
+  /** Text colour of values computed from the map (no field value). Default `'#6b7280'`. */
+  computedColor?: string;
+  /** Text colour of values whose field value deviates from the GIS value beyond `tolerance`. Default `'#dc2626'`. */
   deviationColor?: string;
   /** CSS font family. Default `'sans-serif'`. */
   font?: string;

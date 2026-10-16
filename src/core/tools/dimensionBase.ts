@@ -5,12 +5,6 @@ import type Interaction from 'ol/interaction/Interaction';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import { insertFeature } from '../changes/commands';
-import {
-  decimalSeparator,
-  formatDimensionAngle,
-  formatDimensionNumber,
-  formatSlope,
-} from '../dimensions/format';
 import { dimensionValues } from '../dimensions/values';
 import { dimensionStyleFunction } from '../layers/dimension';
 import { dimensionTarget, type DimensionTarget } from './dimension';
@@ -20,10 +14,10 @@ import { createPreviewLayer, PREVIEW_LAYER_PROPERTY, PREVIEW_VERTEX_PROPERTY } f
 import { BaseTool, type ToolContext, type ToolOptions } from './Tool';
 
 /**
- * Shared machinery of the angular and radial dimension tools: the point-pick interaction with
- * the raw pointer position, markers of the picked points, the dimension in progress drawn in
- * the active dimension layer's own style, and the insert (GIS value, field value or text,
- * schema defaults; selected afterwards).
+ * Shared machinery of the angular, radial and survey dimension tools: the point-pick
+ * interaction with the raw pointer position, markers of the picked points, the dimension in
+ * progress drawn in the active dimension layer's own style, and the insert (GIS value, schema
+ * defaults; selected afterwards). Field values are set later by clicking the value.
  */
 export abstract class DimensionToolBase extends BaseTool {
   private pointer: PointPickInteraction | null = null;
@@ -87,12 +81,6 @@ export abstract class DimensionToolBase extends BaseTool {
     this.dimensionLayer = null;
   }
 
-  /** `t <text>` in the value step inserts the dimension with a free text. */
-  protected freeText(text: string): string | null {
-    const match = /^t\s+(.+)$/i.exec(text.trim());
-    return match ? match[1]! : null;
-  }
-
   protected target(): DimensionTarget | null {
     return this.ctx ? dimensionTarget(this.ctx) : null;
   }
@@ -106,28 +94,11 @@ export abstract class DimensionToolBase extends BaseTool {
     return dimensionValues(feature, target.layer.dimension, ctx.getProjection())?.gis ?? null;
   }
 
-  /** The GIS value as the layer writes it, for the prompt. */
-  protected formattedGis(): string {
-    const ctx = this.ctx;
-    const target = this.target();
-    const feature = this.dimension();
-    if (!ctx || !target || !feature) return '';
-    const values = dimensionValues(feature, target.layer.dimension, ctx.getProjection());
-    if (!values || values.gis === null) return '';
-    const decimal = decimalSeparator(ctx.getLocale());
-    const config = target.layer.dimension;
-    if (values.unit === '%') return formatSlope(values.gis, decimal);
-    return values.unit === 'deg'
-      ? formatDimensionAngle(values.gis, config.angleUnit, decimal)
-      : formatDimensionNumber(values.gis, config.preset, decimal);
-  }
-
-  /** Insert the dimension in progress as one command, select it and start over. */
-  protected insert(
-    fieldValue: number | null,
-    text: string | null,
-    extra: Record<string, unknown> = {},
-  ): void {
+  /**
+   * Insert the dimension in progress as one command, select it and start over. `fieldValue` is
+   * only given where the dimension has no GIS value (a level's height, a free slope).
+   */
+  protected insert(fieldValue: number | null = null, extra: Record<string, unknown> = {}): void {
     const ctx = this.ctx;
     const target = this.target();
     const drawn = this.dimension();
@@ -139,7 +110,7 @@ export abstract class DimensionToolBase extends BaseTool {
       ...drawn.getProperties(),
       ...(gis === null ? {} : { gisValue: Math.round(gis * 1e6) / 1e6 }),
       fieldValue,
-      text,
+      text: null,
       ...extra,
     });
     this.reset();

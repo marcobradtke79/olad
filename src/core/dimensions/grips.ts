@@ -2,7 +2,9 @@ import type Feature from 'ol/Feature';
 import type { Coordinate } from 'ol/coordinate';
 import LineString from 'ol/geom/LineString';
 import type { ProjectionLike } from 'ol/proj';
+import type { ResolvedDimensionConfig } from '../config/types';
 import { unitsPerMetre } from '../measure';
+import { dimensionLabelAnchors } from './labels';
 import { referencesOf, type DimensionReference } from './references';
 import { sweepAngle, type DimensionValues } from './values';
 
@@ -35,11 +37,16 @@ function linear(values: DimensionValues, offset: number, perMetre: number) {
   return { p1, u, n, length, d1: add(p1, n, offset * perMetre) };
 }
 
-/** The grips of a dimension, in the view projection. Tie, station, level and slope: points only. */
+/**
+ * The grips of a dimension, in the view projection: its points, the dimension line or arc, and
+ * for aligned and rotated dimensions the value (at the label, which `config.referenceScale`
+ * places). Tie, station, level and slope: points only.
+ */
 export function dimensionGrips(
   feature: Feature,
   values: DimensionValues,
   projection: ProjectionLike,
+  config: Pick<ResolvedDimensionConfig, 'referenceScale'>,
 ): DimensionGrip[] {
   const grips: DimensionGrip[] = values.points.map((at, index) => ({ kind: 'point', index, at }));
   const offset = Number(feature.get('offset')) || 0;
@@ -47,11 +54,12 @@ export function dimensionGrips(
   if (LINEAR.includes(values.type)) {
     const perMetre = unitsPerMetre(projection, first);
     const { u, length, d1 } = linear(values, offset, perMetre);
-    const shift = (Number(feature.get('textPosition')) || 0) * perMetre;
-    grips.push(
-      { kind: 'line', at: add(d1, u, length * 0.2) },
-      { kind: 'text', at: add(d1, u, length / 2 + shift) },
+    grips.push({ kind: 'line', at: add(d1, u, length * 0.2) });
+    // A running value stands at the point's foot, not at a text position: no text grip.
+    const label = dimensionLabelAnchors(feature, values, projection, config.referenceScale).find(
+      (anchor) => anchor.kind === 'value',
     );
+    if (values.type !== 'running' && label) grips.push({ kind: 'text', at: label.at });
   } else if (values.type === 'angular') {
     const radius = offset * unitsPerMetre(projection, second);
     const sweep = sweepAngle(second, first, third!);

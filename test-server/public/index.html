@@ -186,6 +186,8 @@
         </olcad-panel>
         <div id="map"></div>
       </olcad-dock>
+      <!-- The inline value editor of dimensions: opens where a dimension's value is clicked. -->
+      <olcad-dimension-input></olcad-dimension-input>
       <!-- File → Export…: layers, format and CRS; downloads one file. -->
       <olcad-export-dialog></olcad-export-dialog>
       <!-- View → Layer styles…: drawing order, colours, labels, zoom range. -->
@@ -254,6 +256,7 @@
           window.localLayerPersistence = olcad.persistLocalLayers(editor);
           for (const toolbar of document.querySelectorAll('olcad-toolbar')) toolbar.editor = editor;
           document.querySelector('olcad-straightedge').editor = editor;
+          document.querySelector('olcad-dimension-input').editor = editor;
           document.querySelector('olcad-snap-settings').editor = editor;
           document.querySelector('olcad-grid-settings').editor = editor;
           document.querySelector('olcad-angle-lock').editor = editor;
