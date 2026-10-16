@@ -930,3 +930,78 @@ test.describe('dimension value editor', () => {
     expect(await page.evaluate(() => window.editor.tools.getActive())).toBe('dimension-linear');
   });
 });
+
+test.describe('dimension tools pick their layer', () => {
+  test.beforeEach(async ({ page, request }) => {
+    await request.post('/reset');
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('dimensions').featureCount))
+      .toBe(4);
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('parcels').featureCount))
+      .toBe(2);
+    await page.evaluate(() => window.editor.setEditMode(true));
+  });
+
+  const activeLayer = (page: Page) => page.evaluate(() => window.editor.layers.getActive());
+
+  test('the buttons are enabled without an active layer; the tool makes the dimension layer active', async ({
+    page,
+  }) => {
+    expect(await activeLayer(page)).toBeNull();
+    for (const id of ['linear', 'angular', 'radial', 'survey']) {
+      await expect(
+        page.locator(`olcad-toolbar .olcad-toolbar__tool--dimension-${id}`),
+      ).toBeEnabled();
+    }
+    await page.locator('olcad-toolbar .olcad-toolbar__tool--dimension-linear').click();
+    await expect.poll(() => activeLayer(page)).toBe('dimensions');
+    await expect(page.locator('olcad-toolbar[name="main"]')).toContainText('Layer: Dimensions');
+    const ring = await parcelRing(page, 2);
+    await page.evaluate(
+      ([a, b]) => {
+        const e = window.editor;
+        e.input(`${a![0]},${a![1]}`);
+        e.input(`${b![0]},${b![1]}`);
+        e.input('4');
+      },
+      [ring[0]!, ring[1]!],
+    );
+    expect(await dimensionInserts(page)).toHaveLength(1);
+    // Another dimension tool keeps the layer; a different tool restores the previous choice.
+    await page.evaluate(() => window.editor.tools.activate('dimension-angular'));
+    expect(await activeLayer(page)).toBe('dimensions');
+    await page.evaluate(() => window.editor.tools.activate('select'));
+    expect(await activeLayer(page)).toBeNull();
+    await expect(page.locator('olcad-toolbar[name="main"]')).toContainText('No layer selected');
+  });
+
+  test('restores the previously active layer, and ends when another layer takes over', async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      window.editor.layers.setActive('parcels');
+      window.editor.tools.activate('dimension-radial');
+    });
+    expect(await activeLayer(page)).toBe('dimensions');
+    await page.evaluate(() => window.editor.tools.deactivate());
+    expect(await activeLayer(page)).toBe('parcels');
+    // A layer chosen while the tool runs ends the tool and stays.
+    await page.evaluate(() => {
+      window.editor.tools.activate('dimension-linear');
+      window.editor.layers.setActive('roads');
+    });
+    expect(await page.evaluate(() => window.editor.tools.getActive())).toBeNull();
+    expect(await activeLayer(page)).toBe('roads');
+    // Leaving edit mode ends the tool and restores too.
+    await page.evaluate(() => {
+      window.editor.layers.setActive(null);
+      window.editor.tools.activate('dimension-survey');
+    });
+    expect(await activeLayer(page)).toBe('dimensions');
+    await page.evaluate(() => window.editor.setEditMode(false));
+    expect(await activeLayer(page)).toBeNull();
+  });
+});

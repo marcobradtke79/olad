@@ -196,7 +196,7 @@ export type {
   TemplateChange,
 } from './core/templates';
 export type { SnapResult, SnapTarget } from './core/snapping';
-export { BaseTool } from './core/tools';
+export { BaseTool, pickDimensionLayer } from './core/tools';
 export {
   createHighlightStyle,
   HIGHLIGHT_LAYER_PROPERTY,

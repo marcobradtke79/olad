@@ -182,7 +182,7 @@ Purpose: place a text on the map as a point object of a text layer (`layers[].te
 
 ## `dimension-linear`
 
-Purpose: draw linear dimensions into the active dimension layer ([`layers[].dimension`](configuration.md#layersdimension-object-form), configured or a local one). Precondition: the active layer is a dimension layer that allows `insert`; there is no draft fallback. One tool with six variants (`editor.tools.activate('dimension-linear', { method })`, default `aligned`):
+Purpose: draw linear dimensions into a dimension layer ([`layers[].dimension`](configuration.md#layersdimension-object-form), configured or a local one). Precondition: some dimension layer allows `insert`; there is no draft fallback. Activating the tool makes the active layer a dimension layer by itself — the one already active when it is a dimension layer, else the first dimension layer in the layer list (`pickDimensionLayer`, exported) — and the previously active layer comes back when the dimension tools end (another tool, Escape, edit mode off), unless another layer was chosen meanwhile. Making a non-dimension layer active while the tool runs ends it. One tool with six variants (`editor.tools.activate('dimension-linear', { method })`, default `aligned`):
 
 | `method`   | Measures                                                                                                                                                                                                  | Stored as                                  |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
@@ -206,7 +206,7 @@ A dimension is drawn with its **GIS value** (measured from the map, in the layer
 
 ## `dimension-angular`
 
-Purpose: dimension an angle in the active dimension layer. Precondition: as `dimension-linear`. Two variants (`{ method }`, default `points`):
+Purpose: dimension an angle in a dimension layer. Precondition and layer choice as `dimension-linear`. Two variants (`{ method }`, default `points`):
 
 | `method`   | Steps                                                                                                                                                                                                                               |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -217,7 +217,7 @@ Then the **arc**: the pointer chooses which angle is dimensioned (the sector it 
 
 ## `dimension-radial`
 
-Purpose: dimension a circle or arc in the active dimension layer. Three variants (`{ method }`, default `radius`): `radius` (R), `diameter` (Ø), `arc` (arc length, ⌒).
+Purpose: dimension a circle or arc in a dimension layer (chosen as for `dimension-linear`). Three variants (`{ method }`, default `radius`): `radius` (R), `diameter` (Ø), `arc` (arc length, ⌒).
 
 1. **Curve**: click a circle, an arc or a curved edge. The circle is fitted to the evenly turning vertices around the click (linearized circles and circular arcs inside lines and rings; an ellipse's turns vary too much to fit, use three points there). Where no circle is found the prompt asks for **three points on the arc** (snapped), and their circumcircle is used.
 2. `arc` only: **start** and **end** on the curve (projected onto the circle); the arc is the one holding the picked point (or the middle of the three points).
@@ -227,7 +227,7 @@ Stored as `dimType` `radius` / `diameter` with [centre, point on the circle], `a
 
 ## `dimension-survey`
 
-Purpose: survey and landscape dimensions in the active dimension layer. Three variants (`{ method }`, default `station`):
+Purpose: survey and landscape dimensions in a dimension layer (chosen as for `dimension-linear`). Three variants (`{ method }`, default `station`):
 
 | `method`  | Steps                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

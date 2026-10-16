@@ -65,6 +65,7 @@ export {
   DEFAULT_DIMENSION_LINEAR_METHOD,
   dimensionLinearMethod,
   dimensionTarget,
+  pickDimensionLayer,
   type DimensionLinearMethod,
   type DimensionLinearStep,
   type DimensionTarget,

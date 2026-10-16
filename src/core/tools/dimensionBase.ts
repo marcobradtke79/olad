@@ -7,7 +7,7 @@ import VectorSource from 'ol/source/Vector';
 import { insertFeature } from '../changes/commands';
 import { dimensionValues } from '../dimensions/values';
 import { dimensionStyleFunction } from '../layers/dimension';
-import { dimensionTarget, type DimensionTarget } from './dimension';
+import { dimensionTarget, pickDimensionLayer, type DimensionTarget } from './dimension';
 import { defaultProperties } from './draw';
 import { PointPickInteraction } from './pointer';
 import { createPreviewLayer, PREVIEW_LAYER_PROPERTY, PREVIEW_VERTEX_PROPERTY } from './preview';
@@ -37,8 +37,9 @@ export abstract class DimensionToolBase extends BaseTool {
   /** Back to the first step. */
   protected abstract reset(): void;
 
+  /** Needs a dimension layer that allows inserts; the editor makes it active (`pickDimensionLayer`). */
   override canActivate(ctx: ToolContext, _options?: ToolOptions): boolean {
-    return dimensionTarget(ctx) !== null;
+    return pickDimensionLayer(ctx.layers) !== null;
   }
 
   override activate(ctx: ToolContext, options?: ToolOptions): void {

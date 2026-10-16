@@ -168,7 +168,7 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
   'dimension-linear': {
     label: 'Linear dimension',
     title:
-      'Dimension a distance in the active dimension layer: two points, the dimension line, then the field value; the triangle opens the variants',
+      'Dimension a distance: two points, then the dimension line; drawn into the first dimension layer, the field value typed by clicking the value; the triangle opens the variants',
     icon: 'dimensionAligned',
     variants: [
       {
@@ -223,7 +223,7 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
   'dimension-angular': {
     label: 'Angular dimension',
     title:
-      'Dimension an angle in the active dimension layer: three points or two edges, the arc, then the field angle; the triangle opens the variants',
+      'Dimension an angle: three points or two edges, then the arc; drawn into the first dimension layer, the field angle typed by clicking the value; the triangle opens the variants',
     icon: 'dimensionAngular',
     variants: [
       {
@@ -246,7 +246,7 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
   'dimension-radial': {
     label: 'Radial dimension',
     title:
-      'Dimension a circle or arc in the active dimension layer: click the curve, place the dimension, then the field value; the triangle opens the variants',
+      'Dimension a circle or arc: click the curve, then place the dimension; drawn into the first dimension layer, the field value typed by clicking the value; the triangle opens the variants',
     icon: 'dimensionRadius',
     variants: [
       {
@@ -275,7 +275,7 @@ export const TOOL_BUTTONS: Record<string, ToolButton> = {
   'dimension-survey': {
     label: 'Survey dimension',
     title:
-      'Orthogonal survey, spot levels and slopes in the active dimension layer; the triangle opens the variants',
+      'Orthogonal survey, spot levels and slopes, drawn into the first dimension layer; the triangle opens the variants',
     icon: 'dimensionStation',
     variants: [
       {

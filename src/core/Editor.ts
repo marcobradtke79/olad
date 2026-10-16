@@ -136,6 +136,7 @@ import {
   type InputRequest,
   type ToolOptions,
 } from './tools';
+import { dimensionTarget, pickDimensionLayer } from './tools/dimension';
 
 /** Class set on the map target element while edit mode is on. */
 export const EDIT_MODE_CLASS = 'olcad-edit-mode';
@@ -452,6 +453,14 @@ const LAYER_BOUND_TOOLS = [
   'curve',
   'parallel',
   'text',
+  'dimension-linear',
+  'dimension-angular',
+  'dimension-radial',
+  'dimension-survey',
+];
+
+/** Tools that draw into a dimension layer: the editor makes one active when they start. */
+const DIMENSION_TOOLS = [
   'dimension-linear',
   'dimension-angular',
   'dimension-radial',
@@ -786,6 +795,11 @@ class EditorImpl implements Editor {
   private crosshair: Crosshair | null = null;
   private gridLayer: GridLayer | null = null;
   private pickHandler: ((event: MapBrowserEvent) => void) | null = null;
+  /**
+   * The layer a dimension tool made active, and the one active before it, so the previous
+   * layer comes back when the dimension tools end (`null` while no tool switched layers).
+   */
+  private dimensionLayerSwitch: { previous: string | null; picked: string } | null = null;
   /** The pixel of the last click that hit a dimension value: its `singleclick` is swallowed too. */
   private valueClickPixel: number[] | null = null;
   private readonly valueClickHandler = (event: MapBrowserEvent): boolean =>
@@ -944,7 +958,12 @@ class EditorImpl implements Editor {
         if (!config.editMode && !this.toolManager.isReadOnly(id)) {
           throw new Error('Tools require edit mode');
         }
-        return this.toolManager.activate(id, options);
+        // A dimension tool draws into a dimension layer: make the first one active for it (the
+        // previous active layer comes back when the dimension tools end).
+        const switched = DIMENSION_TOOLS.includes(id) ? this.switchToDimensionLayer() : null;
+        const activated = this.toolManager.activate(id, options);
+        if (!activated && switched) this.restoreLayerAfterDimensionTool();
+        return activated;
       },
       deactivate: () => this.toolManager.deactivate(),
       cancel: () => this.toolManager.cancel(),
@@ -1124,10 +1143,11 @@ class EditorImpl implements Editor {
     };
     // Tools add their interactions after ours; keep the snap interaction last so it handles
     // events first and the tools receive snapped coordinates.
-    this.emitter.on('toolchange', () => {
+    this.emitter.on('toolchange', ({ id }) => {
       this.map.removeInteraction(this.snapInteraction);
       this.map.addInteraction(this.snapInteraction);
       this.updateInspect();
+      if (id === null || !DIMENSION_TOOLS.includes(id)) this.restoreLayerAfterDimensionTool();
     });
     // A click on a dimension's value (map listeners run before any interaction): the value
     // editor, instead of a selection or a tool point.
@@ -1139,6 +1159,11 @@ class EditorImpl implements Editor {
     this.emitter.on('activelayerchange', () => {
       const active = this.toolManager.getActive();
       if (!active || !LAYER_BOUND_TOOLS.includes(active)) return;
+      // A dimension tool whose layer was taken away (another layer made active) ends.
+      if (DIMENSION_TOOLS.includes(active) && !this.dimensionTargetNow()) {
+        this.toolManager.deactivate();
+        return;
+      }
       const options = this.toolManager.getActiveOptions();
       if (this.toolManager.activate(active, options)) return;
       if (!this.toolManager.activate(active)) this.toolManager.deactivate();
@@ -1783,6 +1808,43 @@ class EditorImpl implements Editor {
       this.gridLayer?.attach(null);
     }
     this.map.getTargetElement()?.classList.toggle(EDIT_MODE_CLASS, on);
+  }
+
+  /** The dimension layer the active layer is, for the dimension tools, or `null`. */
+  private dimensionTargetNow(): string | null {
+    const target = dimensionTarget({
+      layers: this.layerManager,
+      getActiveLayer: () => this.layerManager.getActive(),
+    });
+    return target?.layerId ?? null;
+  }
+
+  /**
+   * Make the first dimension layer that allows inserts the active layer for a dimension tool,
+   * remembering the previous one. Returns the picked layer, or `null` when the active layer
+   * already is one or none exists.
+   */
+  private switchToDimensionLayer(): string | null {
+    if (this.dimensionTargetNow()) return null;
+    const picked = pickDimensionLayer(this.layerManager);
+    if (picked === null) return null;
+    this.dimensionLayerSwitch ??= { previous: this.layerManager.getActive(), picked };
+    this.dimensionLayerSwitch.picked = picked;
+    this.layerManager.setActive(picked);
+    return picked;
+  }
+
+  /**
+   * Put the layer back that was active before a dimension tool switched it, unless the user
+   * chose another layer meanwhile or the previous one is gone.
+   */
+  private restoreLayerAfterDimensionTool(): void {
+    const change = this.dimensionLayerSwitch;
+    if (!change) return;
+    this.dimensionLayerSwitch = null;
+    if (this.layerManager.getActive() !== change.picked) return;
+    if (change.previous !== null && !this.layerManager.has(change.previous)) return;
+    this.layerManager.setActive(change.previous);
   }
 
   /**

@@ -55,6 +55,7 @@ export interface DimensionTarget {
 /**
  * Where a dimension goes: the active layer, when it is a dimension layer that allows inserts.
  * `null` otherwise (dimensions never go into the draft layer, which is not a dimension layer).
+ * The editor makes such a layer active when a dimension tool is activated (`pickDimensionLayer`).
  */
 export function dimensionTarget(
   ctx: Pick<ToolContext, 'layers' | 'getActiveLayer'>,
@@ -65,6 +66,21 @@ export function dimensionTarget(
   }
   const layer = ctx.layers.getConfig(layerId);
   return layer.dimension ? { layerId, layer: layer as DimensionTarget['layer'] } : null;
+}
+
+/**
+ * The layer a dimension tool draws into: the active layer when it is a dimension layer that
+ * allows inserts, else the first such layer in the layer list (configured or local), or `null`
+ * when there is none. No side effects: the editor makes the pick the active layer on activation.
+ */
+export function pickDimensionLayer(
+  layers: Pick<ToolContext['layers'], 'list' | 'has' | 'canEdit' | 'getConfig' | 'getActive'>,
+): string | null {
+  const isTarget = (id: string) =>
+    layers.has(id) && layers.canEdit(id, 'insert') && Boolean(layers.getConfig(id).dimension);
+  const active = layers.getActive();
+  if (active !== null && isTarget(active)) return active;
+  return layers.list().find((info) => isTarget(info.id))?.id ?? null;
 }
 
 const round = (value: number, digits: number) => Math.round(value * 10 ** digits) / 10 ** digits;
@@ -126,8 +142,9 @@ export class DimensionLinearTool extends BaseTool {
   private readonly markerSource = new VectorSource<Feature>();
   private readonly dimensionSource = new VectorSource<Feature>();
 
+  /** Needs a dimension layer that allows inserts; the editor makes it active (`pickDimensionLayer`). */
   override canActivate(ctx: ToolContext, options?: ToolOptions): boolean {
-    return dimensionLinearMethod(options) !== null && dimensionTarget(ctx) !== null;
+    return dimensionLinearMethod(options) !== null && pickDimensionLayer(ctx.layers) !== null;
   }
 
   /** Reports the variant in effect, so the toolbar can mirror it. */

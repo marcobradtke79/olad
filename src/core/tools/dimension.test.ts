@@ -12,7 +12,12 @@ import type { InsertFeatureCommand } from '../changes/commands';
 import { resolveLayer } from '../config/defaults';
 import type { ResolvedLayerConfig } from '../config/types';
 import { Selection } from '../selection/Selection';
-import { DIMENSION_LINEAR_PROMPTS, dimensionLinearMethod, DimensionLinearTool } from './dimension';
+import {
+  DIMENSION_LINEAR_PROMPTS,
+  dimensionLinearMethod,
+  DimensionLinearTool,
+  pickDimensionLayer,
+} from './dimension';
 import type { ToolContext } from './Tool';
 
 const selectionConfig = {
@@ -51,10 +56,11 @@ function setup(active: string | null, straightedge = 0) {
   const ctx = {
     map,
     layers: {
-      list: () => [],
+      list: () => Object.keys(layerConfigs).map((id) => ({ id })),
       has: (id: string) => id in layerConfigs,
       canEdit: () => true,
       getConfig: (id: string) => layerConfigs[id]!,
+      getActive: () => active,
     },
     selection,
     execute: vi.fn(() => true),
@@ -92,10 +98,30 @@ describe('dimensionLinearMethod', () => {
 });
 
 describe('DimensionLinearTool', () => {
-  it('needs an active dimension layer', () => {
+  it('needs a dimension layer that allows inserts, not necessarily the active one', () => {
     expect(new DimensionLinearTool().canActivate(setup('dims').ctx)).toBe(true);
-    expect(new DimensionLinearTool().canActivate(setup('roads').ctx)).toBe(false);
-    expect(new DimensionLinearTool().canActivate(setup(null).ctx)).toBe(false);
+    expect(new DimensionLinearTool().canActivate(setup('roads').ctx)).toBe(true);
+    expect(new DimensionLinearTool().canActivate(setup(null).ctx)).toBe(true);
+    const { ctx } = setup(null);
+    Object.assign(ctx.layers, { canEdit: () => false });
+    expect(new DimensionLinearTool().canActivate(ctx)).toBe(false);
+  });
+
+  it('picks the active dimension layer, else the first one in the list', () => {
+    const layers = (active: string | null, ids: string[], insertable = () => true) => ({
+      list: () => ids.map((id) => ({ id })),
+      has: (id: string) => ids.includes(id),
+      canEdit: insertable,
+      getConfig: (id: string) => ({ dimension: id.startsWith('dim') ? {} : undefined }),
+      getActive: () => active,
+    });
+    const pick = (l: ReturnType<typeof layers>) =>
+      pickDimensionLayer(l as unknown as Parameters<typeof pickDimensionLayer>[0]);
+    expect(pick(layers(null, ['roads', 'dims', 'dims2']))).toBe('dims');
+    expect(pick(layers('dims2', ['roads', 'dims', 'dims2']))).toBe('dims2');
+    expect(pick(layers('roads', ['roads', 'dims']))).toBe('dims');
+    expect(pick(layers('dims', ['roads', 'dims'], () => false))).toBeNull();
+    expect(pick(layers(null, ['roads']))).toBeNull();
   });
 
   it('measures two points and inserts with the GIS value when the line is placed', () => {
