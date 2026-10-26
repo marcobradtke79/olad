@@ -4,8 +4,677 @@
     {
       "type": "Feature",
       "id": 100,
-      "properties": { "id": 100, "kind": "hydrant" },
-      "geometry": { "type": "Point", "coordinates": [8.4000, 49.0086] }
+      "properties": {
+        "id": 100,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3976,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 101,
+      "properties": {
+        "id": 101,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3982,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 102,
+      "properties": {
+        "id": 102,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3988,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 103,
+      "properties": {
+        "id": 103,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3994,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 104,
+      "properties": {
+        "id": 104,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 105,
+      "properties": {
+        "id": 105,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4006,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 106,
+      "properties": {
+        "id": 106,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4012,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 107,
+      "properties": {
+        "id": 107,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4018,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 108,
+      "properties": {
+        "id": 108,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4024,
+          49.0078
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 109,
+      "properties": {
+        "id": 109,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3976,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 110,
+      "properties": {
+        "id": 110,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3982,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 111,
+      "properties": {
+        "id": 111,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3988,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 112,
+      "properties": {
+        "id": 112,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3994,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 113,
+      "properties": {
+        "id": 113,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 114,
+      "properties": {
+        "id": 114,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4006,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 115,
+      "properties": {
+        "id": 115,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4012,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 116,
+      "properties": {
+        "id": 116,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4018,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 117,
+      "properties": {
+        "id": 117,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4024,
+          49.0082
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 118,
+      "properties": {
+        "id": 118,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3976,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 119,
+      "properties": {
+        "id": 119,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3982,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 120,
+      "properties": {
+        "id": 120,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3988,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 121,
+      "properties": {
+        "id": 121,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3994,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 122,
+      "properties": {
+        "id": 122,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 123,
+      "properties": {
+        "id": 123,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4006,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 124,
+      "properties": {
+        "id": 124,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4012,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 125,
+      "properties": {
+        "id": 125,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4018,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 126,
+      "properties": {
+        "id": 126,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4024,
+          49.0086
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 127,
+      "properties": {
+        "id": 127,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3976,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 128,
+      "properties": {
+        "id": 128,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3982,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 129,
+      "properties": {
+        "id": 129,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3988,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 130,
+      "properties": {
+        "id": 130,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3994,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 131,
+      "properties": {
+        "id": 131,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 132,
+      "properties": {
+        "id": 132,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4006,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 133,
+      "properties": {
+        "id": 133,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4012,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 134,
+      "properties": {
+        "id": 134,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4018,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 135,
+      "properties": {
+        "id": 135,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4024,
+          49.009
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 136,
+      "properties": {
+        "id": 136,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3976,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 137,
+      "properties": {
+        "id": 137,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3982,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 138,
+      "properties": {
+        "id": 138,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3988,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 139,
+      "properties": {
+        "id": 139,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.3994,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 140,
+      "properties": {
+        "id": 140,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 141,
+      "properties": {
+        "id": 141,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4006,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 142,
+      "properties": {
+        "id": 142,
+        "kind": "hydrant"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4012,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 143,
+      "properties": {
+        "id": 143,
+        "kind": "lamp"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4018,
+          49.0094
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": 144,
+      "properties": {
+        "id": 144,
+        "kind": "bench"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          8.4024,
+          49.0094
+        ]
+      }
     }
   ]
 }

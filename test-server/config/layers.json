@@ -188,7 +188,9 @@
         "typeName": "lamps",
         "version": "1.1.0",
         "outputFormat": "application/json",
-        "strategy": "bbox"
+        "strategy": "bbox",
+        "params": { "maxFeatures": 500 },
+        "fetch": { "credentials": "same-origin" }
       },
       "geometryType": "Point",
       "idProperty": "id",
@@ -197,6 +199,37 @@
         "circle-radius": 5,
         "circle-fill-color": "#facc15",
         "circle-stroke-color": "#713f12",
+        "circle-stroke-width": 1
+      }
+    },
+    {
+      "id": "points-wfs",
+      "title": "Points (WFS 2.0.0, paged)",
+      "visible": false,
+      "snappable": false,
+      "source": {
+        "format": "wfs",
+        "url": "/wfs",
+        "typeName": "points",
+        "version": "2.0.0",
+        "outputFormat": "application/json",
+        "strategy": "all",
+        "pageSize": 20,
+        "params": { "sortBy": "id" }
+      },
+      "geometryType": "Point",
+      "idProperty": "id",
+      "editable": false,
+      "schema": {
+        "fields": [
+          { "name": "id", "type": "integer", "readOnly": true },
+          { "name": "kind", "type": "enum", "values": ["hydrant", "lamp", "bench"] }
+        ]
+      },
+      "style": {
+        "circle-radius": 3,
+        "circle-fill-color": "#a3e635",
+        "circle-stroke-color": "#365314",
         "circle-stroke-width": 1
       }
     },

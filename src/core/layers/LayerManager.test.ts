@@ -59,6 +59,8 @@ describe('LayerManager', () => {
         highlighted: false,
         dataProjection: 'EPSG:4326',
         local: false,
+        loading: false,
+        error: null,
       },
     ]);
     expect(events.onChange).toHaveBeenLastCalledWith({ id: 'a', type: 'add' });

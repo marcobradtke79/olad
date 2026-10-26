@@ -17,14 +17,16 @@ import MVT from 'ol/format/MVT';
 import GeoJSON from 'ol/format/GeoJSON';
 import TopoJSON from 'ol/format/TopoJSON';
 import type { FlatStyleLike } from 'ol/style/flat';
-import type { GeoTiffSourceConfig } from '../config/types';
+import type { FetchConfig, GeoTiffSourceConfig } from '../config/types';
+import { fetchInit } from '../net/fetch';
 
 /**
  * What the raster factory needs of a basemap or an overlay: the id (for errors), the attribution
- * and the source options of one raster type. `minZoom` / `maxZoom` are the tile grid's range here
- * (a basemap's `minZoom` / `maxZoom`, an overlay's `sourceMinZoom` / `sourceMaxZoom`).
+ * and the source options of one raster type; `fetch` applies to the WMTS capabilities request.
+ * `minZoom` / `maxZoom` are the tile grid's range here (a basemap's `minZoom` / `maxZoom`, an
+ * overlay's `sourceMinZoom` / `sourceMaxZoom`).
  */
-export type RasterSpec = { id: string; attribution?: string } & (
+export type RasterSpec = { id: string; attribution?: string; fetch?: FetchConfig } & (
   | { type: 'osm'; maxZoom?: number }
   | {
       type: 'xyz';
@@ -94,7 +96,7 @@ async function loadWmts(
   spec: Extract<RasterSpec, { type: 'wmts' }>,
   ctx: RasterContext,
 ): Promise<void> {
-  const response = await fetch(spec.capabilitiesUrl);
+  const response = await fetch(spec.capabilitiesUrl, fetchInit(spec.fetch));
   if (!response.ok)
     throw new Error(`GetCapabilities failed: ${response.status} ${response.statusText}`);
   const capabilities = new WMTSCapabilities().read(await response.text());

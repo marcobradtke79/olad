@@ -19,6 +19,7 @@ import type { FlatStyleLike } from 'ol/style/flat';
 import type { StyleFunction } from 'ol/style/Style';
 import type { GeometryType, ResolvedLayerConfig, VectorSourceConfig } from '../config/types';
 import type { Locale } from '../i18n';
+import { fetchText, ogcUrl } from '../net/fetch';
 import { dimensionStyleFunction } from './dimension';
 import type { OriginalStore } from './originals';
 import { textStyleFunction } from './text';
@@ -37,6 +38,8 @@ export interface VectorLayerContext {
   originals: OriginalStore;
   onLoad(id: string, features: Feature[]): void;
   onError(id: string, error: Error): void;
+  /** A load started (`true`) or ended (`false`), whichever way it ended. */
+  onLoading?(id: string, loading: boolean): void;
   /** Veto for loaded features by id, for example ones deleted locally but not yet saved. */
   shouldLoad?(layerId: string, featureId: string | number): boolean;
 }
@@ -119,24 +122,49 @@ export function createFormat(source: VectorSourceConfig): FeatureFormat<FeatureL
 const isJsonOutput = (outputFormat: string | undefined): boolean =>
   !!outputFormat && /json/i.test(outputFormat);
 
-/** Build the GetFeature URL for a WFS source. */
+/**
+ * Build the GetFeature URL for a WFS source: the standard parameters, then `source.params`
+ * (which may override them), then the paging parameters of WFS 2.0.0.
+ */
 export function wfsUrl(
   source: VectorSourceConfig,
   extent: number[] | undefined,
   srsName: string,
+  paging?: { count: number; startIndex: number },
 ): string {
   const version = source.version ?? '1.1.0';
-  const url = new URL(source.url!, globalThis.location?.href ?? 'http://localhost/');
-  url.searchParams.set('service', 'WFS');
-  url.searchParams.set('version', version);
-  url.searchParams.set('request', 'GetFeature');
-  url.searchParams.set(version === '2.0.0' ? 'typeNames' : 'typeName', source.typeName!);
-  url.searchParams.set('srsName', srsName);
-  if (source.outputFormat) url.searchParams.set('outputFormat', source.outputFormat);
-  if (extent && extent.every(Number.isFinite)) {
-    url.searchParams.set('bbox', `${extent.join(',')},${srsName}`);
+  return ogcUrl(source.url!, {
+    service: 'WFS',
+    version,
+    request: 'GetFeature',
+    [version === '2.0.0' ? 'typeNames' : 'typeName']: source.typeName!,
+    srsName,
+    outputFormat: source.outputFormat,
+    bbox: extent && extent.every(Number.isFinite) ? `${extent.join(',')},${srsName}` : undefined,
+    ...source.params,
+    ...(paging ? { count: paging.count, startIndex: paging.startIndex } : {}),
+  });
+}
+
+/** `numberReturned` / `numberMatched` of a WFS response (GeoJSON object or GML text). */
+function pageCounts(page: string | Record<string, unknown>): {
+  returned?: number;
+  matched?: number;
+} {
+  if (typeof page === 'string') {
+    const attribute = (name: string) => {
+      const match = new RegExp(`\\b${name}="(\\d+)"`).exec(page);
+      return match ? Number(match[1]) : undefined;
+    };
+    return { returned: attribute('numberReturned'), matched: attribute('numberMatched') };
   }
-  return url.toString();
+  const count = (value: unknown) =>
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^\d+$/.test(value)
+        ? Number(value)
+        : undefined;
+  return { returned: count(page.numberReturned), matched: count(page.numberMatched) };
 }
 
 /** Resolve a CRS identifier (code, URN or URL form) to the registered OpenLayers code. */
@@ -207,33 +235,58 @@ export function readFeatures(
   return { features, dataProjection };
 }
 
-async function fetchData(
+/**
+ * The pages of one load: a single page for most sources, one per request for a paged WFS
+ * 2.0.0 source (`count` / `startIndex` until `numberMatched` is reached or a page is short).
+ */
+async function* fetchPages(
   layer: ResolvedLayerConfig,
   extent: number[],
   resolution: number,
   projection: string,
-): Promise<string | object> {
+): AsyncGenerator<string | object> {
   const source = layer.source;
-  if (source.features) return { type: 'FeatureCollection', features: source.features };
-  if (source.data !== undefined) return source.data;
+  if (source.features) {
+    yield { type: 'FeatureCollection', features: source.features };
+    return;
+  }
+  if (source.data !== undefined) {
+    yield source.data;
+    return;
+  }
   if (source.loader) {
-    return source.loader({
+    yield await source.loader({
       extent: extent as [number, number, number, number],
       resolution,
       projection,
     });
+    return;
   }
-  const url =
-    source.format === 'wfs'
-      ? wfsUrl(
-          source,
-          source.strategy === 'bbox' ? extent : undefined,
-          source.dataProjection ?? projection,
-        )
-      : source.url!;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText} for ${url}`);
-  return response.text();
+  if (source.format !== 'wfs') {
+    yield await fetchText(source.url!, source.fetch);
+    return;
+  }
+  const srsName = source.dataProjection ?? projection;
+  const bboxExtent = source.strategy === 'bbox' ? extent : undefined;
+  const pageSize = source.pageSize;
+  if (!pageSize) {
+    yield await fetchText(wfsUrl(source, bboxExtent, srsName), source.fetch);
+    return;
+  }
+  let startIndex = 0;
+  for (;;) {
+    const url = wfsUrl(source, bboxExtent, srsName, { count: pageSize, startIndex });
+    const text = await fetchText(url, source.fetch);
+    const page = isJsonOutput(source.outputFormat)
+      ? (JSON.parse(text) as Record<string, unknown>)
+      : text;
+    yield page;
+    const { returned, matched } = pageCounts(page);
+    // Without numberReturned the server cannot be paged safely: stop after the first page.
+    if (returned === undefined || returned === 0 || returned < pageSize) return;
+    startIndex += returned;
+    if (matched !== undefined && startIndex >= matched) return;
+  }
 }
 
 /**
@@ -271,8 +324,11 @@ export function createVectorLayer(
     strategy: layer.source.strategy === 'bbox' ? bbox : all,
     loader: (extent, resolution, _projection, success, failure) => {
       const viewProjection = ctx.getProjection();
-      fetchData(layer, extent, resolution, viewProjection)
-        .then((data) => {
+      ctx.onLoading?.(layer.id, true);
+      const loaded: Feature[] = [];
+      const load = async () => {
+        // Pages are read and added one by one, so a paged layer fills up progressively.
+        for await (const data of fetchPages(layer, extent, resolution, viewProjection)) {
           const { features, dataProjection } = readFeatures(
             layer,
             format,
@@ -288,13 +344,19 @@ export function createVectorLayer(
             return ctx.shouldLoad?.(layer.id, id) ?? true;
           });
           vectorSource.addFeatures(fresh);
-          ctx.onLoad(layer.id, fresh);
-          success?.(fresh);
+          loaded.push(...fresh);
+        }
+      };
+      load()
+        .then(() => {
+          ctx.onLoad(layer.id, loaded);
+          success?.(loaded);
         })
         .catch((error: Error) => {
           ctx.onError(layer.id, error);
           failure?.();
-        });
+        })
+        .finally(() => ctx.onLoading?.(layer.id, false));
     },
   });
   const olLayer = new VectorLayer({

@@ -64,7 +64,7 @@ describe('createRasterLayer', () => {
       ctx,
     );
     expect(layer).toBeInstanceOf(TileLayer);
-    expect(fetch).toHaveBeenCalledWith('https://wmts.example.org/caps.xml');
+    expect(fetch).toHaveBeenCalledWith('https://wmts.example.org/caps.xml', {});
     await vi.waitFor(() => expect(ctx.onError).toHaveBeenCalled());
     expect(ctx.onError.mock.calls[0]![0]).toBe('m');
     expect(ctx.onError.mock.calls[0]![1].message).toMatch(/GetCapabilities failed: 404/);

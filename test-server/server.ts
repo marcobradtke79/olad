@@ -4,7 +4,9 @@
  *
  *   GET  /config          test configuration (test-config.json merged with layers.json)
  *   GET  /data/:layer     current data of a GeoJSON layer; other files in data/ are served as is
- *   GET  /wfs             WFS GetFeature emulation (outputFormat=application/json, srsName, bbox)
+ *   GET  /wfs             WFS GetFeature emulation (outputFormat=application/json, srsName, bbox,
+ *                         count / maxFeatures + startIndex paging with numberMatched; ?fail=1 answers
+ *                         500, ?auth=1 needs an Authorization header, ?failonce=<token> fails once per token)
  *   GET  /wms             WMS emulation: GetCapabilities (1.3.0), GetMap (hatched PNG per layer), GetLegendGraphic
  *   POST /changes[?fail=1] apply a change set, answer { idMap }; fail=1 answers 500
  *   GET  /changes/log     every change set received since start / reset
@@ -86,6 +88,8 @@ const seed = new Map<string, FeatureCollection>();
 let data = new Map<string, FeatureCollection>();
 const log: { receivedAt: string; changeSet: ChangeSet; idMap: Record<string, number> }[] = [];
 let nextId = 10_000;
+/** `typeName:token` pairs whose `failonce=<token>` request already failed once. */
+const failedOnce = new Set<string>();
 
 async function loadSeed(): Promise<void> {
   const dir = join(ROOT, 'data');
@@ -432,6 +436,17 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       url.searchParams.get('typeName') ??
       url.searchParams.get('typeNames') ??
       url.searchParams.get('TYPENAME');
+    if (url.searchParams.get('fail') === '1') {
+      return send(res, 500, { error: 'simulated WFS failure (fail=1)' });
+    }
+    if (url.searchParams.get('auth') === '1' && !req.headers.authorization) {
+      return send(res, 401, { error: 'Authorization header required (auth=1)' });
+    }
+    const once = url.searchParams.get('failonce');
+    if (once && typeName && !failedOnce.has(`${typeName}:${once}`)) {
+      failedOnce.add(`${typeName}:${once}`);
+      return send(res, 503, { error: `simulated transient failure (failonce=${once})` });
+    }
     const collection = typeName ? data.get(typeName) : undefined;
     if (!collection) return send(res, 400, { error: `unknown typeName "${typeName}"` });
     if (!/json/i.test(url.searchParams.get('outputFormat') ?? '')) {
@@ -441,12 +456,29 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     }
     const srsName = url.searchParams.get('srsName') ?? 'EPSG:4326';
     const bboxParam = url.searchParams.get('bbox');
-    const features = collection.features
+    const matched = collection.features
       .map((f) => ({ ...f, geometry: transformGeometry(f.geometry, srsName) }))
       .filter(
         (f) => !bboxParam || intersects(f.geometry, bboxParam.split(',').slice(0, 4).map(Number)),
       );
-    return send(res, 200, { type: 'FeatureCollection', features }, MIME['.geojson']);
+    // Paging: WFS 2.0.0 count + startIndex, or the 1.x maxFeatures.
+    const start = Math.max(0, Number(url.searchParams.get('startIndex')) || 0);
+    const limit =
+      Number(url.searchParams.get('count') ?? url.searchParams.get('maxFeatures')) || undefined;
+    const features =
+      limit === undefined ? matched.slice(start) : matched.slice(start, start + limit);
+    return send(
+      res,
+      200,
+      {
+        type: 'FeatureCollection',
+        features,
+        totalFeatures: matched.length,
+        numberMatched: matched.length,
+        numberReturned: features.length,
+      },
+      MIME['.geojson'],
+    );
   }
   if (method === 'GET' && pathname === '/wms') return handleWms(url, res);
   if (method === 'GET' && pathname === '/changes/log') return send(res, 200, log);
@@ -465,6 +497,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
   if (method === 'POST' && pathname === '/reset') {
     resetData();
+    failedOnce.clear();
     return send(res, 200, { ok: true });
   }
 

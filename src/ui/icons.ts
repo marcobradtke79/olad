@@ -82,6 +82,8 @@ export const ICONS = {
   zoomToLayer: svg(
     '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><circle cx="12" cy="12" r="3"/>',
   ),
+  spinner: svg('<path d="M12 3a9 9 0 1 0 9 9"/>'),
+  warning: svg('<path d="M12 3 2.5 20h19z"/><path d="M12 9v5M12 17h.01"/>'),
   snap: svg(
     '<path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 4h4v8a2 2 0 0 0 4 0V4h4"/><path d="M6 8h4M14 8h4"/>',
   ),

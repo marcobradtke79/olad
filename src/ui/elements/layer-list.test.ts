@@ -26,6 +26,8 @@ function layerInfo(id: string, editable: boolean): LayerInfo {
     highlighted: false,
     dataProjection: 'EPSG:4326',
     local: false,
+    loading: false,
+    error: null,
   };
 }
 
@@ -125,6 +127,12 @@ function fakeEditor(editMode = false) {
     failOverlay(id: string, message: string) {
       emitter.emit('overlayerror', { id, error: new Error(message) });
     },
+    /** Set a layer's load state as the core does around a load. */
+    setLoadState(id: string, loading: boolean, error: string | null) {
+      find(id).loading = loading;
+      find(id).error = error;
+      emitter.emit('layerchange', { id, type: 'load' });
+    },
     /** Turn layer `b` into a local layer. */
     makeLocal() {
       find('b').local = true;
@@ -152,6 +160,7 @@ function fakeEditor(editMode = false) {
     place(layer: string, targets?: string[]): Feature;
     addOverlay(info: Partial<OverlayInfo> & { id: string }): void;
     failOverlay(id: string, message: string): void;
+    setLoadState(id: string, loading: boolean, error: string | null): void;
     makeLocal(): void;
   };
   return editor;
@@ -519,5 +528,30 @@ describe('<olcad-layer-list> overlays', () => {
     expect(
       el.querySelector('[data-overlay-id="broken"] [data-detail="error"] dd')!.textContent,
     ).toMatch(/404/);
+  });
+});
+
+describe('<olcad-layer-list> load state', () => {
+  it('shows a spinner while a layer loads and a warning with the message after a failure', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    const row = () => el.querySelector<HTMLElement>('[data-layer-id="a"]')!;
+    expect(row().querySelector('.olcad-layer-list__loading')).toBeNull();
+    editor.setLoadState('a', true, null);
+    expect(row().classList.contains('olcad-layer-list__layer--loading')).toBe(true);
+    expect(row().querySelector('.olcad-layer-list__loading')!.getAttribute('aria-label')).toBe(
+      'Loading',
+    );
+    editor.setLoadState('a', false, '503 Service Unavailable for /wfs');
+    expect(row().classList.contains('olcad-layer-list__layer--loading')).toBe(false);
+    expect(row().classList.contains('olcad-layer-list__layer--error')).toBe(true);
+    const warning = row().querySelector<HTMLElement>('.olcad-layer-list__error')!;
+    expect(warning.dataset.tooltip).toBe('503 Service Unavailable for /wfs');
+    control(el, 'a', 'info').click();
+    expect(el.querySelector('[data-layer-id="a"] [data-detail="error"] dd')!.textContent).toBe(
+      'failed: 503 Service Unavailable for /wfs',
+    );
+    editor.setLoadState('a', false, null);
+    expect(row().querySelector('.olcad-layer-list__error')).toBeNull();
   });
 });

@@ -214,6 +214,31 @@ describe('wfsUrl', () => {
     expect(url.searchParams.get('outputFormat')).toBe('application/json');
   });
 
+  it('appends extra params (which may override) and the paging parameters', () => {
+    const url = new URL(
+      wfsUrl(
+        {
+          format: 'wfs',
+          url: '/wfs?failonce=1',
+          typeName: 'pts',
+          version: '2.0.0',
+          outputFormat: 'application/json',
+          params: { cql_filter: "kind='lamp'", srsName: 'EPSG:25832', maxFeatures: 10 },
+        },
+        undefined,
+        'EPSG:3857',
+        { count: 20, startIndex: 40 },
+      ),
+    );
+    expect(url.searchParams.get('failonce')).toBe('1');
+    expect(url.searchParams.get('typeNames')).toBe('pts');
+    expect(url.searchParams.get('cql_filter')).toBe("kind='lamp'");
+    expect(url.searchParams.get('srsName')).toBe('EPSG:25832');
+    expect(url.searchParams.get('maxFeatures')).toBe('10');
+    expect(url.searchParams.get('count')).toBe('20');
+    expect(url.searchParams.get('startIndex')).toBe('40');
+  });
+
   it('uses typeNames for WFS 2.0.0 and omits an infinite bbox', () => {
     const url = new URL(
       wfsUrl(

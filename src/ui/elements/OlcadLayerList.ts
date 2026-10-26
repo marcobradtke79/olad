@@ -3,6 +3,7 @@ import type { Editor } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
 import type { OverlayInfo } from '../../core/layers/overlays';
 import { setIconButton } from './controls';
+import { icon } from '../icons';
 import { featureTablesOf, onFeatureTableChange } from './OlcadFeatureTable';
 import { isLocalLayerPersisted, onLocalLayerPersistenceChange } from '../localLayerStorage';
 import type { OlcadLayerEditor } from './OlcadLayerEditor';
@@ -317,6 +318,8 @@ export class OlcadLayerList extends HTMLElement {
     row.className = 'olcad-layer-list__layer';
     row.classList.toggle('olcad-layer-list__layer--active', layer.active);
     row.classList.toggle('olcad-layer-list__layer--hidden', !layer.visible);
+    row.classList.toggle('olcad-layer-list__layer--loading', layer.loading);
+    row.classList.toggle('olcad-layer-list__layer--error', layer.error !== null);
     row.dataset.layerId = layer.id;
 
     const button = rowButton;
@@ -333,6 +336,13 @@ export class OlcadLayerList extends HTMLElement {
     const title = document.createElement('span');
     title.className = 'olcad-layer-list__title';
     title.textContent = layer.title;
+
+    // Load state after the name: a spinner while loading, a warning after a failed load.
+    const status: HTMLElement[] = [];
+    if (layer.loading) status.push(statusIcon('loading', 'spinner', 'Loading', 'Loading objects'));
+    if (layer.error !== null) {
+      status.push(statusIcon('error', 'warning', 'Load failed', layer.error));
+    }
 
     const highlight = button('highlight', 'highlight');
     setIconButton(
@@ -427,6 +437,7 @@ export class OlcadLayerList extends HTMLElement {
     detail('snappable', 'Snap target', layer.snappable ? 'yes' : 'no');
     detail('projection', 'Data projection', layer.dataProjection);
     detail('id', 'Id', layer.id);
+    if (layer.error !== null) detail('error', 'Last load', `failed: ${layer.error}`);
     if (open) {
       addDetail(
         details,
@@ -479,6 +490,7 @@ export class OlcadLayerList extends HTMLElement {
     row.append(
       visible,
       title,
+      ...status,
       highlight,
       table,
       edit,
@@ -508,6 +520,22 @@ export class OlcadLayerList extends HTMLElement {
 function isDraft(editor: Editor, feature: Feature): boolean {
   const draft = editor.layers.getDraft();
   return draft !== null && editor.layers.layerOf(feature) === draft;
+}
+
+/** A non-interactive status icon in a row (loading, load failed) with its tooltip. */
+function statusIcon(
+  kind: 'loading' | 'error',
+  name: 'spinner' | 'warning',
+  label: string,
+  description: string,
+): HTMLElement {
+  const el = document.createElement('span');
+  el.className = `olcad-layer-list__${kind}`;
+  el.setAttribute('role', 'img');
+  el.setAttribute('aria-label', label);
+  el.dataset.tooltip = description;
+  el.append(icon(name, document));
+  return el;
 }
 
 /** A row's icon button; `action` plus the row id identify it across re-renders. */

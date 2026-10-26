@@ -14,7 +14,7 @@ test.describe('layers and projections', () => {
     await waitForEditor(page);
     await expect(page.locator('#map canvas')).toBeVisible();
     const rows = page.locator('olcad-layer-list [data-layer-id]');
-    await expect(rows).toHaveCount(11); // the configured layers and the draft layer
+    await expect(rows).toHaveCount(12); // the configured layers and the draft layer
 
     const expected: Record<string, number> = {
       parcels: 2,
@@ -25,6 +25,7 @@ test.describe('layers and projections', () => {
       'survey-points': 1,
       trees: 3,
       lamps: 3,
+      'points-wfs': 0, // hidden at start: loads once shown
       labels: 2,
       dimensions: 4,
       draft: 0,
@@ -59,7 +60,7 @@ test.describe('layers and projections', () => {
     await waitForEditor(page);
     await openFlyout(page, 'layers');
     const enabled = page.locator('olcad-layer-list [data-action="edit"]:not([disabled])');
-    await expect(enabled).toHaveCount(9); // all but the read-only tracks and trees
+    await expect(enabled).toHaveCount(9); // all but the read-only tracks, trees and points
     await expect(page.locator('olcad-toolbar .olcad-toolbar__active-layer')).toHaveText(
       'No layer selected',
     );
@@ -200,7 +201,7 @@ test.describe('layers and projections', () => {
     await expect(page.locator('olcad-layer-list [data-layer-id="points"]')).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => window.editor.layers.get('points').featureCount))
-      .toBe(1);
+      .toBe(45); // the seed points file
 
     await page.evaluate(() =>
       window.editor.basemaps.add({
@@ -217,7 +218,78 @@ test.describe('layers and projections', () => {
     expect(await page.evaluate(() => window.editor.basemaps.getActive())).toBe('osm');
   });
 
+  test('pages a WFS 2.0.0 layer and marks failed loads until a load succeeds', async ({ page }) => {
+    const requests: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/wfs?')) requests.push(r.url());
+    });
+    await page.goto('/');
+    await waitForEditor(page);
+    // Hidden at start (its 45 points would sit under the other specs' clicks): show it to load.
+    await page.evaluate(() => window.editor.layers.setVisible('points-wfs', true));
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('points-wfs').featureCount))
+      .toBe(45);
+    const pages = requests.filter((u) => /typeNames=points/.test(u)).map((u) => new URL(u));
+    expect(pages.map((u) => u.searchParams.get('startIndex'))).toEqual(['0', '20', '40']);
+    expect(pages.every((u) => u.searchParams.get('count') === '20')).toBe(true);
+    expect(pages.every((u) => u.searchParams.get('sortBy') === 'id')).toBe(true);
+    expect(requests.some((u) => /typeName=lamps/.test(u) && /maxFeatures=500/.test(u))).toBe(true);
+    expect(await page.evaluate(() => window.editor.layers.get('points-wfs'))).toMatchObject({
+      loading: false,
+      error: null,
+    });
+
+    // A source whose first request fails: the row carries the message until a load succeeds.
+    await page.evaluate(() =>
+      window.editor.layers.add({
+        id: 'flaky',
+        title: 'Flaky',
+        geometryType: 'Point',
+        source: {
+          format: 'wfs',
+          url: `/wfs?failonce=${Date.now()}`,
+          typeName: 'lamps',
+          outputFormat: 'application/json',
+          strategy: 'bbox',
+        },
+      }),
+    );
+    await openFlyout(page, 'layers');
+    const marker = page.locator('[data-layer-id="flaky"] .olcad-layer-list__error');
+    await expect(marker).toBeVisible();
+    await expect(marker).toHaveAttribute('data-tooltip', /503 Service Unavailable/);
+    expect(await page.evaluate(() => window.editor.layers.get('flaky').error)).toMatch(/503/);
+    // Panning requests a new extent; that load succeeds and clears the error.
+    await page.evaluate(() => {
+      const view = window.editor.map.getView();
+      const [x, y] = view.getCenter()!;
+      view.setCenter([x! + 2000, y!]);
+    });
+    await expect(marker).toHaveCount(0);
+    expect(await page.evaluate(() => window.editor.layers.get('flaky').error)).toBeNull();
+  });
+
   test('WFS emulation reprojects and filters', async ({ request }) => {
+    const unauthorized = await request.get(
+      '/wfs?auth=1&typeName=lamps&outputFormat=application/json',
+    );
+    expect(unauthorized.status()).toBe(401);
+    const authorized = await request.get(
+      '/wfs?auth=1&typeName=lamps&outputFormat=application/json',
+      {
+        headers: { Authorization: 'Bearer test' },
+      },
+    );
+    expect(authorized.status()).toBe(200);
+    const paged = await (
+      await request.get(
+        '/wfs?typeNames=points&version=2.0.0&outputFormat=application/json&count=20&startIndex=40',
+      )
+    ).json();
+    expect(paged.numberMatched).toBe(45);
+    expect(paged.numberReturned).toBe(5);
+    expect(paged.features).toHaveLength(5);
     const bad = await request.get('/wfs?typeName=nope&outputFormat=application/json');
     expect(bad.status()).toBe(400);
     const utm = await (

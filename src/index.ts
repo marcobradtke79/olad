@@ -168,6 +168,7 @@ export type { OverlayInfo, OverlayChangeType } from './core/layers/overlays';
 export { createRasterLayer } from './core/layers/raster';
 export type { RasterSpec, RasterContext } from './core/layers/raster';
 export { fitView, unionExtents } from './core/view/fit';
+export { fetchInit, fetchText, ogcUrl } from './core/net/fetch';
 export type { ExtentIn, FitViewOptions } from './core/view/fit';
 export type { LayerChangeType, LayerStylesJson } from './core/layers/LayerManager';
 export { EXPORT_FORMATS, exportLayers } from './core/export/exportLayers';
@@ -233,6 +234,7 @@ export {
 } from './core/config';
 export type {
   EditorConfig,
+  FetchConfig,
   OverlayConfig,
   XyzOverlayConfig,
   WmsOverlayConfig,

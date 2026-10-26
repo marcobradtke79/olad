@@ -171,7 +171,24 @@ function checkProjection(projection: unknown, path: string): void {
 // ---------------------------------------------------------------------------
 // basemaps and overlays
 
-const BASEMAP_COMMON_KEYS = ['id', 'type', 'title', 'visible', 'attribution'] as const;
+const FETCH_KEYS = ['credentials', 'headers'] as const;
+
+function checkFetch(value: unknown, path: string): void {
+  object(value, path);
+  const f = value as Record<string, unknown>;
+  checkKeys(f, path, FETCH_KEYS);
+  optional(oneOf(['include', 'same-origin', 'omit']))(f.credentials, `${path}.credentials`);
+  if (f.headers !== undefined) {
+    object(f.headers, `${path}.headers`);
+    for (const [key, header] of Object.entries(f.headers as Record<string, unknown>)) {
+      if (typeof header !== 'string') {
+        throw new ConfigError(`${path}.headers.${key}`, 'expected a string');
+      }
+    }
+  }
+}
+
+const BASEMAP_COMMON_KEYS = ['id', 'type', 'title', 'visible', 'attribution', 'fetch'] as const;
 const OVERLAY_COMMON_KEYS = [
   'id',
   'type',
@@ -184,6 +201,7 @@ const OVERLAY_COMMON_KEYS = [
   'legendUrl',
   'extent',
   'extentProjection',
+  'fetch',
 ] as const;
 const BASEMAP_TYPES = ['osm', 'xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
 const OVERLAY_TYPES = ['xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
@@ -307,6 +325,7 @@ function checkBasemap(basemap: unknown, path: string, ctx: Context): void {
   optional(string)(b.title, `${path}.title`);
   optional(boolean)(b.visible, `${path}.visible`);
   optional(string)(b.attribution, `${path}.attribution`);
+  optional(checkFetch)(b.fetch, `${path}.fetch`);
   checkRasterSource(b, path, ctx, type, BASEMAP_ZOOM_KEYS);
 }
 
@@ -339,6 +358,7 @@ function checkOverlay(overlay: unknown, path: string, ctx: Context): void {
   }
   optional(string)(o.legendUrl, `${path}.legendUrl`);
   checkExtentFields(o, path, ctx);
+  optional(checkFetch)(o.fetch, `${path}.fetch`);
   checkRasterSource(o, path, ctx, type, OVERLAY_ZOOM_KEYS);
 }
 
@@ -367,6 +387,9 @@ const SOURCE_KEYS = [
   'typeName',
   'version',
   'outputFormat',
+  'params',
+  'fetch',
+  'pageSize',
 ] as const;
 const EDITABLE_KEYS = ['insert', 'update', 'delete', 'predicate'] as const;
 const FIELD_TYPES = ['string', 'number', 'integer', 'boolean', 'enum', 'date'] as const;
@@ -515,6 +538,24 @@ function checkSource(source: unknown, path: string, ctx: Context): void {
       throw new ConfigError(`${path}.url`, 'required for format wfs');
     }
     string(s.typeName, `${path}.typeName`);
+  }
+  if (s.params !== undefined) {
+    if (s.format !== 'wfs') throw new ConfigError(`${path}.params`, 'needs format wfs');
+    object(s.params, `${path}.params`);
+    for (const [key, value] of Object.entries(s.params as Record<string, unknown>)) {
+      if (!['string', 'number', 'boolean'].includes(typeof value)) {
+        throw new ConfigError(`${path}.params.${key}`, 'expected a string, number or boolean');
+      }
+    }
+  }
+  optional(checkFetch)(s.fetch, `${path}.fetch`);
+  if (s.pageSize !== undefined) {
+    if (!Number.isInteger(s.pageSize) || (s.pageSize as number) < 1) {
+      throw new ConfigError(`${path}.pageSize`, 'expected a positive integer');
+    }
+    if (s.format !== 'wfs' || s.version !== '2.0.0') {
+      throw new ConfigError(`${path}.pageSize`, 'needs format wfs and version 2.0.0');
+    }
   }
 }
 

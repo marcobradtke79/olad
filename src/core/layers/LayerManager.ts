@@ -52,6 +52,10 @@ export interface LayerInfo {
   dataProjection: string;
   /** Whether the user created it in the client (`editor.localLayers`); never in the change set. */
   local: boolean;
+  /** Whether a load is in flight (several may overlap for the `bbox` strategy). */
+  loading: boolean;
+  /** The message of the last failed load, cleared by the next successful one; `null` otherwise. */
+  error: string | null;
 }
 
 const DEFAULT_HIGHLIGHT: ResolvedLayerHighlightConfig = {
@@ -72,7 +76,8 @@ export type LayerChangeType =
   | 'title'
   | 'schema'
   | 'style'
-  | 'order';
+  | 'order'
+  | 'load';
 
 export interface LayerManagerEvents {
   /** `raster`: the change concerns an overlay registered with `attachRaster` (its style). */
@@ -87,6 +92,10 @@ export interface LayerManagerEvents {
 interface Entry {
   config: ResolvedLayerConfig;
   layer: VectorLayer<VectorSource<Feature>>;
+  /** Loads in flight. */
+  loading: number;
+  /** The last failed load, until a load succeeds. */
+  error: Error | null;
   /** The highlight overlay while the layer is highlighted. */
   highlight?: VectorLayer<VectorSource<Feature>>;
   /** The user's style (`setStyle`), replacing the configured one; absent: configured. */
@@ -169,11 +178,18 @@ export class LayerManager {
       locale: this.locale,
       isDimensionStale: this.isStale,
       originals: this.originals,
-      onLoad: (id, features) => this.events.onLoad({ id, features }),
-      onError: (id, error) => this.events.onError({ id, error }),
+      onLoad: (id, features) => {
+        this.setLoadError(id, null);
+        this.events.onLoad({ id, features });
+      },
+      onError: (id, error) => {
+        this.setLoadError(id, error);
+        this.events.onError({ id, error });
+      },
+      onLoading: (id, loading) => this.setLoading(id, loading),
       shouldLoad: (id, featureId) => this.events.shouldLoad?.(id, featureId) ?? true,
     });
-    this.entries.set(config.id, { config: resolved, layer });
+    this.entries.set(config.id, { config: resolved, layer, loading: 0, error: null });
     this.order.push(config.id);
     this.map.addLayer(layer);
     this.events.onChange({ id: config.id, type: 'add' });
@@ -486,7 +502,26 @@ export class LayerManager {
       highlighted: entry.highlight !== undefined,
       dataProjection: this.dataProjection(id),
       local: this.localIds.has(id),
+      loading: entry.loading > 0,
+      error: entry.error?.message ?? null,
     };
+  }
+
+  /** Count a load that started or ended; `layerchange` (`load`) when the layer flips state. */
+  private setLoading(id: string, loading: boolean): void {
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    const before = entry.loading > 0;
+    entry.loading = Math.max(0, entry.loading + (loading ? 1 : -1));
+    if (before !== entry.loading > 0) this.events.onChange({ id, type: 'load' });
+  }
+
+  /** Remember a failed load (or clear it after a successful one); `layerchange` (`load`) on change. */
+  private setLoadError(id: string, error: Error | null): void {
+    const entry = this.entries.get(id);
+    if (!entry || entry.error === error || (!entry.error && !error)) return;
+    entry.error = error;
+    this.events.onChange({ id, type: 'load' });
   }
 
   /** Mark a layer as created in the client; `info().local` reports it. */

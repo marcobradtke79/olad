@@ -49,6 +49,14 @@ export interface ViewFitConfig {
   maxZoom?: number;
 }
 
+/** A JSON-safe subset of `RequestInit` for the library's own `fetch` calls. */
+export interface FetchConfig {
+  /** `credentials` mode of the request. Default: the browser's (`same-origin`). */
+  credentials?: 'include' | 'same-origin' | 'omit';
+  /** Request headers, for example an API key or a bearer token. */
+  headers?: Record<string, string>;
+}
+
 /** A proj4 definition registered at startup. */
 export interface ProjectionConfig {
   /** Projection code, for example `EPSG:25832`. */
@@ -68,6 +76,11 @@ interface BasemapBase {
   visible?: boolean;
   /** Attribution text or HTML. */
   attribution?: string;
+  /**
+   * Options of the `fetch` for the WMTS capabilities document. Tiles are loaded by the browser's
+   * image pipeline and cannot carry headers; `crossOrigin: 'use-credentials'` sends cookies.
+   */
+  fetch?: FetchConfig;
 }
 
 /** OpenStreetMap standard tiles. */
@@ -197,6 +210,8 @@ interface OverlayBase {
   extent?: [number, number, number, number];
   /** Projection of `extent`. Defaults to `'EPSG:4326'`. */
   extentProjection?: string;
+  /** Options of the `fetch` for the WMTS capabilities document (tiles cannot carry headers). */
+  fetch?: FetchConfig;
 }
 
 /** Slippy map tiles drawn over the basemap. */
@@ -347,6 +362,19 @@ export interface VectorSourceConfig {
   version?: '1.0.0' | '1.1.0' | '2.0.0';
   /** WFS `outputFormat` parameter. `application/json` switches parsing to GeoJSON. */
   outputFormat?: string;
+  /**
+   * Extra GetFeature query parameters for `wfs`, appended verbatim (`maxFeatures`, `count`,
+   * `cql_filter`, `propertyName`, `sortBy`, `viewparams`, …); a key the editor sets itself
+   * (`srsName`, `outputFormat`) is overridden by it.
+   */
+  params?: Record<string, string | number | boolean>;
+  /** Options of the `fetch` call of a `url` source, every format. */
+  fetch?: FetchConfig;
+  /**
+   * WFS 2.0.0 paging: features per request (`count`); further pages follow with `startIndex`
+   * until the server's `numberMatched` is reached or a page is short. Objects appear page by page.
+   */
+  pageSize?: number;
 }
 
 export type FieldType = 'string' | 'number' | 'integer' | 'boolean' | 'enum' | 'date';

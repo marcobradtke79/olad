@@ -1183,6 +1183,43 @@
   overflow-wrap: anywhere;
 }
 
+/* Load state after the name: a turning spinner while loading, a warning after a failed load. */
+@keyframes olcad-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.olcad-layer-list__loading,
+.olcad-layer-list__error {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--olcad-color-muted);
+}
+
+.olcad-layer-list__loading svg,
+.olcad-layer-list__error svg {
+  width: 16px;
+  height: 16px;
+}
+
+.olcad-layer-list__loading svg {
+  animation: olcad-spin 1s linear infinite;
+}
+
+.olcad-layer-list__error {
+  color: var(--olcad-color-error, #f87171);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .olcad-layer-list__loading svg {
+    animation: none;
+  }
+}
+
 /* Overlay rows: an opacity slider with its value and the legend image in the details. */
 .olcad-layer-list__opacity-control {
   display: inline-flex;

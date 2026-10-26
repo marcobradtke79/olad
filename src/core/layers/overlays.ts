@@ -196,7 +196,7 @@ export class OverlayManager {
 
 /** The raster factory's input for an overlay: its source options with the tile-grid zoom keys. */
 function toRasterSpec(o: ResolvedOverlayConfig): RasterSpec {
-  const common = { id: o.id, attribution: o.attribution };
+  const common = { id: o.id, attribution: o.attribution, fetch: o.fetch };
   switch (o.type) {
     case 'xyz':
       return {

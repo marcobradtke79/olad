@@ -70,7 +70,7 @@ test.describe('overlays', () => {
 
     await openFlyout(page, 'layers');
     await expect(page.locator('olcad-layer-list [data-overlay-id]')).toHaveCount(6);
-    await expect(page.locator('olcad-layer-list [data-layer-id]')).toHaveCount(11);
+    await expect(page.locator('olcad-layer-list [data-layer-id]')).toHaveCount(12);
 
     // Switching the hidden single-image WMS on sends a GetMap to the test server.
     const getMap = page.waitForRequest(
