@@ -16,6 +16,8 @@ pnpm add proj4
 
 npm and yarn take the same URL (`npm install <url> ol`). To update, install the URL of the newer release; version ranges and `pnpm update` do not apply to URL installs.
 
+**Verify a download.** Every release also carries a `SHA256SUMS` file and build provenance attestations created by the release workflow: `shasum -a 256 -c SHA256SUMS` checks the files, `gh attestation verify ol-cad-<version>.tgz --repo marcobradtke79/olad` tells which workflow run built them (see [docs/releasing.md](docs/releasing.md)). URL installs also record the package file's integrity hash in the lockfile.
+
 Supported OpenLayers versions: 9.x and 10.x (peer dependency).
 
 **Development version** (unreleased changes from `main`): build a package file from the repository and install it.
@@ -92,6 +94,7 @@ Download `ol-cad.umd.js` and `ui.css` from the [release](https://github.com/marc
 - [UI elements](docs/ui.md)
 - [Framework integration](docs/frameworks.md): Angular, React, Vue
 - [Test server](docs/test-server.md)
+- [Releasing](docs/releasing.md): tags, the release workflow, checksums and attestations
 - [Decision records](docs/decisions/)
 
 ## Development

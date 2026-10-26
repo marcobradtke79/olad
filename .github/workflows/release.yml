@@ -1,0 +1,51 @@
+# Builds a tagged version and attaches the package file, the script-tag build, SHA256SUMS and
+# build provenance attestations to the GitHub release. See docs/releasing.md.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check that the tag matches package.json
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          packaged="$(node -p "require('./package.json').version")"
+          if [ "$version" != "$packaged" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $packaged" >&2
+            exit 1
+          fi
+      - name: Release notes from CHANGELOG.md
+        run: node scripts/changelog-section.js "${GITHUB_REF_NAME#v}" > release-notes.md
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm pack
+      - run: scripts/release-assets.sh
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/*
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --title "$GITHUB_REF_NAME" --notes-file release-notes.md $prerelease
