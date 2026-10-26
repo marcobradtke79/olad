@@ -1,0 +1,1 @@
+OLAD (OpenLayers Aided Design) · Describes the development version (npm package `ol-cad`, not yet released) · The source of these pages is the `wiki/` folder of the [main repository](https://github.com/marcobradtke79/olad); edits made here are overwritten on the next publish.
