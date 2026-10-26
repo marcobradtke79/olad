@@ -4,6 +4,7 @@
       "id": "parcels",
       "title": "Parcels",
       "attribution": "Parcels &copy; ol-cad test data",
+      "extent": [8.3988, 49.0089, 8.4032, 49.0106],
       "visible": true,
       "source": {
         "format": "geojson",
@@ -150,6 +151,8 @@
     {
       "id": "survey-points",
       "title": "Survey points (WKT, EPSG:25832)",
+      "extent": [456084, 5428742, 456200, 5428795],
+      "extentProjection": "EPSG:25832",
       "source": {
         "format": "wkt",
         "data": "MULTIPOINT((456094.22 5428752.20),(456189.55 5428784.79))",

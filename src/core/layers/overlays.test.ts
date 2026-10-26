@@ -184,6 +184,16 @@ describe('OverlayManager', () => {
     expect(om.info('o3').legendUrl).toBeUndefined();
   });
 
+  it('knows a configured extent, transformed into the view projection', () => {
+    const { om } = setup();
+    om.add(wms('o1', { extent: [8.39, 49.0, 8.41, 49.02] }));
+    om.add(wms('o2'));
+    const extent = om.getExtent('o1')!;
+    expect(extent[0]).toBeCloseTo(933971, -1);
+    expect(extent[2]).toBeCloseTo(936197, -1);
+    expect(om.getExtent('o2')).toBeNull();
+  });
+
   it('destroy removes every overlay from the map and the order', () => {
     const { lm, om, layers } = setup();
     om.add(wms('o1'));

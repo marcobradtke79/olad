@@ -61,6 +61,8 @@ function fakeEditor(editMode = false) {
         emitter.emit('overlaychange', { id, type: 'style' });
       }),
       getLegendUrl: (id: string) => overlay(id).legendUrl,
+      getExtent: (id: string) => (id === 'wms' ? [0, 0, 1, 1] : null),
+      fit: vi.fn(() => true),
     },
     selection: {
       get: () => selected,
@@ -90,6 +92,8 @@ function fakeEditor(editMode = false) {
       moveDrafts: vi.fn(() => []),
       getFeatures: () => [],
       getConfig: (id: string) => ({ id }),
+      getExtent: (id: string) => (id === 'a' ? [0, 0, 1, 1] : null),
+      fit: vi.fn(() => true),
     },
     changes: { get: () => ({ version: 1, changes: [] }) },
     map: { getTargetElement: () => document.body },
@@ -139,8 +143,12 @@ function fakeEditor(editMode = false) {
     destroy: () => emitter.emit('destroy', undefined),
   } as unknown as Editor & {
     setEditMode: ReturnType<typeof vi.fn>;
-    layers: { moveDrafts: ReturnType<typeof vi.fn> };
-    overlays: { setVisible: ReturnType<typeof vi.fn>; setOpacity: ReturnType<typeof vi.fn> };
+    layers: { moveDrafts: ReturnType<typeof vi.fn>; fit: ReturnType<typeof vi.fn> };
+    overlays: {
+      setVisible: ReturnType<typeof vi.fn>;
+      setOpacity: ReturnType<typeof vi.fn>;
+      fit: ReturnType<typeof vi.fn>;
+    };
     place(layer: string, targets?: string[]): Feature;
     addOverlay(info: Partial<OverlayInfo> & { id: string }): void;
     failOverlay(id: string, message: string): void;
@@ -479,6 +487,25 @@ describe('<olcad-layer-list> overlays', () => {
     expect(details().querySelector('output')!.textContent).toBe('40 %');
     // The list was not rebuilt under the slider while it applied.
     expect(details().querySelector('[data-action="opacity"]')).toBe(slider);
+  });
+
+  it('offers a Zoom button in the details while an extent is known', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    control(el, 'a', 'info').click();
+    const zoomA = el.querySelector<HTMLButtonElement>('[data-layer-id="a"] [data-action="zoom"]')!;
+    expect(zoomA.disabled).toBe(false);
+    expect(zoomA.getAttribute('aria-label')).toBe('Zoom to A');
+    zoomA.click();
+    expect(editor.layers.fit).toHaveBeenCalledWith('a');
+    control(el, 'b', 'info').click();
+    expect(
+      el.querySelector<HTMLButtonElement>('[data-layer-id="b"] [data-action="zoom"]')!.disabled,
+    ).toBe(true);
+    editor.addOverlay({ id: 'wms' });
+    el.querySelector<HTMLButtonElement>('[data-overlay-id="wms"] [data-action="info"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-overlay-id="wms"] [data-action="zoom"]')!.click();
+    expect(editor.overlays.fit).toHaveBeenCalledWith('wms');
   });
 
   it('shows the last error of an overlay in its row and details', () => {

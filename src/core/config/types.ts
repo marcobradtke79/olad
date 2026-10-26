@@ -26,6 +26,27 @@ export interface ViewConfig {
   rotation?: number;
   /** Extent that constrains the view, in view projection units. */
   extent?: [number, number, number, number];
+  /** Projection `center` is given in. Defaults to the view projection; `'EPSG:4326'` takes `[lon, lat]`. */
+  centerProjection?: string;
+  /** Fit the initial view to an extent or to layers once the map has a size; wins over `center` and `zoom`. */
+  fit?: ViewFitConfig;
+}
+
+/** The initial fit of the view (`view.fit`). Exactly one of `extent` and `layers` is required. */
+export interface ViewFitConfig {
+  /** Extent to fit, in `projection`. */
+  extent?: [number, number, number, number];
+  /** Projection of `extent`. Defaults to the view projection. */
+  projection?: string;
+  /**
+   * Fit the union of the data extents (`layers[].extent`, `overlays[].extent`) of these layers
+   * and overlays, or of all of them with `true`; entries without an extent are skipped.
+   */
+  layers?: true | string[];
+  /** Padding in pixels: top, right, bottom, left. */
+  padding?: [number, number, number, number];
+  /** Highest zoom level the fit may reach. */
+  maxZoom?: number;
 }
 
 /** A proj4 definition registered at startup. */
@@ -172,6 +193,10 @@ interface OverlayBase {
   maxZoom?: number;
   /** URL of a legend image for the layer list. WMS overlays derive one from the service when it is not set. */
   legendUrl?: string;
+  /** Data extent of the overlay, for `view.fit`, `editor.overlays.fit` and the layer list's Zoom button. */
+  extent?: [number, number, number, number];
+  /** Projection of `extent`. Defaults to `'EPSG:4326'`. */
+  extentProjection?: string;
 }
 
 /** Slippy map tiles drawn over the basemap. */
@@ -366,6 +391,10 @@ export interface LayerConfig {
   opacity?: number;
   /** Attribution text or HTML, shown while the layer is visible. */
   attribution?: string;
+  /** Data extent of the layer, for `view.fit`, `editor.layers.fit` and the layer list's Zoom button. */
+  extent?: [number, number, number, number];
+  /** Projection of `extent`. Defaults to `'EPSG:4326'` (lon / lat, as servers publish bounding boxes). */
+  extentProjection?: string;
   /** Geometry type every feature of the layer must have. */
   geometryType: GeometryType;
   /** Property that holds the feature id when the format does not carry one. */

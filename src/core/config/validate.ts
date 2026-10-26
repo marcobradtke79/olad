@@ -99,7 +99,38 @@ const VIEW_KEYS = [
   'maxZoom',
   'rotation',
   'extent',
+  'centerProjection',
+  'fit',
 ] as const;
+const FIT_KEYS = ['extent', 'projection', 'layers', 'padding', 'maxZoom'] as const;
+
+function checkFit(fit: unknown, path: string, ctx: Context): void {
+  object(fit, path);
+  const f = fit as Record<string, unknown>;
+  checkKeys(f, path, FIT_KEYS);
+  if ((f.extent === undefined) === (f.layers === undefined)) {
+    throw new ConfigError(path, 'exactly one of "extent" or "layers" is required');
+  }
+  if (f.extent !== undefined && !isNumberTuple(f.extent, 4)) {
+    throw new ConfigError(`${path}.extent`, 'expected [minX, minY, maxX, maxY]');
+  }
+  optional(checkProjectionCode(ctx))(f.projection, `${path}.projection`);
+  if (f.layers !== undefined && f.layers !== true) {
+    arrayOf(string)(f.layers, `${path}.layers`);
+  }
+  if (f.padding !== undefined && !isNumberTuple(f.padding, 4)) {
+    throw new ConfigError(`${path}.padding`, 'expected [top, right, bottom, left]');
+  }
+  optional(number)(f.maxZoom, `${path}.maxZoom`);
+}
+
+/** `extent` (four finite numbers) and `extentProjection` of a layer or overlay. */
+function checkExtentFields(o: Record<string, unknown>, path: string, ctx: Context): void {
+  if (o.extent !== undefined && !isNumberTuple(o.extent, 4)) {
+    throw new ConfigError(`${path}.extent`, 'expected [minX, minY, maxX, maxY]');
+  }
+  optional(checkProjectionCode(ctx))(o.extentProjection, `${path}.extentProjection`);
+}
 
 function checkView(view: unknown, path: string, ctx: Context): void {
   object(view, path);
@@ -119,6 +150,8 @@ function checkView(view: unknown, path: string, ctx: Context): void {
   if (typeof v.minZoom === 'number' && typeof v.maxZoom === 'number' && v.minZoom > v.maxZoom) {
     throw new ConfigError(`${path}.minZoom`, 'must not be greater than maxZoom');
   }
+  optional(checkProjectionCode(ctx))(v.centerProjection, `${path}.centerProjection`);
+  if (v.fit !== undefined) checkFit(v.fit, `${path}.fit`, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +182,8 @@ const OVERLAY_COMMON_KEYS = [
   'minZoom',
   'maxZoom',
   'legendUrl',
+  'extent',
+  'extentProjection',
 ] as const;
 const BASEMAP_TYPES = ['osm', 'xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
 const OVERLAY_TYPES = ['xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
@@ -303,6 +338,7 @@ function checkOverlay(overlay: unknown, path: string, ctx: Context): void {
     throw new ConfigError(`${path}.maxZoom`, 'must not be less than minZoom');
   }
   optional(string)(o.legendUrl, `${path}.legendUrl`);
+  checkExtentFields(o, path, ctx);
   checkRasterSource(o, path, ctx, type, OVERLAY_ZOOM_KEYS);
 }
 
@@ -362,6 +398,8 @@ const LAYER_KEYS = [
   'maxZoom',
   'opacity',
   'attribution',
+  'extent',
+  'extentProjection',
   'text',
   'dimension',
 ] as const;
@@ -564,6 +602,7 @@ function checkLayer(layer: unknown, path: string, ctx: Context): void {
   optional(number)(l.maxZoom, `${path}.maxZoom`);
   optional(unitInterval)(l.opacity, `${path}.opacity`);
   optional(string)(l.attribution, `${path}.attribution`);
+  checkExtentFields(l, path, ctx);
   optional(checkText)(l.text, `${path}.text`);
   if (
     l.text !== undefined &&

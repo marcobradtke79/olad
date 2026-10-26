@@ -70,8 +70,15 @@
   },
   "view": {
     "projection": "EPSG:3857",
-    "center": [935100, 6276400],
+    "center": [8.400146221801647, 49.00906691596662],
+    "centerProjection": "EPSG:4326",
     "zoom": 16,
+    "fit": {
+      "extent": [8.3992, 49.0085, 8.4011, 49.0096],
+      "projection": "EPSG:4326",
+      "padding": [10, 10, 10, 10],
+      "maxZoom": 16
+    },
     "minZoom": 2,
     "maxZoom": 22,
     "rotation": 0
@@ -239,7 +246,9 @@
       "serverType": "geoserver",
       "crossOrigin": "anonymous",
       "opacity": 0.7,
-      "attribution": "Test server WMS"
+      "attribution": "Test server WMS",
+      "extent": [8.3988, 49.0089, 8.4032, 49.0106],
+      "extentProjection": "EPSG:4326"
     },
     {
       "id": "roads-wms",

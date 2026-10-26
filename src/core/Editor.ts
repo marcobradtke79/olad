@@ -2,7 +2,7 @@ import Feature from 'ol/Feature';
 import OlMap from 'ol/Map';
 import View from 'ol/View';
 import type BaseLayer from 'ol/layer/Base';
-import { get as getProjection, transformExtent } from 'ol/proj';
+import { get as getProjection, transformExtent, transform } from 'ol/proj';
 import { applyDefaults, resolveBasemap, validateBasemapConfig, validateConfig } from './config';
 import type {
   FieldConfig,
@@ -46,6 +46,8 @@ import { nearestSegment, normalizeAngle, screenAngle, type Segment } from './geo
 import { Emitter } from './events';
 import { BASEMAP_ID_PROPERTY, createBasemapLayer } from './layers/basemaps';
 import { OverlayManager, type OverlayChangeType, type OverlayInfo } from './layers/overlays';
+import type { Extent } from 'ol/extent';
+import { fitView, unionExtents, type ExtentIn, type FitViewOptions } from './view/fit';
 import type { OverlayConfig, ResolvedOverlayConfig } from './config/types';
 import { LAYER_ID_PROPERTY } from './layers/vector';
 import {
@@ -254,6 +256,13 @@ export interface BasemapInfo {
   active: boolean;
 }
 
+/**
+ * What `editor.fit` fits: an extent (in `projection`, default the view projection) or the
+ * union of the data extents of layers and overlays (`layers[].extent`, `overlays[].extent`,
+ * else the loaded features of a layer); all of them with `true`.
+ */
+export type FitOptions = (ExtentIn | { layers: true | string[] }) & FitViewOptions;
+
 export interface BasemapsApi {
   /** All configured basemaps in config order. */
   list(): BasemapInfo[];
@@ -297,6 +306,10 @@ export interface OverlaysApi {
    * (for `resolution` when given), else `undefined`.
    */
   getLegendUrl(id: string, resolution?: number): string | undefined;
+  /** The configured data extent in the view projection, or `null`. */
+  getExtent(id: string): Extent | null;
+  /** Fit the view to the configured extent. Returns `false` when none is configured. */
+  fit(id: string, options?: FitViewOptions): boolean;
 }
 
 export interface LayersApi {
@@ -304,6 +317,13 @@ export interface LayersApi {
   list(): LayerInfo[];
   /** Overlay and vector layer ids in drawing order, bottom first (`setOrder` takes both kinds). */
   getOrder(): string[];
+  /**
+   * The layer's data extent in the view projection: the configured `extent`, else the extent
+   * of the loaded features, else `null`.
+   */
+  getExtent(id: string): Extent | null;
+  /** Fit the view to `getExtent(id)`. Returns `false` when no extent is known. */
+  fit(id: string, options?: FitViewOptions): boolean;
   /** Info for one layer. Throws for an unknown id. */
   get(id: string): LayerInfo;
   /** The resolved configuration of a layer. */
@@ -775,6 +795,11 @@ export interface Editor {
   canUndo(): boolean;
   canRedo(): boolean;
   /** Current view projection code. */
+  /**
+   * Fit the view to an extent or to the data extents of layers and overlays (`FitOptions`), once
+   * the map has a size. Returns `false` when nothing could be fitted (no extent known).
+   */
+  fit(options: FitOptions): boolean;
   getProjection(): string;
   /** Switch the view projection. Reprojects every loaded feature; emits `beforeprojectionchange` and `projectionchange`. */
   setProjection(code: string): void;
@@ -944,6 +969,7 @@ class EditorImpl implements Editor {
         ...(config.draft.style ? { style: config.draft.style } : {}),
       });
     }
+    if (config.view.fit) this.applyConfiguredFit();
     this.toolManager = new ToolManager(
       {
         map: this.map,
@@ -1308,6 +1334,8 @@ class EditorImpl implements Editor {
     this.layers = {
       list: () => lm.list(),
       getOrder: () => lm.getOrder(),
+      getExtent: (id) => lm.getExtent(id),
+      fit: (id, options) => this.fitExtent(lm.getExtent(id), options),
       get: (id) => lm.info(id),
       getConfig: (id) => lm.getConfig(id),
       getActive: () => lm.getActive(),
@@ -1395,6 +1423,8 @@ class EditorImpl implements Editor {
         });
       },
       getLegendUrl: (id, resolution) => om.getLegendUrl(id, resolution),
+      getExtent: (id) => om.getExtent(id),
+      fit: (id, options) => this.fitExtent(om.getExtent(id), options),
     };
 
     const local = new LocalLayers({
@@ -2202,11 +2232,52 @@ class EditorImpl implements Editor {
     }
   }
 
+  fit(options: FitOptions): boolean {
+    if ('layers' in options) return this.fitExtent(this.layersExtent(options.layers), options);
+    fitView(this.map, { extent: options.extent, projection: options.projection }, options);
+    return true;
+  }
+
+  /** Fit the view to an extent in the view projection; `false` for `null`. */
+  private fitExtent(extent: Extent | null, options: FitViewOptions = {}): boolean {
+    if (!extent) return false;
+    fitView(this.map, { extent }, options);
+    return true;
+  }
+
+  /** The union of the known data extents of the given layers and overlays (all for `true`). */
+  private layersExtent(ids: true | string[]): Extent | null {
+    const list = ids === true ? this.layerManager.getOrder() : ids;
+    const extents: Extent[] = [];
+    for (const id of list) {
+      const extent = this.overlayManager.has(id)
+        ? this.overlayManager.getExtent(id)
+        : this.layerManager.has(id)
+          ? this.layerManager.getExtent(id)
+          : null;
+      if (extent) extents.push(extent);
+    }
+    return unionExtents(extents);
+  }
+
+  /** `view.fit` from the configuration: an extent, or the configured extents of layers. */
+  private applyConfiguredFit(): void {
+    const fit = this.config.view.fit;
+    if (!fit) return;
+    const options = { padding: fit.padding, maxZoom: fit.maxZoom };
+    if (fit.layers) this.fit({ layers: fit.layers, ...options });
+    else if (fit.extent) this.fit({ extent: fit.extent, projection: fit.projection, ...options });
+  }
+
   private createView(projection: string): View {
     const { view } = this.config;
+    const center =
+      view.centerProjection && view.centerProjection !== projection
+        ? (transform(view.center, view.centerProjection, projection) as [number, number])
+        : view.center;
     return new View({
       projection,
-      center: view.center,
+      center,
       zoom: view.zoom,
       minZoom: view.minZoom,
       maxZoom: view.maxZoom,

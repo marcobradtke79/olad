@@ -288,6 +288,25 @@ describe('LayerManager styles and order', () => {
     expect(lm.getStyle('labels').text).toEqual({ color: '#ff0000', halo: '#000000' });
   });
 
+  it('knows a layer extent from the configuration or from the loaded features', () => {
+    const { lm } = manager();
+    lm.add({
+      id: 'configured',
+      geometryType: 'Point',
+      source: { features: [] },
+      extent: [8.39, 49.0, 8.41, 49.02],
+    });
+    const extent = lm.getExtent('configured')!;
+    expect(extent[0]).toBeCloseTo(933971, -1);
+    expect(extent[3]).toBeCloseTo(6278256, -1);
+    lm.add({ id: 'empty', geometryType: 'Point', source: { features: [] } });
+    expect(lm.getExtent('empty')).toBeNull();
+    lm.add({ id: 'loaded', geometryType: 'Point', source: { features: [] } });
+    lm.getSource('loaded').addFeature(new Feature(new Point([10, 20])));
+    lm.getSource('loaded').addFeature(new Feature(new Point([30, 5])));
+    expect(lm.getExtent('loaded')).toEqual([10, 5, 30, 20]);
+  });
+
   it('draws a layer with its configured opacity and attribution and resets to them', () => {
     const { lm } = manager();
     lm.add({

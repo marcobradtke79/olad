@@ -31,6 +31,54 @@ test.describe('test page', () => {
     await expect(items.nth(0)).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('fits the initial view to the configured extent and zooms to layers', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    const view = () =>
+      page.evaluate(() => {
+        const v = window.editor.map.getView();
+        return { center: v.getCenter()!, zoom: v.getZoom()! };
+      });
+    // view.fit: the lon/lat extent around the configured centre, capped at zoom 16.
+    const initial = await view();
+    let center = initial.center;
+    expect(initial.zoom).toBeCloseTo(16, 5);
+    expect(center[0]).toBeCloseTo(935100, -1);
+    expect(center[1]).toBeCloseTo(6276400, -1);
+    // Configured extents are known at once (survey-points in EPSG:25832), loaded ones after load.
+    expect(
+      await page.evaluate(() => window.editor.layers.getExtent('survey-points')),
+    ).not.toBeNull();
+    expect(await page.evaluate(() => window.editor.layers.getExtent('draft'))).toBeNull();
+    expect(await page.evaluate(() => window.editor.layers.fit('draft'))).toBe(false);
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.getExtent('roads') !== null))
+      .toBe(true);
+    // editor.fit with an extent in another projection moves the view.
+    expect(
+      await page.evaluate(() =>
+        window.editor.fit({ extent: [8.39, 49.0, 8.41, 49.02], projection: 'EPSG:4326' }),
+      ),
+    ).toBe(true);
+    ({ center } = await view());
+    expect(center[0]).toBeCloseTo(935084, -1);
+    expect(center[1]).toBeCloseTo(6276558.5, -1);
+    // Zoom to layer through the API and the layer list button.
+    expect(await page.evaluate(() => window.editor.layers.fit('survey-points'))).toBe(true);
+    const survey = await page.evaluate(() => window.editor.layers.getExtent('survey-points')!);
+    ({ center } = await view());
+    expect(center[0]).toBeCloseTo((survey[0]! + survey[2]!) / 2, 0);
+    expect(center[1]).toBeCloseTo((survey[1]! + survey[3]!) / 2, 0);
+    await openFlyout(page, 'layers');
+    await page.locator('[data-layer-id="parcels"] [data-action="info"]').click();
+    await page.locator('[data-layer-id="parcels"] [data-action="zoom"]').click();
+    const parcels = await page.evaluate(() => window.editor.layers.getExtent('parcels')!);
+    ({ center } = await view());
+    expect(center[0]).toBeCloseTo((parcels[0]! + parcels[2]!) / 2, 0);
+    expect(await page.evaluate(() => window.editor.overlays.fit('parcels-wms'))).toBe(true);
+    expect(await page.evaluate(() => window.editor.fit({ layers: true }))).toBe(true);
+  });
+
   test('server answers config, data, log and reset', async ({ request }) => {
     const config = await (await request.get('/config')).json();
     expect(config.basemaps).toHaveLength(7);

@@ -124,6 +124,7 @@ export type {
   BasemapInfo,
   BasemapsApi,
   OverlaysApi,
+  FitOptions,
   LayersApi,
   StraightedgeApi,
   ChangesApi,
@@ -162,6 +163,12 @@ export {
 } from './core/layers/style';
 export type { LayerStyle, StrokeDash } from './core/layers/style';
 export { LAYER_Z_INDEX_BASE } from './core/layers/LayerManager';
+export { OVERLAY_ID_PROPERTY } from './core/layers/overlays';
+export type { OverlayInfo, OverlayChangeType } from './core/layers/overlays';
+export { createRasterLayer } from './core/layers/raster';
+export type { RasterSpec, RasterContext } from './core/layers/raster';
+export { fitView, unionExtents } from './core/view/fit';
+export type { ExtentIn, FitViewOptions } from './core/view/fit';
 export type { LayerChangeType, LayerStylesJson } from './core/layers/LayerManager';
 export { EXPORT_FORMATS, exportLayers } from './core/export/exportLayers';
 export { IMPORT_FORMATS, ImportError, readImport } from './core/import/readImport';

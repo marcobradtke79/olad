@@ -9,17 +9,26 @@ import type { OlcadLayerEditor } from './OlcadLayerEditor';
 
 /** What a row control does; with the layer id it identifies the control across re-renders. */
 type RowAction =
-  'visible' | 'highlight' | 'table' | 'edit' | 'move-draft' | 'settings' | 'info' | 'opacity';
+  | 'visible'
+  | 'highlight'
+  | 'table'
+  | 'edit'
+  | 'move-draft'
+  | 'settings'
+  | 'info'
+  | 'opacity'
+  | 'zoom';
 
 /**
  * `<olcad-layer-list>`: basemaps as a radio group, one row per raster overlay (visibility and
- * details with an opacity slider, the zoom range and the legend; `editor.overlays`) and one row
- * per vector layer with its name and icon buttons: visibility, highlight (`editor.layers.setHighlighted`), table (opens the layer
- * in the `<olcad-feature-table>` bound to the same editor, or closes it), edit (switches edit
- * mode on and makes the layer the active one; no tool is started), move (while draft objects
- * are selected, on the rows of the layers that take them: `editor.layers.moveDrafts`), settings
+ * details with an opacity slider, the zoom range, the legend and a Zoom button;
+ * `editor.overlays`) and one row per vector layer with its name and icon buttons: visibility,
+ * highlight (`editor.layers.setHighlighted`), table (opens the layer in the
+ * `<olcad-feature-table>` bound to the same editor, or closes it), edit (switches edit mode on
+ * and makes the layer the active one; no tool is started), move (while draft objects are
+ * selected, on the rows of the layers that take them: `editor.layers.moveDrafts`), settings
  * (local layers only: name, attributes, delete in `<olcad-layer-editor>`) and info (details
- * below the row). A New layer button above the layers creates a local layer
+ * below the row, with a Zoom button that fits the view to the layer's extent). A New layer button above the layers creates a local layer
  * (`editor.localLayers`) in the same dialog. With the `reveal` attribute, selecting draft objects opens the
  * flyout panel the list sits in. Bind with `element.editor = editor`. Renders into light DOM
  * so the theme and host styles apply.
@@ -264,6 +273,16 @@ export class OlcadLayerList extends HTMLElement {
       addDetail(details, 'attribution', 'Attribution', plainText(overlay.attribution));
     }
     addDetail(details, 'id', 'Id', overlay.id);
+    if (open) {
+      addDetail(
+        details,
+        'extent',
+        'Extent',
+        zoomButton(overlay.title, editor.overlays.getExtent?.(overlay.id) ?? null, () =>
+          editor.overlays.fit(overlay.id),
+        ),
+      );
+    }
     if (error) addDetail(details, 'error', 'Error', error.message);
 
     row.append(visible, title, info, details);
@@ -408,6 +427,16 @@ export class OlcadLayerList extends HTMLElement {
     detail('snappable', 'Snap target', layer.snappable ? 'yes' : 'no');
     detail('projection', 'Data projection', layer.dataProjection);
     detail('id', 'Id', layer.id);
+    if (open) {
+      addDetail(
+        details,
+        'extent',
+        'Extent',
+        zoomButton(layer.title, editor.layers.getExtent?.(layer.id) ?? null, () =>
+          editor.layers.fit(layer.id),
+        ),
+      );
+    }
     const kept = isLocalLayerPersisted(editor);
     if (layer.local)
       detail('storage', 'Storage', kept ? 'this browser' : 'memory (lost on reload)');
@@ -507,6 +536,24 @@ function addDetail(details: HTMLDListElement, key: string, label: string, value:
   else dd.append(value);
   item.append(dt, dd);
   details.append(item);
+}
+
+/**
+ * The Zoom button of a details list: fits the view to the layer's data extent (configured, or
+ * the loaded objects); disabled while no extent is known.
+ */
+function zoomButton(title: string, extent: unknown, fit: () => void): HTMLButtonElement {
+  const button = rowButton('zoom', 'zoom');
+  const known = extent !== null && extent !== undefined;
+  setIconButton(
+    button,
+    'zoomToLayer',
+    `Zoom to ${title}`,
+    known ? 'Zoom the map to this layer' : 'No extent known yet: nothing loaded, none configured',
+  );
+  button.disabled = !known;
+  button.addEventListener('click', fit);
+  return button;
 }
 
 function percent(value: number): string {

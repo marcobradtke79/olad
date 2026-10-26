@@ -1,6 +1,8 @@
 import type Feature from 'ol/Feature';
 import type OlMap from 'ol/Map';
 import type BaseLayer from 'ol/layer/Base';
+import { isEmpty, type Extent } from 'ol/extent';
+import { transformExtent } from 'ol/proj';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
 import type {
@@ -515,6 +517,23 @@ export class LayerManager {
 
   getConfig(id: string): ResolvedLayerConfig {
     return this.require(id).config;
+  }
+
+  /**
+   * The layer's data extent in the view projection: the configured `extent`, else the extent of
+   * the loaded features, else `null` (nothing loaded yet, or an empty layer).
+   */
+  getExtent(id: string): Extent | null {
+    const { config, layer } = this.require(id);
+    if (config.extent) {
+      return transformExtent(
+        config.extent,
+        config.extentProjection ?? 'EPSG:4326',
+        this.getProjection(),
+      );
+    }
+    const extent = layer.getSource()?.getExtent();
+    return extent && !isEmpty(extent) ? [...extent] : null;
   }
 
   /**

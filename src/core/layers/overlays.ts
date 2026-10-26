@@ -1,5 +1,7 @@
 import type OlMap from 'ol/Map';
 import type BaseLayer from 'ol/layer/Base';
+import type { Extent } from 'ol/extent';
+import { transformExtent } from 'ol/proj';
 import type Layer from 'ol/layer/Layer';
 import TileWMS from 'ol/source/TileWMS';
 import ImageWMS from 'ol/source/ImageWMS';
@@ -140,6 +142,17 @@ export class OverlayManager {
 
   getOlLayer(id: string): BaseLayer {
     return this.require(id).layer;
+  }
+
+  /** The configured data extent in the view projection, or `null`. */
+  getExtent(id: string): Extent | null {
+    const { config } = this.require(id);
+    if (!config.extent) return null;
+    return transformExtent(
+      config.extent,
+      config.extentProjection ?? 'EPSG:4326',
+      this.getProjection(),
+    );
   }
 
   setVisible(id: string, visible: boolean): void {
