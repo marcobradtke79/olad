@@ -56,6 +56,8 @@ export interface LayerInfo {
   loading: boolean;
   /** The message of the last failed load, cleared by the next successful one; `null` otherwise. */
   error: string | null;
+  /** The configured legend image. */
+  legendUrl?: string;
 }
 
 const DEFAULT_HIGHLIGHT: ResolvedLayerHighlightConfig = {
@@ -504,6 +506,7 @@ export class LayerManager {
       local: this.localIds.has(id),
       loading: entry.loading > 0,
       error: entry.error?.message ?? null,
+      ...(config.legendUrl ? { legendUrl: config.legendUrl } : {}),
     };
   }
 

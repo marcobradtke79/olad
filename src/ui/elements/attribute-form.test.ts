@@ -438,3 +438,60 @@ describe('<olcad-attribute-form reveal>', () => {
     expect(document.activeElement).toBe(control(el, 'pressure'));
   });
 });
+
+describe('<olcad-attribute-form> server information', () => {
+  const info = (pending: boolean, features: Feature[] = []) => ({
+    coordinate: [0, 0],
+    pixel: [1, 1],
+    pending,
+    results: pending ? [] : [{ overlay: 'parcels-wms', title: 'Parcels (WMS)', features }],
+  });
+
+  it('shows the answers of an inspect click as records until something is selected', () => {
+    const editor = fakeEditor(false);
+    document.body.innerHTML = '<olcad-attribute-form></olcad-attribute-form>';
+    const el = document.querySelector<OlcadAttributeForm>('olcad-attribute-form')!;
+    el.editor = editor as unknown as Editor;
+    editor.emitter.emit('featureinfo', info(true));
+    expect(el.querySelector('.olcad-attribute-form__title')!.textContent).toBe(
+      'Information from the server',
+    );
+    expect(el.querySelector('.olcad-attribute-form__hint')!.textContent).toMatch(/Asking/);
+    const answer = new Feature({ owner: 'A', area: 12, nested: { a: 1 }, empty: null });
+    answer.setId('test:parcels.1');
+    editor.emitter.emit('featureinfo', info(false, [answer]));
+    expect(el.querySelector('.olcad-attribute-form__source')!.textContent).toBe('Parcels (WMS)');
+    const value = (key: string) =>
+      el.querySelector(`.olcad-attribute-form__record [data-key="${key}"] dd`)!.textContent;
+    expect(value('id')).toBe('test:parcels.1');
+    expect(value('owner')).toBe('A');
+    expect(value('area')).toBe('12');
+    expect(value('nested')).toBe('{"a":1}');
+    expect(value('empty')).toBe('–');
+    expect(el.querySelector('[data-key="geometry"]')).toBeNull();
+    // An error is reported per overlay; no results at all say so.
+    editor.emitter.emit('featureinfo', {
+      ...info(false),
+      results: [{ overlay: 'x', title: 'X', features: [], error: new Error('503 down') }],
+    });
+    expect(el.querySelector('.olcad-attribute-form__hint')!.textContent).toMatch(/503 down/);
+    editor.emitter.emit('featureinfo', { ...info(false), results: [] });
+    expect(el.querySelector('.olcad-attribute-form__hint')!.textContent).toMatch(/No overlay/);
+    // A selection replaces the information.
+    editor.emitter.emit('featureinfo', info(false, [answer]));
+    editor.selection.set([editor.place('hydrants', { pressure: 3 })]);
+    expect(el.querySelector('.olcad-attribute-form__source')).toBeNull();
+    expect(el.querySelector('.olcad-attribute-form__title')!.textContent).toMatch(/Hydrants/);
+    editor.selection.set([]);
+    expect(el.querySelector('.olcad-attribute-form__hint')!.textContent).toMatch(/Select one/);
+  });
+
+  it('is ignored by the popup form', () => {
+    const editor = fakeEditor(false);
+    document.body.innerHTML = '<olcad-attribute-form popup></olcad-attribute-form>';
+    const el = document.querySelector<OlcadAttributeForm>('olcad-attribute-form')!;
+    el.editor = editor as unknown as Editor;
+    editor.emitter.emit('featureinfo', info(false, [new Feature({ a: 1 })]));
+    expect(el.querySelector('dialog')?.hasAttribute('open') ?? false).toBe(false);
+  });
+});

@@ -269,9 +269,11 @@ export class OlcadLayerStyleDialog extends HTMLElement {
       note.className = 'olcad-layer-style-dialog__note';
       note.textContent = 'Overlay: the server draws it. Opacity and zoom range can be changed.';
       const apply = () => this.apply(id);
+      const legend = editor.overlays.getLegendUrl(id);
       this.form.replaceChildren(
         title,
         note,
+        ...(legend ? [legendBlock(legend, true)] : []),
         section('Layer', [
           field('Opacity', rangeInput('opacity', style.opacity, apply)),
           field('From zoom', optionalNumberInput('min-zoom', style.minZoom, apply)),
@@ -298,6 +300,7 @@ export class OlcadLayerStyleDialog extends HTMLElement {
       parts.push(note);
     }
 
+    if (info.legendUrl) parts.push(legendBlock(info.legendUrl, false));
     const apply = () => this.apply(id);
     if (sections.stroke && style.stroke) {
       parts.push(
@@ -433,6 +436,21 @@ export class OlcadLayerStyleDialog extends HTMLElement {
       this.applying = false;
     }
   }
+}
+
+/** The server's legend image, collapsible; open for overlays, which the server draws entirely. */
+function legendBlock(url: string, open: boolean): HTMLDetailsElement {
+  const block = document.createElement('details');
+  block.className = 'olcad-layer-style-dialog__legend';
+  block.open = open;
+  const summary = document.createElement('summary');
+  summary.textContent = 'Server legend';
+  const img = document.createElement('img');
+  img.alt = 'Legend';
+  img.loading = 'lazy';
+  img.src = url;
+  block.append(summary, img);
+  return block;
 }
 
 function section(legendText: string, children: HTMLElement[]): HTMLFieldSetElement {

@@ -262,14 +262,7 @@ export class OlcadLayerList extends HTMLElement {
     addDetail(details, 'zoom', 'Zoom range', zoomRange(overlay.minZoom, overlay.maxZoom));
     const resolution = editor.map?.getView?.()?.getResolution?.();
     const legendUrl = editor.overlays.getLegendUrl(overlay.id, resolution) ?? overlay.legendUrl;
-    if (legendUrl) {
-      const img = document.createElement('img');
-      img.className = 'olcad-layer-list__legend';
-      img.alt = `Legend of ${overlay.title}`;
-      img.loading = 'lazy';
-      img.src = legendUrl;
-      addDetail(details, 'legend', 'Legend', img);
-    }
+    if (legendUrl) addDetail(details, 'legend', 'Legend', legendImage(legendUrl, overlay.title));
     if (overlay.attribution) {
       addDetail(details, 'attribution', 'Attribution', plainText(overlay.attribution));
     }
@@ -438,6 +431,8 @@ export class OlcadLayerList extends HTMLElement {
     detail('projection', 'Data projection', layer.dataProjection);
     detail('id', 'Id', layer.id);
     if (layer.error !== null) detail('error', 'Last load', `failed: ${layer.error}`);
+    if (layer.legendUrl)
+      addDetail(details, 'legend', 'Legend', legendImage(layer.legendUrl, layer.title));
     if (open) {
       addDetail(
         details,
@@ -582,6 +577,16 @@ function zoomButton(title: string, extent: unknown, fit: () => void): HTMLButton
   button.disabled = !known;
   button.addEventListener('click', fit);
   return button;
+}
+
+/** The legend image of a layer or overlay for its details. */
+function legendImage(url: string, title: string): HTMLImageElement {
+  const img = document.createElement('img');
+  img.className = 'olcad-layer-list__legend';
+  img.alt = `Legend of ${title}`;
+  img.loading = 'lazy';
+  img.src = url;
+  return img;
 }
 
 function percent(value: number): string {

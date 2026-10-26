@@ -94,4 +94,72 @@ test.describe('inspect selection outside edit mode', () => {
     await page.mouse.click(viewport.x + px[0]!, viewport.y + px[1]!);
     await expect.poll(() => selectedIds(page)).toEqual([815]);
   });
+
+  test('a click beside the objects asks the queryable WMS overlay and shows its answer', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await waitForEditor(page);
+    await expect
+      .poll(() => page.evaluate(() => window.editor.layers.get('parcels').featureCount))
+      .toBe(2);
+    await page.waitForFunction(() => {
+      let rendered = false;
+      window.editor.map.once('rendercomplete', () => (rendered = true));
+      window.editor.map.render();
+      return new Promise((resolve) => setTimeout(() => resolve(rendered), 100));
+    });
+    // A pixel with no vector object under it and no map control over it.
+    const px = await page.evaluate(() => {
+      const map = window.editor.map;
+      const [width, height] = map.getSize() as [number, number];
+      const box = map.getViewport()!.getBoundingClientRect();
+      for (let y = 120; y < height - 60; y += 40) {
+        for (let x = 120; x < width - 60; x += 40) {
+          const hit = map.hasFeatureAtPixel([x, y], {
+            layerFilter: (l) => l.get('olcad:layer') !== undefined,
+            hitTolerance: 8,
+          });
+          const under = document.elementFromPoint(box.left + x, box.top + y);
+          if (!hit && under?.closest('.ol-viewport') && !under.closest('.ol-control')) {
+            return [x, y];
+          }
+        }
+      }
+      return null;
+    });
+    expect(px).not.toBeNull();
+    const viewport = (await page.locator('.ol-viewport').boundingBox())!;
+    const request = page.waitForRequest((r) => /REQUEST=GetFeatureInfo/i.test(r.url()));
+    await page.mouse.click(viewport.x + px![0]!, viewport.y + px![1]!);
+    const url = new URL((await request).url());
+    expect(url.searchParams.get('QUERY_LAYERS')).toBe('test:parcels');
+    expect(url.searchParams.get('INFO_FORMAT')).toBe('application/json');
+    expect(await selectedIds(page)).toEqual([]);
+    const form = page.locator('olcad-panel[name="attributes"] olcad-attribute-form');
+    await expect(form.locator('.olcad-attribute-form__source')).toHaveText([
+      'Parcels (WMS, test server)',
+    ]);
+    await expect(form.locator('.olcad-attribute-form__record [data-key="title"] dd')).toHaveText(
+      'Parcels',
+    );
+    await expect(page.locator('olcad-panel[name="attributes"]')).toHaveAttribute('open', '');
+
+    // The API answers the same; hidden overlays are not asked.
+    const results = await page.evaluate(async () => {
+      const answers = await window.editor.overlays.featureInfo(
+        window.editor.map.getView().getCenter()!,
+      );
+      return answers.map((r) => [r.overlay, r.features.length, r.features[0]?.get('layer')]);
+    });
+    expect(results).toEqual([['parcels-wms', 1, 'test:parcels']]);
+    await page.evaluate(() => window.editor.overlays.setVisible('parcels-wms', false));
+    expect(
+      await page.evaluate(
+        async () =>
+          (await window.editor.overlays.featureInfo(window.editor.map.getView().getCenter()!))
+            .length,
+      ),
+    ).toBe(0);
+  });
 });

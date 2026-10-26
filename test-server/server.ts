@@ -7,7 +7,8 @@
  *   GET  /wfs             WFS GetFeature emulation (outputFormat=application/json, srsName, bbox,
  *                         count / maxFeatures + startIndex paging with numberMatched; ?fail=1 answers
  *                         500, ?auth=1 needs an Authorization header, ?failonce=<token> fails once per token)
- *   GET  /wms             WMS emulation: GetCapabilities (1.3.0), GetMap (hatched PNG per layer), GetLegendGraphic
+ *   GET  /wms             WMS emulation: GetCapabilities (1.3.0), GetMap (hatched PNG per layer), GetLegendGraphic,
+ *                         GetFeatureInfo (JSON: one record per queryable QUERY_LAYERS entry)
  *   POST /changes[?fail=1] apply a change set, answer { idMap }; fail=1 answers 500
  *   GET  /changes/log     every change set received since start / reset
  *   POST /reset           restore the seed data
@@ -387,6 +388,39 @@ function handleWms(url: URL, res: ServerResponse): void {
         200,
         png(`legend:${layer}`, () => legendImage(color)),
         MIME['.png'],
+      );
+    }
+    case 'getfeatureinfo': {
+      const names = (params.get('query_layers') ?? params.get('layers') ?? '')
+        .split(',')
+        .filter(Boolean);
+      const layers = wmsLayers();
+      const features = names.flatMap((name) => {
+        const layer = layers.find((l) => l.name === name);
+        if (!layer?.queryable) return [];
+        return [
+          {
+            type: 'Feature',
+            id: `${name}.1`,
+            geometry: null,
+            properties: {
+              layer: name,
+              title: layer.title,
+              pixel: `${params.get('i') ?? params.get('x') ?? '?'},${params.get('j') ?? params.get('y') ?? '?'}`,
+            },
+          },
+        ];
+      });
+      return send(
+        res,
+        200,
+        {
+          type: 'FeatureCollection',
+          features,
+          totalFeatures: features.length,
+          numberReturned: features.length,
+        },
+        MIME['.geojson'],
       );
     }
     default:

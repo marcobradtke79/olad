@@ -119,6 +119,7 @@ function fakeEditor(editMode = false) {
         type: 'wms',
         visible: true,
         opacity: 1,
+        queryable: false,
         ...info,
       });
       emitter.emit('overlaychange', { id: info.id, type: 'add' });
@@ -132,6 +133,11 @@ function fakeEditor(editMode = false) {
       find(id).loading = loading;
       find(id).error = error;
       emitter.emit('layerchange', { id, type: 'load' });
+    },
+    /** Give a layer a configured legend. */
+    setLegend(id: string, url: string) {
+      find(id).legendUrl = url;
+      emitter.emit('layerchange', { id, type: 'add' });
     },
     /** Turn layer `b` into a local layer. */
     makeLocal() {
@@ -161,6 +167,7 @@ function fakeEditor(editMode = false) {
     addOverlay(info: Partial<OverlayInfo> & { id: string }): void;
     failOverlay(id: string, message: string): void;
     setLoadState(id: string, loading: boolean, error: string | null): void;
+    setLegend(id: string, url: string): void;
     makeLocal(): void;
   };
   return editor;
@@ -553,5 +560,20 @@ describe('<olcad-layer-list> load state', () => {
     );
     editor.setLoadState('a', false, null);
     expect(row().querySelector('.olcad-layer-list__error')).toBeNull();
+  });
+});
+
+describe('<olcad-layer-list> legends', () => {
+  it('shows a configured legend image in the layer details', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    control(el, 'a', 'info').click();
+    expect(el.querySelector('[data-layer-id="a"] [data-detail="legend"]')).toBeNull();
+    editor.setLegend('a', 'https://example.org/legend-a.png');
+    const img = el.querySelector<HTMLImageElement>(
+      '[data-layer-id="a"] [data-detail="legend"] img.olcad-layer-list__legend',
+    )!;
+    expect(img.src).toBe('https://example.org/legend-a.png');
+    expect(img.alt).toBe('Legend of A');
   });
 });

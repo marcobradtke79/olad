@@ -4,6 +4,7 @@
       "id": "parcels",
       "title": "Parcels",
       "attribution": "Parcels &copy; ol-cad test data",
+      "legendUrl": "/wms?SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=test:parcels",
       "extent": [8.3988, 49.0089, 8.4032, 49.0106],
       "visible": true,
       "source": {

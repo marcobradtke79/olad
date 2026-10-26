@@ -3,6 +3,8 @@ import type BaseLayer from 'ol/layer/Base';
 import type { Extent } from 'ol/extent';
 import { transformExtent } from 'ol/proj';
 import type Layer from 'ol/layer/Layer';
+import type View from 'ol/View';
+import type { Coordinate } from 'ol/coordinate';
 import TileWMS from 'ol/source/TileWMS';
 import ImageWMS from 'ol/source/ImageWMS';
 import type { OverlayConfig, ResolvedOverlayConfig } from '../config/types';
@@ -10,6 +12,7 @@ import { resolveOverlay } from '../config/defaults';
 import { validateOverlayConfig } from '../config/validate';
 import type { LayerManager } from './LayerManager';
 import { createRasterLayer, type RasterSpec } from './raster';
+import { queryFeatureInfo, type FeatureInfoResult } from './featureInfo';
 
 /**
  * Property set on every overlay layer, holding the overlay id. Overlays never carry
@@ -34,6 +37,8 @@ export interface OverlayInfo {
   /** The configured legend image, or the one a WMS service offers (`GetLegendGraphic`). */
   legendUrl?: string;
   attribution?: string;
+  /** Whether GetFeatureInfo is asked at inspect clicks (`wms` overlays with `queryable`). */
+  queryable: boolean;
 }
 
 export interface OverlayManagerEvents {
@@ -133,7 +138,41 @@ export class OverlayManager {
       ...(Number.isFinite(maxZoom) ? { maxZoom } : {}),
       ...(legendUrl ? { legendUrl } : {}),
       ...(config.attribution ? { attribution: config.attribution } : {}),
+      queryable: config.queryable,
     };
+  }
+
+  /**
+   * GetFeatureInfo at `coordinate` for every WMS overlay that is queryable, visible and drawn at
+   * the view's zoom: one request each, a failure reported in its result instead of thrown.
+   */
+  async featureInfo(coordinate: Coordinate, view: View): Promise<FeatureInfoResult[]> {
+    const resolution = view.getResolution();
+    if (resolution === undefined) return [];
+    const projection = view.getProjection();
+    const asked = this.ids()
+      .map((id) => this.entries.get(id)!)
+      .filter(
+        ({ config, layer }) =>
+          config.type === 'wms' && config.queryable && (layer as Layer).isVisible(view),
+      );
+    return Promise.all(
+      asked.map(async ({ config, layer }) => {
+        const result: FeatureInfoResult = { overlay: config.id, title: config.title, features: [] };
+        try {
+          result.features = await queryFeatureInfo(
+            layer as Layer,
+            config as Extract<ResolvedOverlayConfig, { type: 'wms' }>,
+            coordinate,
+            resolution,
+            projection,
+          );
+        } catch (error) {
+          result.error = error instanceof Error ? error : new Error(String(error));
+        }
+        return result;
+      }),
+    );
   }
 
   getConfig(id: string): ResolvedOverlayConfig {

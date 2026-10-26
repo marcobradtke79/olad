@@ -212,6 +212,16 @@ interface OverlayBase {
   extentProjection?: string;
   /** Options of the `fetch` for the WMTS capabilities document (tiles cannot carry headers). */
   fetch?: FetchConfig;
+  /**
+   * The server answers GetFeatureInfo for this overlay (`wms` only): a click beside the vector
+   * objects queries it while edit mode is off. Default `false`.
+   */
+  queryable?: boolean;
+  /**
+   * `INFO_FORMAT` of GetFeatureInfo requests. Default `'application/json'` (GeoServer); GML and
+   * XML answers are read with OpenLayers' `WMSGetFeatureInfo` format.
+   */
+  infoFormat?: string;
 }
 
 /** Slippy map tiles drawn over the basemap. */
@@ -423,6 +433,8 @@ export interface LayerConfig {
   extent?: [number, number, number, number];
   /** Projection of `extent`. Defaults to `'EPSG:4326'` (lon / lat, as servers publish bounding boxes). */
   extentProjection?: string;
+  /** URL of a legend image, shown in the layer list details and the style dialog. */
+  legendUrl?: string;
   /** Geometry type every feature of the layer must have. */
   geometryType: GeometryType;
   /** Property that holds the feature id when the format does not carry one. */
@@ -726,6 +738,7 @@ export type ResolvedOverlayConfig = OverlayConfig & {
   title: string;
   visible: boolean;
   opacity: number;
+  queryable: boolean;
 };
 
 export interface ResolvedEditableConfig {

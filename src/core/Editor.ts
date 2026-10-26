@@ -46,6 +46,8 @@ import { nearestSegment, normalizeAngle, screenAngle, type Segment } from './geo
 import { Emitter } from './events';
 import { BASEMAP_ID_PROPERTY, createBasemapLayer } from './layers/basemaps';
 import { OverlayManager, type OverlayChangeType, type OverlayInfo } from './layers/overlays';
+import type { FeatureInfoResult } from './layers/featureInfo';
+import { isEditorLayer } from './tools/layerFilter';
 import type { Extent } from 'ol/extent';
 import { fitView, unionExtents, type ExtentIn, type FitViewOptions } from './view/fit';
 import type { OverlayConfig, ResolvedOverlayConfig } from './config/types';
@@ -155,6 +157,17 @@ export interface EditorEvents extends Record<string, unknown> {
   overlaychange: { id: string; type: OverlayChangeType };
   /** An overlay's source could not be built or its WMTS capabilities failed to load. */
   overlayerror: { id: string; error: Error };
+  /**
+   * An inspect click beside the vector objects asked the visible queryable WMS overlays for
+   * the server's information there: first with `pending: true` and no results, then with the
+   * answers (`overlays.featureInfo`).
+   */
+  featureinfo: {
+    coordinate: Coordinate;
+    pixel: number[];
+    results: FeatureInfoResult[];
+    pending: boolean;
+  };
   /** A layer was added or removed, or its visibility, editability, snappability, highlight, title or schema changed. */
   layerchange: {
     id: string;
@@ -310,6 +323,11 @@ export interface OverlaysApi {
   getExtent(id: string): Extent | null;
   /** Fit the view to the configured extent. Returns `false` when none is configured. */
   fit(id: string, options?: FitViewOptions): boolean;
+  /**
+   * GetFeatureInfo at a map position for every WMS overlay that is `queryable`, visible and
+   * drawn at the current zoom: one result per overlay, a failed request as `error`.
+   */
+  featureInfo(coordinate: Coordinate): Promise<FeatureInfoResult[]>;
 }
 
 export interface LayersApi {
@@ -872,6 +890,8 @@ class EditorImpl implements Editor {
   private valueClickPixel: number[] | null = null;
   private readonly valueClickHandler = (event: MapBrowserEvent): boolean =>
     this.onValueClick(event);
+  /** Inspect clicks beside the vector objects ask the queryable overlays (`featureinfo`). */
+  private readonly featureInfoHandler = (event: MapBrowserEvent): void => this.onInfoClick(event);
   private readonly valueSingleClickHandler = (event: MapBrowserEvent): boolean => {
     const pixel = this.valueClickPixel;
     this.valueClickPixel = null;
@@ -1063,6 +1083,7 @@ class EditorImpl implements Editor {
     });
     this.updateInspect();
     this.map.addInteraction(this.inspectInteraction);
+    this.map.on('singleclick', this.featureInfoHandler);
     this.map.addLayer(this.measurementStore.layer);
     this.map.addLayer(this.measurementStore.liveLayer);
     const measured = this.measurementStore;
@@ -1425,6 +1446,7 @@ class EditorImpl implements Editor {
       getLegendUrl: (id, resolution) => om.getLegendUrl(id, resolution),
       getExtent: (id) => om.getExtent(id),
       fit: (id, options) => this.fitExtent(om.getExtent(id), options),
+      featureInfo: (coordinate) => om.featureInfo(coordinate, this.map.getView()),
     };
 
     const local = new LocalLayers({
@@ -1909,6 +1931,25 @@ class EditorImpl implements Editor {
   }
 
   /** The inspect click selection runs outside edit mode while no read-only tool takes the clicks. */
+  /**
+   * Inspect click beside the vector objects: ask the visible queryable WMS overlays for the
+   * server's information at that point. The click still reaches the inspect selection.
+   */
+  private onInfoClick(event: MapBrowserEvent): void {
+    if (!this.inspectInteraction.getActive()) return;
+    if (!this.overlayManager.list().some((o) => o.queryable && o.visible)) return;
+    const hitTolerance = Math.ceil(this.config.cursor.pickBoxSize / 2);
+    if (this.map.hasFeatureAtPixel(event.pixel, { layerFilter: isEditorLayer, hitTolerance })) {
+      return;
+    }
+    const { coordinate, pixel } = event;
+    this.emitter.emit('featureinfo', { coordinate, pixel, results: [], pending: true });
+    this.overlayManager.featureInfo(coordinate, this.map.getView()).then((results) => {
+      if (this.destroyed) return;
+      this.emitter.emit('featureinfo', { coordinate, pixel, results, pending: false });
+    });
+  }
+
   private updateInspect(): void {
     this.inspectInteraction.setActive(
       !this.config.editMode && this.config.selection.inspect && !this.toolManager.isReadOnly(),
@@ -2210,6 +2251,7 @@ class EditorImpl implements Editor {
     this.endPick();
     this.map.un('click', this.valueClickHandler);
     this.map.un('singleclick', this.valueSingleClickHandler);
+    this.map.un('singleclick', this.featureInfoHandler);
     this.map.removeInteraction(this.snapInteraction);
     this.map.removeInteraction(this.inspectInteraction);
     this.pickHighlight?.setMap(null);

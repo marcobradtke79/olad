@@ -42,7 +42,13 @@ function fakeEditor() {
     schema: { fields: [{ name: 'owner', type: 'string' }] },
   });
   lm.add({ id: 'roads', title: 'Roads', geometryType: 'LineString', source: { features: [] } });
-  lm.add({ id: 'trees', title: 'Trees', geometryType: 'Point', source: { features: [] } });
+  lm.add({
+    id: 'trees',
+    title: 'Trees',
+    geometryType: 'Point',
+    source: { features: [] },
+    legendUrl: 'https://example.org/trees-legend.png',
+  });
   const editor = {
     layers: {
       list: () => lm.list(),
@@ -59,7 +65,11 @@ function fakeEditor() {
       exportStyles: () => lm.exportStyles(),
       importStyles: (json: unknown) => lm.importStyles(json),
     },
-    overlays: { has: (id: string) => om.has(id), get: (id: string) => om.info(id) },
+    overlays: {
+      has: (id: string) => om.has(id),
+      get: (id: string) => om.info(id),
+      getLegendUrl: (id: string) => om.getLegendUrl(id),
+    },
     on: emitter.on.bind(emitter),
   } as unknown as Editor;
   return { editor, lm, om };
@@ -137,9 +147,12 @@ describe('<olcad-layer-style-dialog>', () => {
     expect(lm.getStyle('parcels').label).toMatchObject({ field: 'owner', size: 12 });
     set(el, 'min-zoom', '12', 'change');
     expect(lm.getStyle('parcels').minZoom).toBe(12);
-    // Another layer: its own sections.
+    // Another layer: its own sections, and its configured legend collapsed.
     row(el, 'trees').querySelector<HTMLButtonElement>('[data-action="select"]')!.click();
     expect(legends()).toEqual(['Points', 'Label', 'Layer']);
+    const treeLegend = el.querySelector<HTMLDetailsElement>('.olcad-layer-style-dialog__legend')!;
+    expect(treeLegend.open).toBe(false);
+    expect(treeLegend.querySelector('img')!.src).toBe('https://example.org/trees-legend.png');
     expect(control<HTMLInputElement>(el, 'label-field').type).toBe('text');
   });
 
@@ -183,6 +196,9 @@ describe('<olcad-layer-style-dialog> overlays', () => {
     expect(row(el, 'ortho').dataset.kind).toBe('overlay');
     expect(row(el, 'trees').dataset.kind).toBe('layer');
     expect(Array.from(el.querySelectorAll('legend'), (l) => l.textContent)).toEqual(['Layer']);
+    const legend = el.querySelector<HTMLDetailsElement>('.olcad-layer-style-dialog__legend')!;
+    expect(legend.open).toBe(true);
+    expect(legend.querySelector('img')!.src).toMatch(/REQUEST=GetLegendGraphic/);
     expect(control<HTMLInputElement>(el, 'opacity').value).toBe('0.8');
     set(el, 'opacity', '0.3');
     expect(lm.getStyle('ortho')).toEqual({ opacity: 0.3 });

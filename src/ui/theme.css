@@ -242,6 +242,47 @@
   color: var(--olcad-color-muted);
 }
 
+/* Server information after an inspect click: the answering overlay and one record per feature. */
+.olcad-attribute-form__source {
+  font-weight: 600;
+  margin-top: var(--olcad-spacing);
+}
+
+.olcad-attribute-form__record {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--olcad-spacing);
+  margin: 4px 0;
+  font-size: 0.9em;
+}
+
+.olcad-attribute-form__row {
+  display: contents;
+}
+
+.olcad-attribute-form__row dt {
+  color: var(--olcad-color-muted);
+}
+
+.olcad-attribute-form__row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The server's legend in the style dialog: open for overlays, collapsed for vector layers. */
+.olcad-layer-style-dialog__legend {
+  margin: calc(var(--olcad-spacing) / 2) 0;
+}
+
+.olcad-layer-style-dialog__legend img {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 2px;
+  background: #fff;
+  border-radius: 2px;
+}
+
 .olcad-attribute-form__hint,
 .olcad-attribute-form__error {
   margin: calc(var(--olcad-spacing) / 2) 0;

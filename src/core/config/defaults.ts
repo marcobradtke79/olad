@@ -27,6 +27,7 @@ export function resolveOverlay(overlay: OverlayConfig): ResolvedOverlayConfig {
     title: overlay.title ?? overlay.id,
     visible: overlay.visible ?? true,
     opacity: overlay.opacity ?? 1,
+    queryable: overlay.queryable ?? false,
   };
 }
 

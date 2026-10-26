@@ -248,6 +248,8 @@
       "crossOrigin": "anonymous",
       "opacity": 0.7,
       "attribution": "Test server WMS",
+      "queryable": true,
+      "infoFormat": "application/json",
       "extent": [8.3988, 49.0089, 8.4032, 49.0106],
       "extentProjection": "EPSG:4326"
     },

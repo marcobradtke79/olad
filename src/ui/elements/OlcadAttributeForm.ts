@@ -2,7 +2,7 @@ import type Feature from 'ol/Feature';
 import { layerFormFields } from '../../core/dimensions/form';
 import { updateProperties } from '../../core/changes/commands';
 import type { FieldConfig } from '../../core/config/types';
-import type { Editor } from '../../core/Editor';
+import type { Editor, EditorEvents } from '../../core/Editor';
 
 /**
  * `<olcad-attribute-form>`: a form generated from the layer schema for the single selected
@@ -11,7 +11,9 @@ import type { Editor } from '../../core/Editor';
  * With the `popup` attribute the form lives in a modal dialog that opens whenever a command
  * inserts a feature (`featureinsert`) into a layer that has attributes. Several inserts (a
  * mirrored or split group) are shown one after another ("1 of 3"): Save or Later moves on to
- * the next, Escape closes the dialog for all of them.
+ * the next, Escape closes the dialog for all of them. A docked form also shows what the
+ * queryable WMS overlays answer to an inspect click beside the objects (`featureinfo`): one
+ * read-only record per feature, until something is selected.
  * Bind with `element.editor = editor`.
  */
 export class OlcadAttributeForm extends HTMLElement {
@@ -24,6 +26,8 @@ export class OlcadAttributeForm extends HTMLElement {
   /** Popup mode: how many features the current batch had, for the "1 of 3" progress. */
   private popupTotal = 0;
   private dialog: HTMLDialogElement | null = null;
+  /** The last GetFeatureInfo answer (docked forms only), shown while nothing is selected. */
+  private featureInfo: EditorEvents['featureinfo'] | null = null;
 
   get popup(): boolean {
     return this.hasAttribute('popup');
@@ -57,6 +61,7 @@ export class OlcadAttributeForm extends HTMLElement {
       this.unsubscribe.push(
         editor.on('selectionchange', ({ features }) => {
           this.error = null;
+          if (features.length > 0) this.featureInfo = null;
           this.render(true);
           if (this.reveal && !this.popup && features.length === 1 && !editor.isEditMode()) {
             this.revealPanel();
@@ -90,6 +95,15 @@ export class OlcadAttributeForm extends HTMLElement {
           }
           this.error = null;
           this.render(true);
+        }),
+        editor.on('featureinfo', (event) => {
+          if (this.popup) return; // the popup is for new objects, not for server information
+          this.featureInfo = event;
+          this.error = null;
+          this.render(true);
+          if (this.reveal && !event.pending && event.results.some((r) => r.features.length > 0)) {
+            this.revealPanel();
+          }
         }),
         editor.on('layerchange', rerender),
         editor.on('dimensionstale', rerender),
@@ -178,8 +192,10 @@ export class OlcadAttributeForm extends HTMLElement {
    */
   private render(force = false): void {
     const current = this.currentSubject();
+    // A selected object wins over the server information of the last inspect click.
+    const info = current || this.popup ? null : this.featureInfo;
     const sameSubject = current?.feature === this.subject;
-    if (!force && sameSubject && this.contains(document.activeElement)) return;
+    if (!force && sameSubject && !info && this.contains(document.activeElement)) return;
     this.subject = current?.feature ?? null;
     const editor = this.boundEditor;
     if (this.popup) {
@@ -199,11 +215,58 @@ export class OlcadAttributeForm extends HTMLElement {
       return;
     }
     this.replaceChildren();
+    if (editor && !current && info) {
+      this.renderFeatureInfo(this, info);
+      return;
+    }
     if (!editor || !current) {
       this.append(hint(editor ? 'Select one feature to edit its attributes.' : ''));
       return;
     }
     this.renderInto(this, editor, current.feature, current.layer);
+  }
+
+  /** What the queryable overlays answered at the last inspect click: one record per feature. */
+  private renderFeatureInfo(target: HTMLElement, info: EditorEvents['featureinfo']): void {
+    const title = document.createElement('div');
+    title.className = 'olcad-attribute-form__title';
+    title.textContent = 'Information from the server';
+    target.append(title);
+    if (info.pending) {
+      target.append(hint('Asking the overlays…'));
+      return;
+    }
+    if (info.results.length === 0) {
+      target.append(hint('No overlay answers at this point.'));
+      return;
+    }
+    for (const result of info.results) {
+      const source = document.createElement('div');
+      source.className = 'olcad-attribute-form__source';
+      source.dataset.overlay = result.overlay;
+      source.textContent = result.title;
+      target.append(source);
+      if (result.error) {
+        target.append(hint(`Request failed: ${result.error.message}`));
+        continue;
+      }
+      if (result.features.length === 0) {
+        target.append(hint('Nothing at this point.'));
+        continue;
+      }
+      for (const feature of result.features) {
+        const record = document.createElement('dl');
+        record.className = 'olcad-attribute-form__record';
+        const id = feature.getId();
+        if (id !== undefined) addRecordRow(record, 'id', String(id));
+        const geometryName = feature.getGeometryName();
+        for (const [key, value] of Object.entries(feature.getProperties())) {
+          if (key === geometryName) continue;
+          addRecordRow(record, key, formatInfoValue(value));
+        }
+        target.append(record);
+      }
+    }
   }
 
   private ensureDialog(): HTMLDialogElement {
@@ -400,6 +463,25 @@ function staleNotice(
   });
   box.append(text, update, detach);
   return box;
+}
+
+/** One `dt` / `dd` row of a server information record. */
+function addRecordRow(record: HTMLDListElement, key: string, value: string): void {
+  const row = document.createElement('div');
+  row.className = 'olcad-attribute-form__row';
+  row.dataset.key = key;
+  const dt = document.createElement('dt');
+  dt.textContent = key;
+  const dd = document.createElement('dd');
+  dd.textContent = value;
+  row.append(dt, dd);
+  record.append(row);
+}
+
+function formatInfoValue(value: unknown): string {
+  if (value === null || value === undefined) return '–';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
 
 function hint(text: string): HTMLElement {

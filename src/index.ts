@@ -165,6 +165,8 @@ export type { LayerStyle, StrokeDash } from './core/layers/style';
 export { LAYER_Z_INDEX_BASE } from './core/layers/LayerManager';
 export { OVERLAY_ID_PROPERTY } from './core/layers/overlays';
 export type { OverlayInfo, OverlayChangeType } from './core/layers/overlays';
+export { DEFAULT_INFO_FORMAT, featureInfoUrl, readFeatureInfo } from './core/layers/featureInfo';
+export type { FeatureInfoResult } from './core/layers/featureInfo';
 export { createRasterLayer } from './core/layers/raster';
 export type { RasterSpec, RasterContext } from './core/layers/raster';
 export { fitView, unionExtents } from './core/view/fit';

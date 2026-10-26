@@ -202,6 +202,8 @@ const OVERLAY_COMMON_KEYS = [
   'extent',
   'extentProjection',
   'fetch',
+  'queryable',
+  'infoFormat',
 ] as const;
 const BASEMAP_TYPES = ['osm', 'xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
 const OVERLAY_TYPES = ['xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
@@ -359,6 +361,8 @@ function checkOverlay(overlay: unknown, path: string, ctx: Context): void {
   optional(string)(o.legendUrl, `${path}.legendUrl`);
   checkExtentFields(o, path, ctx);
   optional(checkFetch)(o.fetch, `${path}.fetch`);
+  optional(boolean)(o.queryable, `${path}.queryable`);
+  optional(string)(o.infoFormat, `${path}.infoFormat`);
   checkRasterSource(o, path, ctx, type, OVERLAY_ZOOM_KEYS);
 }
 
@@ -423,6 +427,7 @@ const LAYER_KEYS = [
   'attribution',
   'extent',
   'extentProjection',
+  'legendUrl',
   'text',
   'dimension',
 ] as const;
@@ -644,6 +649,7 @@ function checkLayer(layer: unknown, path: string, ctx: Context): void {
   optional(unitInterval)(l.opacity, `${path}.opacity`);
   optional(string)(l.attribution, `${path}.attribution`);
   checkExtentFields(l, path, ctx);
+  optional(string)(l.legendUrl, `${path}.legendUrl`);
   optional(checkText)(l.text, `${path}.text`);
   if (
     l.text !== undefined &&

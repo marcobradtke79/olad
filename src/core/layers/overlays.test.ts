@@ -2,7 +2,8 @@
 import Collection from 'ol/Collection';
 import type BaseLayer from 'ol/layer/Base';
 import type OlMap from 'ol/Map';
-import { describe, expect, it, vi } from 'vitest';
+import View from 'ol/View';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OverlayConfig } from '../config/types';
 import { LayerManager } from './LayerManager';
 import { OverlayManager, OVERLAY_ID_PROPERTY } from './overlays';
@@ -35,7 +36,39 @@ const vector = (id: string) => ({
   source: { features: [] as Record<string, unknown>[] },
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('OverlayManager', () => {
+  it('asks the queryable, visible WMS overlays for feature info and reports failures per overlay', async () => {
+    const { om } = setup();
+    om.add(wms('asked', { queryable: true, title: 'Asked' }));
+    om.add(wms('silent'));
+    om.add(wms('hidden', { queryable: true, visible: false }));
+    om.add(wms('zoomed-out', { queryable: true, minZoom: 15 }));
+    om.add(wms('failing', { queryable: true }));
+    const answer = JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', id: 'a.1', geometry: null, properties: { name: 'A' } }],
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        /QUERY_LAYERS=failing/.test(url)
+          ? { ok: false, status: 500, statusText: 'Internal Server Error', text: async () => '' }
+          : { ok: true, status: 200, statusText: 'OK', text: async () => answer },
+      ),
+    );
+    const view = new View({ projection: 'EPSG:3857', center: [0, 0], zoom: 10 });
+    const results = await om.featureInfo([0, 0], view);
+    expect(results.map((r) => [r.overlay, r.title, r.features.length, r.error?.message])).toEqual([
+      ['asked', 'Asked', 1, undefined],
+      ['failing', 'failing', 0, expect.stringMatching(/500/)],
+    ]);
+    expect(results[0]!.features[0]!.get('name')).toBe('A');
+    expect(om.info('asked').queryable).toBe(true);
+    expect(om.info('silent').queryable).toBe(false);
+  });
+
   it('adds, lists, switches and removes overlays with events', () => {
     const { om, layers, events } = setup();
     om.add(wms('o1', { title: 'One', opacity: 0.7, minZoom: 8, attribution: 'me' }));
@@ -54,6 +87,7 @@ describe('OverlayManager', () => {
         minZoom: 8,
         legendUrl: expect.stringMatching(/REQUEST=GetLegendGraphic/),
         attribution: 'me',
+        queryable: false,
       },
       {
         id: 'o2',
@@ -62,6 +96,7 @@ describe('OverlayManager', () => {
         visible: false,
         opacity: 1,
         legendUrl: expect.stringMatching(/LAYER=o2/),
+        queryable: false,
       },
     ]);
     expect(events.onChange.mock.calls.map((c) => c[0])).toEqual([

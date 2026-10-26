@@ -88,6 +88,28 @@ describe('validateConfig: overlays', () => {
     ).not.toThrow();
   });
 
+  it('accepts queryable and infoFormat, and a layer legend URL', () => {
+    expect(() =>
+      validateConfig({
+        ...base,
+        overlays: [{ ...wms, queryable: true, infoFormat: 'application/vnd.ogc.gml' }],
+        layers: [{ id: 'l', geometryType: 'Point', source: { features: [] }, legendUrl: '/l.png' }],
+      }),
+    ).not.toThrow();
+    expect(() => validateConfig({ ...base, overlays: [{ ...wms, queryable: 'yes' }] })).toThrow(
+      /config\.overlays\[0\]\.queryable/,
+    );
+    expect(() =>
+      validateConfig({
+        ...base,
+        layers: [{ id: 'l', geometryType: 'Point', source: { features: [] }, legendUrl: 1 }],
+      }),
+    ).toThrow(/config\.layers\[0\]\.legendUrl/);
+    expect(applyDefaults({ target: 'map', overlays: [wms as never] }).overlays[0]!.queryable).toBe(
+      false,
+    );
+  });
+
   it('validates one overlay for editor.overlays.add', () => {
     expect(() => validateOverlayConfig(wms)).not.toThrow();
     expect(() => validateOverlayConfig({ id: 'o', type: 'wms', url: '/wms' })).toThrow(
@@ -97,7 +119,9 @@ describe('validateConfig: overlays', () => {
 
   it('applies the overlay defaults', () => {
     const resolved = applyDefaults({ target: 'map', overlays: [wms as never] });
-    expect(resolved.overlays).toEqual([{ ...wms, title: 'o', visible: true, opacity: 1 }]);
+    expect(resolved.overlays).toEqual([
+      { ...wms, title: 'o', visible: true, opacity: 1, queryable: false },
+    ]);
     expect(applyDefaults({ target: 'map' }).overlays).toEqual([]);
   });
 });
