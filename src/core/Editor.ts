@@ -46,6 +46,7 @@ import { nearestSegment, normalizeAngle, screenAngle, type Segment } from './geo
 import { Emitter } from './events';
 import { BASEMAP_ID_PROPERTY, createBasemapLayer } from './layers/basemaps';
 import { OverlayManager, type OverlayChangeType, type OverlayInfo } from './layers/overlays';
+import { listGroups, type GroupInfo } from './layers/groups';
 import type { FeatureInfoResult } from './layers/featureInfo';
 import { isEditorLayer } from './tools/layerFilter';
 import type { Extent } from 'ol/extent';
@@ -328,6 +329,18 @@ export interface OverlaysApi {
    * drawn at the current zoom: one result per overlay, a failed request as `error`.
    */
   featureInfo(coordinate: Coordinate): Promise<FeatureInfoResult[]>;
+}
+
+/**
+ * Groups of layers and overlays (`groups[]`, `layers[].group`, `overlays[].group`). A group has
+ * no visibility of its own: it shows or hides its members, which emit `layerchange` /
+ * `overlaychange` as usual.
+ */
+export interface GroupsApi {
+  /** The declared groups in config order, then the ones only members name; members bottom first. */
+  list(): GroupInfo[];
+  /** Show or hide every member layer and overlay. Throws for an unknown group. */
+  setVisible(id: string, visible: boolean): void;
 }
 
 export interface LayersApi {
@@ -769,6 +782,7 @@ export interface Editor {
   readonly config: ResolvedEditorConfig;
   readonly basemaps: BasemapsApi;
   readonly overlays: OverlaysApi;
+  readonly groups: GroupsApi;
   readonly layers: LayersApi;
   readonly straightedge: StraightedgeApi;
   readonly changes: ChangesApi;
@@ -836,6 +850,7 @@ class EditorImpl implements Editor {
   readonly config: ResolvedEditorConfig;
   readonly basemaps: BasemapsApi;
   readonly overlays: OverlaysApi;
+  readonly groups: GroupsApi;
   readonly layers: LayersApi;
   readonly straightedge: StraightedgeApi;
   readonly changes: ChangesApi;
@@ -1447,6 +1462,16 @@ class EditorImpl implements Editor {
       getExtent: (id) => om.getExtent(id),
       fit: (id, options) => this.fitExtent(om.getExtent(id), options),
       featureInfo: (coordinate) => om.featureInfo(coordinate, this.map.getView()),
+    };
+
+    this.groups = {
+      list: () => listGroups(config.groups, lm.list(), om.list()),
+      setVisible: (id, visible) => {
+        const group = this.groups.list().find((g) => g.id === id);
+        if (!group) throw new Error(`Unknown group "${id}"`);
+        for (const overlay of group.overlays) om.setVisible(overlay, visible);
+        for (const layer of group.layers) this.layers.setVisible(layer, visible);
+      },
     };
 
     const local = new LocalLayers({

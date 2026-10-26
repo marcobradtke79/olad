@@ -2,12 +2,14 @@ import type {
   BasemapConfig,
   DimensionPreset,
   EditorConfig,
+  GroupConfig,
   LayerConfig,
   OverlayConfig,
   ResolvedBasemapConfig,
   ResolvedDimensionConfig,
   ResolvedEditableConfig,
   ResolvedEditorConfig,
+  ResolvedGroupConfig,
   ResolvedLayerConfig,
   ResolvedOverlayConfig,
   ResolvedTextConfig,
@@ -29,6 +31,10 @@ export function resolveOverlay(overlay: OverlayConfig): ResolvedOverlayConfig {
     opacity: overlay.opacity ?? 1,
     queryable: overlay.queryable ?? false,
   };
+}
+
+export function resolveGroup(group: GroupConfig): ResolvedGroupConfig {
+  return { id: group.id, title: group.title ?? group.id, collapsed: group.collapsed ?? false };
 }
 
 export function resolveEditable(editable: LayerConfig['editable']): ResolvedEditableConfig {
@@ -134,6 +140,7 @@ export function applyDefaults(config: EditorConfig): ResolvedEditorConfig {
     basemaps,
     layers: (config.layers ?? []).map(resolveLayer),
     overlays: (config.overlays ?? []).map(resolveOverlay),
+    groups: (config.groups ?? []).map(resolveGroup),
     editMode: config.editMode ?? false,
     cursor: {
       crosshair: true,

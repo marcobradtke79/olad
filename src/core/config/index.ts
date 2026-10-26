@@ -12,6 +12,7 @@ export {
   resolveEditable,
   resolveLayer,
   resolveOverlay,
+  resolveGroup,
   DEFAULT_CENTER,
   DEFAULT_PROJECTION,
   DEFAULT_ZOOM,

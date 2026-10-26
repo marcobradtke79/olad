@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Layer groups: new config list `groups[]` (`id`, `title`, `collapsed`) and options `layers[].group` / `overlays[].group`; a `group` naming no declared group creates one titled with its id, listed after the declared ones. `editor.groups` (`list()`: `GroupInfo { id, title, collapsed, layers, overlays }` with the members in drawing order; `setVisible(id, visible)` for every member), `LayerInfo.group`, `OverlayInfo.group`; exported `listGroups`, `resolveGroup` and the types `GroupsApi`, `GroupInfo`, `GroupConfig`, `ResolvedGroupConfig`. `<olcad-layer-list>` lists the members of each group under a group row (disclosure button with `aria-expanded`, visibility toggle with `aria-pressed` `true` / `false` / `mixed`, title) in the Overlays and Layers sections, ungrouped rows after; new icon `chevron`. The test configuration groups `roads`, `hydrants`, `lamps` and the `roads-wms` overlay as Infrastructure.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added

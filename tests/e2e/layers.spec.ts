@@ -307,3 +307,44 @@ test.describe('layers and projections', () => {
     expect(none.features).toHaveLength(0);
   });
 });
+
+test.describe('layer groups', () => {
+  test('a group row lists its members and switches them on and off together', async ({ page }) => {
+    await page.goto('/');
+    await waitForEditor(page);
+    await openFlyout(page, 'layers');
+    const groups = await page.evaluate(() => window.editor.groups.list());
+    expect(groups).toEqual([
+      {
+        id: 'infrastructure',
+        title: 'Infrastructure',
+        collapsed: false,
+        layers: ['roads', 'hydrants', 'lamps'],
+        overlays: ['roads-wms'],
+      },
+    ]);
+    const head = page.locator(
+      'olcad-layer-list .olcad-layer-list__group-row[data-section="layers"][data-group-id="infrastructure"]',
+    );
+    await expect(head.locator('.olcad-layer-list__title')).toHaveText('Infrastructure');
+    const members = head.locator('+ .olcad-layer-list__group-members');
+    await expect(members.locator('[data-layer-id]')).toHaveCount(3);
+    // roads-wms starts hidden, so the group is mixed.
+    const eye = head.locator('[data-action="group-visible"]');
+    await expect(eye).toHaveAttribute('aria-pressed', 'mixed');
+    await eye.click();
+    await expect(eye).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => window.editor.overlays.get('roads-wms').visible)).toBe(true);
+    await eye.click();
+    await expect(eye).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      await page.evaluate(() =>
+        ['roads', 'hydrants', 'lamps'].map((id) => window.editor.layers.get(id).visible),
+      ),
+    ).toEqual([false, false, false]);
+    expect(await page.evaluate(() => window.editor.layers.get('parcels').visible)).toBe(true);
+    // The disclosure button hides the members.
+    await head.locator('[data-action="group-toggle"]').click();
+    await expect(members).toBeHidden();
+  });
+});

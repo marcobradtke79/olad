@@ -46,11 +46,14 @@ const editor = createEditor({
     },
   ],
   // A server-rendered layer over the basemap: switched on its own, dimmed, never edited.
+  // The layer list shows grouped layers and overlays under one row with a shared visibility toggle.
+  groups: [{ id: 'annotation', title: 'Annotation' }],
   overlays: [
     {
       id: 'osm-labels',
       type: 'wms',
       title: 'OSM labels (WMS overlay)',
+      group: 'annotation',
       url: 'https://ows.terrestris.de/osm/service',
       params: { LAYERS: 'OSM-Overlay-WMS', TRANSPARENT: true },
       serverType: 'geoserver',
@@ -86,6 +89,7 @@ const editor = createEditor({
       // field value is set (click the value on the map).
       id: 'dimensions',
       title: 'Dimensions',
+      group: 'annotation',
       geometryType: 'LineString',
       editable: true,
       snappable: false,

@@ -204,6 +204,7 @@ const OVERLAY_COMMON_KEYS = [
   'fetch',
   'queryable',
   'infoFormat',
+  'group',
 ] as const;
 const BASEMAP_TYPES = ['osm', 'xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
 const OVERLAY_TYPES = ['xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
@@ -363,6 +364,7 @@ function checkOverlay(overlay: unknown, path: string, ctx: Context): void {
   optional(checkFetch)(o.fetch, `${path}.fetch`);
   optional(boolean)(o.queryable, `${path}.queryable`);
   optional(string)(o.infoFormat, `${path}.infoFormat`);
+  optional(groupId)(o.group, `${path}.group`);
   checkRasterSource(o, path, ctx, type, OVERLAY_ZOOM_KEYS);
 }
 
@@ -428,6 +430,7 @@ const LAYER_KEYS = [
   'extent',
   'extentProjection',
   'legendUrl',
+  'group',
   'text',
   'dimension',
 ] as const;
@@ -650,6 +653,7 @@ function checkLayer(layer: unknown, path: string, ctx: Context): void {
   optional(string)(l.attribution, `${path}.attribution`);
   checkExtentFields(l, path, ctx);
   optional(string)(l.legendUrl, `${path}.legendUrl`);
+  optional(groupId)(l.group, `${path}.group`);
   optional(checkText)(l.text, `${path}.text`);
   if (
     l.text !== undefined &&
@@ -670,6 +674,26 @@ function checkLayer(layer: unknown, path: string, ctx: Context): void {
 }
 
 // ---------------------------------------------------------------------------
+// groups
+
+const GROUP_KEYS = ['id', 'title', 'collapsed'] as const;
+
+/** A group id: a non-empty string. */
+function groupId(value: unknown, path: string): void {
+  string(value, path);
+  if ((value as string).length === 0) throw new ConfigError(path, 'expected a non-empty string');
+}
+
+function checkGroup(group: unknown, path: string): void {
+  object(group, path);
+  const g = group as Record<string, unknown>;
+  checkKeys(g, path, GROUP_KEYS);
+  groupId(g.id, `${path}.id`);
+  optional(string)(g.title, `${path}.title`);
+  optional(boolean)(g.collapsed, `${path}.collapsed`);
+}
+
+// ---------------------------------------------------------------------------
 // root
 
 const ROOT_KEYS = [
@@ -681,6 +705,7 @@ const ROOT_KEYS = [
   'basemaps',
   'layers',
   'overlays',
+  'groups',
   'editMode',
   'cursor',
   'changes',
@@ -992,6 +1017,11 @@ export function validateConfig(config: unknown): asserts config is EditorConfig 
     if (!Array.isArray(c.layers)) throw new ConfigError('config.layers', 'expected an array');
     c.layers.forEach((l, i) => checkLayer(l, `config.layers[${i}]`, ctx));
     checkUniqueIds(c.layers, 'config.layers', 'layer');
+  }
+  if (c.groups !== undefined) {
+    if (!Array.isArray(c.groups)) throw new ConfigError('config.groups', 'expected an array');
+    c.groups.forEach((g, i) => checkGroup(g, `config.groups[${i}]`));
+    checkUniqueIds(c.groups, 'config.groups', 'group');
   }
   if (c.overlays !== undefined) {
     if (!Array.isArray(c.overlays)) throw new ConfigError('config.overlays', 'expected an array');

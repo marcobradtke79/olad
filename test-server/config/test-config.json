@@ -267,7 +267,8 @@
       "visible": false,
       "minZoom": 10,
       "maxZoom": 22,
-      "legendUrl": "/wms?SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=test:roads"
+      "legendUrl": "/wms?SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=test:roads",
+      "group": "infrastructure"
     },
     {
       "id": "hatch-xyz",
@@ -331,5 +332,6 @@
       "convertToRGB": false,
       "visible": false
     }
-  ]
+  ],
+  "groups": [{ "id": "infrastructure", "title": "Infrastructure" }]
 }

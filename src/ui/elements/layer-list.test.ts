@@ -5,6 +5,8 @@ import type { Editor, EditorEvents } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
 import type { OverlayInfo } from '../../core/layers/overlays';
 import { Emitter } from '../../core/events';
+import { listGroups } from '../../core/layers/groups';
+import type { ResolvedGroupConfig } from '../../core/config/types';
 import { defineElements, type OlcadFeatureTable, type OlcadLayerList } from '../index';
 import { persistLocalLayers } from '../localLayerStorage';
 
@@ -42,7 +44,26 @@ function fakeEditor(editMode = false) {
   const layerOf = new Map<Feature, string>();
   const fits = new Map<Feature, string[]>();
   const find = (id: string) => infos.find((i) => i.id === id)!;
+  const declaredGroups: ResolvedGroupConfig[] = [];
   const editor = {
+    groups: {
+      list: () => listGroups(declaredGroups, infos, overlays),
+      setVisible: vi.fn((id: string, visible: boolean) => {
+        const group = listGroups(declaredGroups, infos, overlays).find((g) => g.id === id)!;
+        for (const o of group.overlays) editor.overlays.setVisible(o, visible);
+        for (const l of group.layers) editor.layers.setVisible(l, visible);
+      }),
+    },
+    /** Declare a group and put layers / overlays into it. */
+    group(group: ResolvedGroupConfig | string, members: string[]) {
+      const id = typeof group === 'string' ? group : group.id;
+      if (typeof group !== 'string') declaredGroups.push(group);
+      for (const member of members) {
+        const target = infos.find((i) => i.id === member) ?? overlay(member);
+        target.group = id;
+      }
+      emitter.emit('layerchange', { id: members[0]!, type: 'add' });
+    },
     tools: { getActive: () => null, activate: vi.fn(), deactivate: vi.fn() },
     isEditMode: () => editMode,
     setEditMode: vi.fn((on: boolean) => {
@@ -156,6 +177,8 @@ function fakeEditor(editMode = false) {
     off: emitter.off.bind(emitter),
     destroy: () => emitter.emit('destroy', undefined),
   } as unknown as Editor & {
+    groups: { setVisible: ReturnType<typeof vi.fn> };
+    group(group: ResolvedGroupConfig | string, members: string[]): void;
     setEditMode: ReturnType<typeof vi.fn>;
     layers: { moveDrafts: ReturnType<typeof vi.fn>; fit: ReturnType<typeof vi.fn> };
     overlays: {
@@ -575,5 +598,83 @@ describe('<olcad-layer-list> legends', () => {
     )!;
     expect(img.src).toBe('https://example.org/legend-a.png');
     expect(img.alt).toBe('Legend of A');
+  });
+});
+
+describe('<olcad-layer-list> groups', () => {
+  it('lists group members under a group row in each section, ungrouped rows after', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    editor.addOverlay({ id: 'wms' });
+    editor.addOverlay({ id: 'xyz' });
+    editor.group({ id: 'infra', title: 'Infrastructure', collapsed: false }, ['b', 'wms']);
+    const sections = el.querySelectorAll<HTMLElement>('.olcad-layer-list__group[role="group"]');
+    const order = (section: HTMLElement) =>
+      Array.from(
+        section.querySelectorAll<HTMLElement>(
+          '.olcad-layer-list__group-row, [data-layer-id], [data-overlay-id]',
+        ),
+        (r) => r.dataset.groupId ?? r.dataset.layerId ?? r.dataset.overlayId,
+      );
+    expect(order(sections[0]!)).toEqual(['infra', 'wms', 'xyz']);
+    expect(order(sections[1]!)).toEqual(['infra', 'b', 'a']);
+    const head = el.querySelector<HTMLElement>(
+      '.olcad-layer-list__group-row[data-section="layers"]',
+    )!;
+    expect(head.querySelector('.olcad-layer-list__title')!.textContent).toBe('Infrastructure');
+    const members = head.nextElementSibling as HTMLElement;
+    expect(members.getAttribute('aria-labelledby')).toBe(
+      head.querySelector('.olcad-layer-list__title')!.id,
+    );
+    expect(members.querySelector('[data-layer-id="b"]')).not.toBeNull();
+  });
+
+  it('collapses per section and keeps the state across re-renders', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    editor.group({ id: 'g', title: 'G', collapsed: true }, ['a']);
+    const toggle = () =>
+      el.querySelector<HTMLButtonElement>(
+        '.olcad-layer-list__group-row [data-action="group-toggle"]',
+      )!;
+    const members = () => el.querySelector<HTMLElement>('.olcad-layer-list__group-members')!;
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    expect(members().hidden).toBe(true);
+    toggle().focus();
+    toggle().click();
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    expect(members().hidden).toBe(false);
+    expect(document.activeElement).toBe(toggle()); // focus survives the re-render
+    editor.layers.setVisible('b', false); // any re-render keeps it open
+    expect(members().hidden).toBe(false);
+  });
+
+  it('shows all / none / mixed and switches every member', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    editor.addOverlay({ id: 'wms' });
+    editor.group('implicit', ['a', 'wms']);
+    const eye = (section: string) =>
+      el.querySelector<HTMLButtonElement>(
+        `.olcad-layer-list__group-row[data-section="${section}"] [data-action="group-visible"]`,
+      )!;
+    expect(eye('layers').getAttribute('aria-pressed')).toBe('true');
+    expect(
+      el.querySelector(
+        '.olcad-layer-list__group-row[data-section="layers"] .olcad-layer-list__title',
+      )!.textContent,
+    ).toBe('implicit');
+    editor.overlays.setVisible('wms', false);
+    expect(eye('layers').getAttribute('aria-pressed')).toBe('mixed');
+    expect(eye('overlays').getAttribute('aria-pressed')).toBe('mixed');
+    eye('layers').click();
+    expect(editor.groups.setVisible).toHaveBeenLastCalledWith('implicit', true);
+    expect(eye('overlays').getAttribute('aria-pressed')).toBe('true');
+    eye('overlays').click();
+    expect(editor.groups.setVisible).toHaveBeenLastCalledWith('implicit', false);
+    expect(eye('layers').getAttribute('aria-pressed')).toBe('false');
+    expect(el.querySelector('[data-layer-id="a"]')!.classList).toContain(
+      'olcad-layer-list__layer--hidden',
+    );
   });
 });

@@ -39,6 +39,8 @@ export interface OverlayInfo {
   attribution?: string;
   /** Whether GetFeatureInfo is asked at inspect clicks (`wms` overlays with `queryable`). */
   queryable: boolean;
+  /** The group the overlay is listed under (`overlays[].group`). */
+  group?: string;
 }
 
 export interface OverlayManagerEvents {
@@ -139,6 +141,7 @@ export class OverlayManager {
       ...(legendUrl ? { legendUrl } : {}),
       ...(config.attribution ? { attribution: config.attribution } : {}),
       queryable: config.queryable,
+      ...(config.group !== undefined ? { group: config.group } : {}),
     };
   }
 

@@ -112,6 +112,7 @@ export const ICONS = {
   ),
   arrowUp: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
   arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
+  chevron: svg('<path d="m9 6 6 6-6 6"/>'),
   palette: svg(
     '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.8 1.2-1.6-.4-1 .3-2.4 1.6-2.4H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/>',
   ),

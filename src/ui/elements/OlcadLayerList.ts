@@ -2,6 +2,7 @@ import type Feature from 'ol/Feature';
 import type { Editor } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
 import type { OverlayInfo } from '../../core/layers/overlays';
+import type { GroupInfo } from '../../core/layers/groups';
 import { setIconButton } from './controls';
 import { icon } from '../icons';
 import { featureTablesOf, onFeatureTableChange } from './OlcadFeatureTable';
@@ -18,7 +19,12 @@ type RowAction =
   | 'settings'
   | 'info'
   | 'opacity'
-  | 'zoom';
+  | 'zoom'
+  | 'group-toggle'
+  | 'group-visible';
+
+/** The two sections of the list that show groups. */
+type Section = 'overlays' | 'layers';
 
 /**
  * `<olcad-layer-list>`: basemaps as a radio group, one row per raster overlay (visibility and
@@ -29,7 +35,10 @@ type RowAction =
  * and makes the layer the active one; no tool is started), move (while draft objects are
  * selected, on the rows of the layers that take them: `editor.layers.moveDrafts`), settings
  * (local layers only: name, attributes, delete in `<olcad-layer-editor>`) and info (details
- * below the row, with a Zoom button that fits the view to the layer's extent). A New layer button above the layers creates a local layer
+ * below the row, with a Zoom button that fits the view to the layer's extent). Members of a group
+ * (`editor.groups`) are listed under a group row with a disclosure button and a visibility toggle
+ * for all members (`aria-pressed="mixed"` while only some are visible), in both sections when the
+ * group has layers and overlays; ungrouped rows follow. A New layer button above the layers creates a local layer
  * (`editor.localLayers`) in the same dialog. With the `reveal` attribute, selecting draft objects opens the
  * flyout panel the list sits in. Bind with `element.editor = editor`. Renders into light DOM
  * so the theme and host styles apply.
@@ -45,6 +54,8 @@ export class OlcadLayerList extends HTMLElement {
   private readonly overlayErrors = new Map<string, Error>();
   /** Set while an opacity slider applies its value, so the list is not rebuilt under the pointer. */
   private applying = false;
+  /** Groups opened or closed by the user, per section (`overlays:id`, `layers:id`). */
+  private readonly collapsed = new Map<string, boolean>();
 
   /** `reveal`: a selection holding draft objects opens the flyout panel the list sits in. */
   get reveal(): boolean {
@@ -119,7 +130,7 @@ export class OlcadLayerList extends HTMLElement {
   private render(): void {
     // A rebuild would drop the focus: remember the focused row control and restore it.
     const focused = this.ownerDocument.activeElement as HTMLElement | null;
-    const focusedRow = focused?.closest<HTMLElement>('[data-layer-id], [data-overlay-id]');
+    const focusedRow = focused?.closest<HTMLElement>(ROW_SELECTOR);
     const focus =
       focused && this.contains(focused) && focused.dataset.action
         ? { action: focused.dataset.action, row: rowId(focusedRow) }
@@ -132,13 +143,17 @@ export class OlcadLayerList extends HTMLElement {
     const layers = editor.layers.list();
     const known = new Set([...overlays.map((o) => o.id), ...layers.map((l) => l.id)]);
     for (const id of this.expanded) if (!known.has(id)) this.expanded.delete(id);
+    const groups = editor.groups?.list() ?? [];
+    const visible = new Map<string, boolean>();
+    for (const item of [...overlays, ...layers]) visible.set(item.id, item.visible);
+    const grouping: Grouping = { groups, visible };
     this.renderBasemaps(editor);
-    this.renderOverlays(editor, overlays);
-    this.renderLayers(editor, layers);
+    this.renderOverlays(editor, overlays, grouping);
+    this.renderLayers(editor, layers, grouping);
     if (focus?.row) {
-      const row = Array.from(
-        this.querySelectorAll<HTMLElement>('[data-layer-id], [data-overlay-id]'),
-      ).find((el) => rowId(el) === focus.row);
+      const row = Array.from(this.querySelectorAll<HTMLElement>(ROW_SELECTOR)).find(
+        (el) => rowId(el) === focus.row,
+      );
       row?.querySelector<HTMLElement>(`[data-action="${focus.action}"]`)?.focus();
     }
   }
@@ -174,7 +189,7 @@ export class OlcadLayerList extends HTMLElement {
     this.append(group);
   }
 
-  private renderOverlays(editor: Editor, overlays: OverlayInfo[]): void {
+  private renderOverlays(editor: Editor, overlays: OverlayInfo[], grouping: Grouping): void {
     if (overlays.length === 0) return;
     const heading = this.heading('Overlays', 'overlays');
     this.append(heading);
@@ -182,7 +197,9 @@ export class OlcadLayerList extends HTMLElement {
     group.className = 'olcad-layer-list__group';
     group.setAttribute('role', 'group');
     group.setAttribute('aria-labelledby', heading.id);
-    for (const overlay of overlays) group.append(this.renderOverlay(editor, overlay));
+    this.renderMembers(editor, group, 'overlays', overlays, grouping, (overlay) =>
+      this.renderOverlay(editor, overlay),
+    );
     this.append(group);
   }
 
@@ -283,7 +300,7 @@ export class OlcadLayerList extends HTMLElement {
     return row;
   }
 
-  private renderLayers(editor: Editor, layers: LayerInfo[]): void {
+  private renderLayers(editor: Editor, layers: LayerInfo[], grouping: Grouping): void {
     const heading = this.heading('Layers', 'layers');
     const add = document.createElement('button');
     add.type = 'button';
@@ -302,8 +319,97 @@ export class OlcadLayerList extends HTMLElement {
     group.setAttribute('role', 'group');
     group.setAttribute('aria-labelledby', heading.id);
     const drafts = editor.selection.get().filter((f) => isDraft(editor, f));
-    for (const layer of layers) group.append(this.renderLayer(editor, layer, drafts));
+    this.renderMembers(editor, group, 'layers', layers, grouping, (layer) =>
+      this.renderLayer(editor, layer, drafts),
+    );
     this.append(group);
+  }
+
+  /**
+   * The rows of one section: each group with members here as a group row and its members (in
+   * list order), then the ungrouped rows.
+   */
+  private renderMembers<T extends { id: string; group?: string }>(
+    editor: Editor,
+    container: HTMLElement,
+    section: Section,
+    items: T[],
+    grouping: Grouping,
+    row: (item: T) => HTMLElement,
+  ): void {
+    for (const info of grouping.groups) {
+      const members = items.filter((item) => item.group === info.id);
+      if (members.length === 0) continue;
+      container.append(this.renderGroup(editor, section, info, grouping, members.map(row)));
+    }
+    for (const item of items) {
+      if (item.group === undefined || !grouping.groups.some((g) => g.id === item.group)) {
+        container.append(row(item));
+      }
+    }
+  }
+
+  private renderGroup(
+    editor: Editor,
+    section: Section,
+    info: GroupInfo,
+    grouping: Grouping,
+    rows: HTMLElement[],
+  ): HTMLElement {
+    const key = `${section}:${info.id}`;
+    const closed = this.collapsed.get(key) ?? info.collapsed;
+    const membersId = `${this.sectionId()}-group-${section}-${info.id}`;
+    const titleId = `${membersId}-title`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'olcad-layer-list__layer-group';
+    wrapper.dataset.group = info.id;
+
+    const head = document.createElement('div');
+    head.className = 'olcad-layer-list__group-row';
+    head.dataset.groupId = info.id;
+    head.dataset.section = section;
+
+    const toggle = rowButton('group-toggle', 'group-toggle');
+    setIconButton(toggle, 'chevron', `Group ${info.title}`, closed ? 'Open group' : 'Close group');
+    toggle.setAttribute('aria-expanded', String(!closed));
+    toggle.setAttribute('aria-controls', membersId);
+    toggle.addEventListener('click', () => {
+      this.collapsed.set(key, !closed);
+      this.render();
+    });
+
+    // Visible: all members (layers and overlays), none, or mixed.
+    const ids = [...info.overlays, ...info.layers];
+    const shown = ids.filter((id) => grouping.visible.get(id)).length;
+    const state = shown === 0 ? 'false' : shown === ids.length ? 'true' : 'mixed';
+    const visible = rowButton('group-visible', 'visible');
+    setIconButton(
+      visible,
+      state === 'false' ? 'eyeOff' : 'eye',
+      `Visible: ${info.title}`,
+      state === 'true' ? 'Hide every layer of this group' : 'Show every layer of this group',
+    );
+    visible.setAttribute('aria-pressed', state);
+    visible.addEventListener('click', () => editor.groups.setVisible(info.id, state !== 'true'));
+
+    const title = document.createElement('span');
+    title.className = 'olcad-layer-list__title olcad-layer-list__group-title';
+    title.id = titleId;
+    title.textContent = info.title;
+
+    head.append(toggle, visible, title);
+
+    const members = document.createElement('div');
+    members.className = 'olcad-layer-list__group-members';
+    members.id = membersId;
+    members.setAttribute('role', 'group');
+    members.setAttribute('aria-labelledby', titleId);
+    members.hidden = closed;
+    members.append(...rows);
+
+    wrapper.append(head, members);
+    return wrapper;
   }
 
   private renderLayer(editor: Editor, layer: LayerInfo, drafts: Feature[]): HTMLElement {
@@ -542,8 +648,20 @@ function rowButton(action: RowAction, className: string): HTMLButtonElement {
   return el;
 }
 
-/** The layer or overlay id of a row element. */
+/** The groups and every layer's and overlay's visibility, for the group rows. */
+interface Grouping {
+  groups: GroupInfo[];
+  visible: Map<string, boolean>;
+}
+
+/** Rows whose focused control is restored after a re-render. */
+const ROW_SELECTOR = '[data-layer-id], [data-overlay-id], [data-group-id]';
+
+/** The layer or overlay id of a row element, or `group:<section>:<id>` for a group row. */
 function rowId(row: HTMLElement | null | undefined): string | undefined {
+  if (row?.dataset.groupId !== undefined) {
+    return `group:${row.dataset.section}:${row.dataset.groupId}`;
+  }
   return row?.dataset.layerId ?? row?.dataset.overlayId;
 }
 

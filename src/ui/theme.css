@@ -1194,6 +1194,65 @@
   border-color: var(--olcad-layer-highlight-color);
 }
 
+/* Group rows: a disclosure chevron, the group's visibility (eye, half-tone while mixed), its name;
+   the members are indented below. */
+.olcad-layer-list__group-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--olcad-spacing) / 2);
+  padding: calc(var(--olcad-spacing) / 2);
+  border-radius: var(--olcad-radius);
+}
+
+.olcad-layer-list__group-row:hover {
+  background: var(--olcad-color-hover);
+}
+
+.olcad-layer-list__group-row .olcad-icon-button {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+}
+
+.olcad-layer-list__group-row .olcad-icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.olcad-layer-list__group-title {
+  font-weight: 600;
+}
+
+.olcad-layer-list__group-toggle[aria-expanded] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--olcad-color-fg);
+}
+
+.olcad-layer-list__group-toggle svg {
+  transition: transform 0.12s ease;
+}
+
+.olcad-layer-list__group-toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.olcad-layer-list__visible[aria-pressed='mixed'] {
+  color: var(--olcad-color-fg);
+  opacity: 0.55;
+}
+
+.olcad-layer-list__group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: calc(var(--olcad-spacing) * 1.5);
+}
+
+.olcad-layer-list__group-members[hidden] {
+  display: none;
+}
+
 .olcad-layer-list__info-toggle[aria-expanded='true'] {
   border-color: var(--olcad-color-border);
 }

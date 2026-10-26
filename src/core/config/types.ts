@@ -222,6 +222,8 @@ interface OverlayBase {
    * XML answers are read with OpenLayers' `WMSGetFeatureInfo` format.
    */
   infoFormat?: string;
+  /** Id of the group the overlay is listed under (`groups[]`; an undeclared id creates one). */
+  group?: string;
 }
 
 /** Slippy map tiles drawn over the basemap. */
@@ -435,6 +437,8 @@ export interface LayerConfig {
   extentProjection?: string;
   /** URL of a legend image, shown in the layer list details and the style dialog. */
   legendUrl?: string;
+  /** Id of the group the layer is listed under (`groups[]`; an undeclared id creates one). */
+  group?: string;
   /** Geometry type every feature of the layer must have. */
   geometryType: GeometryType;
   /** Property that holds the feature id when the format does not carry one. */
@@ -554,6 +558,8 @@ export interface EditorConfig {
   layers?: LayerConfig[];
   /** Raster overlays between the basemap and the vector layers. Changeable at runtime through `editor.overlays`. */
   overlays?: OverlayConfig[];
+  /** Groups the layer list shows layers and overlays under (`layers[].group`, `overlays[].group`). */
+  groups?: GroupConfig[];
   /** Start in edit mode. Switchable at runtime with `editor.setEditMode`. Default `false`. */
   editMode?: boolean;
   /** Edit-mode cursor: CAD crosshair with a pick box. */
@@ -581,6 +587,21 @@ export interface EditorConfig {
   /** The draft layer: target of inserts while no layer is active. */
   draft?: DraftConfig;
 }
+
+/**
+ * A group of layers and overlays, listed together and switched on and off together. Members name
+ * it in `layers[].group` / `overlays[].group`; declaring it sets its title, order and start state.
+ */
+export interface GroupConfig {
+  /** Unique identifier, named by the members' `group`. */
+  id: string;
+  /** Human readable name. Defaults to `id`. */
+  title?: string;
+  /** The layer list starts with the group closed. Default `false`. */
+  collapsed?: boolean;
+}
+
+export type ResolvedGroupConfig = Required<GroupConfig>;
 
 /**
  * The draft layer takes new objects while no layer is active. It accepts every geometry type,
@@ -774,6 +795,7 @@ export interface ResolvedEditorConfig {
   basemaps: ResolvedBasemapConfig[];
   layers: ResolvedLayerConfig[];
   overlays: ResolvedOverlayConfig[];
+  groups: ResolvedGroupConfig[];
   editMode: boolean;
   cursor: Required<CursorConfig>;
   changes: ResolvedChangesConfig;

@@ -58,6 +58,8 @@ export interface LayerInfo {
   error: string | null;
   /** The configured legend image. */
   legendUrl?: string;
+  /** The group the layer is listed under (`layers[].group`). */
+  group?: string;
 }
 
 const DEFAULT_HIGHLIGHT: ResolvedLayerHighlightConfig = {
@@ -507,6 +509,7 @@ export class LayerManager {
       loading: entry.loading > 0,
       error: entry.error?.message ?? null,
       ...(config.legendUrl ? { legendUrl: config.legendUrl } : {}),
+      ...(config.group !== undefined ? { group: config.group } : {}),
     };
   }
 

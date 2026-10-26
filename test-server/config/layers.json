@@ -72,6 +72,7 @@
     {
       "id": "roads",
       "title": "Roads",
+      "group": "infrastructure",
       "source": {
         "format": "geojson",
         "url": "/data/roads.geojson"
@@ -99,6 +100,7 @@
     {
       "id": "hydrants",
       "title": "Hydrants (KML)",
+      "group": "infrastructure",
       "source": {
         "format": "kml",
         "url": "/data/hydrants.kml"
@@ -183,6 +185,7 @@
     {
       "id": "lamps",
       "title": "Lamps (WFS)",
+      "group": "infrastructure",
       "source": {
         "format": "wfs",
         "url": "/wfs",
