@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
 ### Added
 
 - Raster overlays: new config list `overlays[]` (types `xyz`, `wms`, `wmts`, `vector-tile` and `geotiff` with the source options of the basemap of that type; `visible` default on, `opacity`, the display zoom range `minZoom` / `maxZoom` with `sourceMinZoom` / `sourceMaxZoom` for the tile grid, `attribution`, `legendUrl`), drawn between the basemap and the vector layers, each switched on and off on its own and read-only (never selected, snapped or edited, never in the change set). `editor.overlays` (`list`, `get`, `has`, `getConfig`, `add`, `remove`, `setVisible`, `setOpacity`, `setZoomRange`, `getLegendUrl`: the configured legend or the WMS GetLegendGraphic URL), events `overlaychange` / `overlayerror`, exported `OVERLAY_ID_PROPERTY`, `createRasterLayer` (the factory basemaps and overlays share), the overlay config types, `validateOverlayConfig` and `resolveOverlay`. Overlays share the drawing order and the style store with the layers: `editor.layers.getOrder()` lists both kinds bottom first, `setOrder` / `moveLayer` / `resetOrder` / `getStyle` / `setStyle` (opacity and zoom range only) / `resetStyle` / `exportStyles` / `importStyles` take overlay ids, new overlays and an order stored before overlays existed stay below the vector layers. `<olcad-layer-list>` shows an Overlays section between Basemaps and Layers (visibility; details with type, an opacity slider applying live, zoom range, legend image, attribution, id and the last error), `<olcad-layer-style-dialog>` lists overlays in the shared order (marked "overlay") with the Layer section only, `persistLayerStyles` saves overlay styles too. Test server: `GET /wms` emulation (GetCapabilities 1.3.0 with three layers, GetMap as hatched PNG tiles, GetLegendGraphic) and six overlays in the test configuration; `examples/vanilla` shows a WMS overlay.
@@ -200,6 +202,7 @@ First public release, on GitHub (package file attached to the release; not on np
 - Local test server (`pnpm serve:test`) with `/config`, `/data/:layer`, `/changes` (with `?fail=1`), `/changes/log`, `/reset` and a reference test page.
 - Test that fails when `docs/configuration.md` and the `EditorConfig` type disagree.
 
-[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/marcobradtke79/olad/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/marcobradtke79/olad/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/marcobradtke79/olad/releases/tag/v0.1.0
