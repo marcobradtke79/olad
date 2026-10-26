@@ -222,5 +222,101 @@
       "convertToRGB": false,
       "attribution": "Contains modified Copernicus Sentinel data 2020"
     }
+  ],
+  "overlays": [
+    {
+      "id": "parcels-wms",
+      "type": "wms",
+      "title": "Parcels (WMS, test server)",
+      "url": "/wms",
+      "params": {
+        "LAYERS": "test:parcels",
+        "TRANSPARENT": true,
+        "FORMAT": "image/png",
+        "VERSION": "1.3.0"
+      },
+      "tiled": true,
+      "serverType": "geoserver",
+      "crossOrigin": "anonymous",
+      "opacity": 0.7,
+      "attribution": "Test server WMS"
+    },
+    {
+      "id": "roads-wms",
+      "type": "wms",
+      "title": "Roads (WMS single image, zoom 10 to 22)",
+      "url": "/wms",
+      "params": {
+        "LAYERS": "test:roads",
+        "TRANSPARENT": true
+      },
+      "tiled": false,
+      "projection": "EPSG:3857",
+      "visible": false,
+      "minZoom": 10,
+      "maxZoom": 22,
+      "legendUrl": "/wms?SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=test:roads"
+    },
+    {
+      "id": "hatch-xyz",
+      "type": "xyz",
+      "title": "Hatch tiles (XYZ, test server)",
+      "url": "/wms?REQUEST=GetMap&LAYERS=xyz&z={z}&x={x}&y={y}",
+      "sourceMinZoom": 0,
+      "sourceMaxZoom": 20,
+      "tileSize": 256,
+      "crossOrigin": "anonymous",
+      "visible": false,
+      "opacity": 0.5
+    },
+    {
+      "id": "topplus-overlay",
+      "type": "wmts",
+      "title": "TopPlusOpen grey (WMTS overlay, BKG)",
+      "capabilitiesUrl": "https://sgx.geodatenzentrum.de/wmts_topplus_open/1.0.0/WMTSCapabilities.xml",
+      "layer": "web_grau",
+      "format": "image/png",
+      "style": "default",
+      "crossOrigin": "anonymous",
+      "visible": false,
+      "attribution": "&copy; GeoBasis-DE / BKG, CC BY 4.0"
+    },
+    {
+      "id": "versatiles-overlay",
+      "type": "vector-tile",
+      "title": "VersaTiles streets (vector-tile overlay)",
+      "url": "https://tiles.versatiles.org/tiles/osm/{z}/{x}/{y}",
+      "format": "mvt",
+      "sourceMinZoom": 0,
+      "sourceMaxZoom": 14,
+      "projection": "EPSG:3857",
+      "visible": false,
+      "style": [
+        {
+          "filter": ["==", ["get", "layer"], "streets"],
+          "style": {
+            "stroke-color": "#f59e0b",
+            "stroke-width": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "s2-overlay",
+      "type": "geotiff",
+      "title": "Sentinel-2 true colour (GeoTIFF overlay, Red Sea)",
+      "sources": [
+        {
+          "url": "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/Q/WD/2020/7/S2A_36QWD_20200701_0_L2A/TCI.tif",
+          "bands": [1, 2, 3],
+          "min": 0,
+          "max": 255,
+          "nodata": 0
+        }
+      ],
+      "normalize": true,
+      "convertToRGB": false,
+      "visible": false
+    }
   ]
 }

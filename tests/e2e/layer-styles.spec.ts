@@ -42,6 +42,8 @@ test.describe('layer styles', () => {
     const before = initial.zIndex!;
     expect((await olLayer(page, 'roads')).zIndex).toBe(before + 1);
     const ids = await page.evaluate(() => window.editor.layers.list().map((l) => l.id));
+    // The drawing order holds the overlays below the layers: the top zIndex is its length.
+    const order = await page.evaluate(() => window.editor.layers.getOrder());
     for (let i = ids.indexOf('roads'); i < ids.length - 1; i++) {
       await row('roads').locator('[data-action="up"]').click();
     }
@@ -49,7 +51,7 @@ test.describe('layer styles', () => {
       'data-layer-id',
       'roads',
     );
-    expect((await olLayer(page, 'roads')).zIndex).toBe(ids.length);
+    expect((await olLayer(page, 'roads')).zIndex).toBe(order.length);
 
     // Parcels: stroke colour, fill opacity, a label and a minimum zoom.
     await row('parcels').locator('[data-action="select"]').click();
@@ -72,7 +74,7 @@ test.describe('layer styles', () => {
     await page.waitForFunction(() => Boolean(window.editor));
     parcels = await olLayer(page, 'parcels');
     expect(parcels.style).toMatchObject({ 'stroke-color': '#ff0000' });
-    expect((await olLayer(page, 'roads')).zIndex).toBe(ids.length);
+    expect((await olLayer(page, 'roads')).zIndex).toBe(order.length);
     expect(await page.evaluate(() => window.editor.layers.list().at(-1)!.id)).toBe('roads');
 
     // Reset all: configured styles and order again, also after a reload.

@@ -1,5 +1,5 @@
 import { get as getProjection } from 'ol/proj';
-import type { BasemapConfig, EditorConfig, LayerConfig } from './types';
+import type { BasemapConfig, EditorConfig, LayerConfig, OverlayConfig } from './types';
 import { isLengthUnit, LENGTH_UNITS } from '../units';
 
 /** Thrown by `createEditor` when the configuration is invalid. `path` names the offending option. */
@@ -136,41 +136,49 @@ function checkProjection(projection: unknown, path: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// basemaps
+// basemaps and overlays
 
 const BASEMAP_COMMON_KEYS = ['id', 'type', 'title', 'visible', 'attribution'] as const;
-const BASEMAP_KEYS: Record<string, readonly string[]> = {
-  osm: [...BASEMAP_COMMON_KEYS, 'maxZoom'],
-  xyz: [...BASEMAP_COMMON_KEYS, 'url', 'minZoom', 'maxZoom', 'tileSize', 'crossOrigin'],
-  wms: [
-    ...BASEMAP_COMMON_KEYS,
-    'url',
-    'params',
-    'tiled',
-    'serverType',
-    'projection',
-    'crossOrigin',
-  ],
-  wmts: [
-    ...BASEMAP_COMMON_KEYS,
-    'capabilitiesUrl',
-    'layer',
-    'matrixSet',
-    'format',
-    'style',
-    'crossOrigin',
-  ],
-  'vector-tile': [
-    ...BASEMAP_COMMON_KEYS,
-    'url',
-    'format',
-    'minZoom',
-    'maxZoom',
-    'projection',
-    'style',
-  ],
-  geotiff: [...BASEMAP_COMMON_KEYS, 'sources', 'normalize', 'convertToRGB'],
-};
+const OVERLAY_COMMON_KEYS = [
+  'id',
+  'type',
+  'title',
+  'visible',
+  'attribution',
+  'opacity',
+  'minZoom',
+  'maxZoom',
+  'legendUrl',
+] as const;
+const BASEMAP_TYPES = ['osm', 'xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
+const OVERLAY_TYPES = ['xyz', 'wms', 'wmts', 'vector-tile', 'geotiff'] as const;
+/**
+ * Names of the tile grid's zoom range: `minZoom` / `maxZoom` on basemaps, `sourceMinZoom` /
+ * `sourceMaxZoom` on overlays (whose `minZoom` / `maxZoom` are the display range, like layers).
+ */
+type ZoomKeys = readonly [min: string, max: string];
+const BASEMAP_ZOOM_KEYS: ZoomKeys = ['minZoom', 'maxZoom'];
+const OVERLAY_ZOOM_KEYS: ZoomKeys = ['sourceMinZoom', 'sourceMaxZoom'];
+
+/** The source options of one raster type, or `undefined` for an unknown type. */
+function rasterSourceKeys(type: string, zoom: ZoomKeys): readonly string[] | undefined {
+  switch (type) {
+    case 'osm':
+      return [zoom[1]];
+    case 'xyz':
+      return ['url', zoom[0], zoom[1], 'tileSize', 'crossOrigin'];
+    case 'wms':
+      return ['url', 'params', 'tiled', 'serverType', 'projection', 'crossOrigin'];
+    case 'wmts':
+      return ['capabilitiesUrl', 'layer', 'matrixSet', 'format', 'style', 'crossOrigin'];
+    case 'vector-tile':
+      return ['url', 'format', zoom[0], zoom[1], 'projection', 'style'];
+    case 'geotiff':
+      return ['sources', 'normalize', 'convertToRGB'];
+    default:
+      return undefined;
+  }
+}
 const GEOTIFF_SOURCE_KEYS = ['url', 'bands', 'min', 'max', 'nodata'] as const;
 
 function checkGeoTiffSource(source: unknown, path: string): void {
@@ -184,35 +192,27 @@ function checkGeoTiffSource(source: unknown, path: string): void {
   optional(number)(s.nodata, `${path}.nodata`);
 }
 
-function checkBasemap(basemap: unknown, path: string, ctx: Context): void {
-  object(basemap, path);
-  const b = basemap as Record<string, unknown>;
-  string(b.id, `${path}.id`);
-  const type = b.type;
-  const allowed = typeof type === 'string' ? BASEMAP_KEYS[type] : undefined;
-  if (!allowed) {
-    throw new ConfigError(
-      `${path}.type`,
-      `expected one of ${Object.keys(BASEMAP_KEYS).join(', ')}`,
-    );
-  }
-  checkKeys(b, path, allowed);
-  optional(string)(b.title, `${path}.title`);
-  optional(boolean)(b.visible, `${path}.visible`);
-  optional(string)(b.attribution, `${path}.attribution`);
-  optional(number)(b.minZoom, `${path}.minZoom`);
-  optional(number)(b.maxZoom, `${path}.maxZoom`);
-  optional(nullableString)(b.crossOrigin, `${path}.crossOrigin`);
-  optional(checkProjectionCode(ctx))(b.projection, `${path}.projection`);
+/** The source options basemaps and overlays of raster `type` share (keys already checked). */
+function checkRasterSource(
+  r: Record<string, unknown>,
+  path: string,
+  ctx: Context,
+  type: string,
+  zoom: ZoomKeys,
+): void {
+  optional(number)(r[zoom[0]], `${path}.${zoom[0]}`);
+  optional(number)(r[zoom[1]], `${path}.${zoom[1]}`);
+  optional(nullableString)(r.crossOrigin, `${path}.crossOrigin`);
+  optional(checkProjectionCode(ctx))(r.projection, `${path}.projection`);
   switch (type) {
     case 'xyz':
-      string(b.url, `${path}.url`);
-      optional(number)(b.tileSize, `${path}.tileSize`);
+      string(r.url, `${path}.url`);
+      optional(number)(r.tileSize, `${path}.tileSize`);
       break;
     case 'wms': {
-      string(b.url, `${path}.url`);
-      object(b.params, `${path}.params`);
-      const params = b.params as Record<string, unknown>;
+      string(r.url, `${path}.url`);
+      object(r.params, `${path}.params`);
+      const params = r.params as Record<string, unknown>;
       for (const [key, value] of Object.entries(params)) {
         if (!['string', 'number', 'boolean'].includes(typeof value)) {
           throw new ConfigError(`${path}.params.${key}`, 'expected a string, number or boolean');
@@ -221,40 +221,89 @@ function checkBasemap(basemap: unknown, path: string, ctx: Context): void {
       if (!Object.keys(params).some((k) => k.toUpperCase() === 'LAYERS')) {
         throw new ConfigError(`${path}.params`, 'LAYERS is required');
       }
-      optional(boolean)(b.tiled, `${path}.tiled`);
+      optional(boolean)(r.tiled, `${path}.tiled`);
       optional(oneOf(['mapserver', 'geoserver', 'qgis', 'carmentaserver']))(
-        b.serverType,
+        r.serverType,
         `${path}.serverType`,
       );
       break;
     }
     case 'wmts':
-      string(b.capabilitiesUrl, `${path}.capabilitiesUrl`);
-      string(b.layer, `${path}.layer`);
-      optional(string)(b.matrixSet, `${path}.matrixSet`);
-      optional(string)(b.format, `${path}.format`);
-      optional(string)(b.style, `${path}.style`);
+      string(r.capabilitiesUrl, `${path}.capabilitiesUrl`);
+      string(r.layer, `${path}.layer`);
+      optional(string)(r.matrixSet, `${path}.matrixSet`);
+      optional(string)(r.format, `${path}.format`);
+      optional(string)(r.style, `${path}.style`);
       break;
     case 'vector-tile':
-      string(b.url, `${path}.url`);
-      optional(oneOf(['mvt', 'geojson', 'topojson']))(b.format, `${path}.format`);
-      optional(styleLike)(b.style, `${path}.style`);
+      string(r.url, `${path}.url`);
+      optional(oneOf(['mvt', 'geojson', 'topojson']))(r.format, `${path}.format`);
+      optional(styleLike)(r.style, `${path}.style`);
       break;
     case 'geotiff':
-      arrayOf(checkGeoTiffSource)(b.sources, `${path}.sources`);
-      if ((b.sources as unknown[]).length === 0) {
+      arrayOf(checkGeoTiffSource)(r.sources, `${path}.sources`);
+      if ((r.sources as unknown[]).length === 0) {
         throw new ConfigError(`${path}.sources`, 'at least one source is required');
       }
-      optional(boolean)(b.normalize, `${path}.normalize`);
+      optional(boolean)(r.normalize, `${path}.normalize`);
       if (
-        b.convertToRGB !== undefined &&
-        typeof b.convertToRGB !== 'boolean' &&
-        b.convertToRGB !== 'auto'
+        r.convertToRGB !== undefined &&
+        typeof r.convertToRGB !== 'boolean' &&
+        r.convertToRGB !== 'auto'
       ) {
         throw new ConfigError(`${path}.convertToRGB`, "expected a boolean or 'auto'");
       }
       break;
   }
+}
+
+function checkBasemap(basemap: unknown, path: string, ctx: Context): void {
+  object(basemap, path);
+  const b = basemap as Record<string, unknown>;
+  string(b.id, `${path}.id`);
+  const type = typeof b.type === 'string' ? b.type : '';
+  const sourceKeys = (BASEMAP_TYPES as readonly string[]).includes(type)
+    ? rasterSourceKeys(type, BASEMAP_ZOOM_KEYS)
+    : undefined;
+  if (!sourceKeys) {
+    throw new ConfigError(`${path}.type`, `expected one of ${BASEMAP_TYPES.join(', ')}`);
+  }
+  checkKeys(b, path, [...BASEMAP_COMMON_KEYS, ...sourceKeys]);
+  optional(string)(b.title, `${path}.title`);
+  optional(boolean)(b.visible, `${path}.visible`);
+  optional(string)(b.attribution, `${path}.attribution`);
+  checkRasterSource(b, path, ctx, type, BASEMAP_ZOOM_KEYS);
+}
+
+const unitInterval: Checker = (v, p) => {
+  number(v, p);
+  if ((v as number) < 0 || (v as number) > 1)
+    throw new ConfigError(p, 'expected a number from 0 to 1');
+};
+
+function checkOverlay(overlay: unknown, path: string, ctx: Context): void {
+  object(overlay, path);
+  const o = overlay as Record<string, unknown>;
+  string(o.id, `${path}.id`);
+  const type = typeof o.type === 'string' ? o.type : '';
+  const sourceKeys = (OVERLAY_TYPES as readonly string[]).includes(type)
+    ? rasterSourceKeys(type, OVERLAY_ZOOM_KEYS)
+    : undefined;
+  if (!sourceKeys) {
+    throw new ConfigError(`${path}.type`, `expected one of ${OVERLAY_TYPES.join(', ')}`);
+  }
+  checkKeys(o, path, [...OVERLAY_COMMON_KEYS, ...sourceKeys]);
+  optional(string)(o.title, `${path}.title`);
+  optional(boolean)(o.visible, `${path}.visible`);
+  optional(string)(o.attribution, `${path}.attribution`);
+  optional(unitInterval)(o.opacity, `${path}.opacity`);
+  optional(number)(o.minZoom, `${path}.minZoom`);
+  optional(number)(o.maxZoom, `${path}.maxZoom`);
+  if (typeof o.minZoom === 'number' && typeof o.maxZoom === 'number' && o.minZoom > o.maxZoom) {
+    throw new ConfigError(`${path}.maxZoom`, 'must not be less than minZoom');
+  }
+  optional(string)(o.legendUrl, `${path}.legendUrl`);
+  checkRasterSource(o, path, ctx, type, OVERLAY_ZOOM_KEYS);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +360,8 @@ const LAYER_KEYS = [
   'schema',
   'minZoom',
   'maxZoom',
+  'opacity',
+  'attribution',
   'text',
   'dimension',
 ] as const;
@@ -511,6 +562,8 @@ function checkLayer(layer: unknown, path: string, ctx: Context): void {
   optional(checkSchema)(l.schema, `${path}.schema`);
   optional(number)(l.minZoom, `${path}.minZoom`);
   optional(number)(l.maxZoom, `${path}.maxZoom`);
+  optional(unitInterval)(l.opacity, `${path}.opacity`);
+  optional(string)(l.attribution, `${path}.attribution`);
   optional(checkText)(l.text, `${path}.text`);
   if (
     l.text !== undefined &&
@@ -541,6 +594,7 @@ const ROOT_KEYS = [
   'proj4',
   'basemaps',
   'layers',
+  'overlays',
   'editMode',
   'cursor',
   'changes',
@@ -765,6 +819,23 @@ export function validateBasemapConfig(
   checkBasemap(basemap, path, { declaredProjections: new Set() });
 }
 
+/** Validate one overlay config, for example before `editor.overlays.add`. */
+export function validateOverlayConfig(
+  overlay: unknown,
+  path = 'overlay',
+): asserts overlay is OverlayConfig {
+  checkOverlay(overlay, path, { declaredProjections: new Set() });
+}
+
+/** Ids of the configured vector layers and the draft layer (the overlay ids must not collide). */
+function configuredLayerIds(c: Record<string, unknown>): string[] {
+  const ids = Array.isArray(c.layers)
+    ? (c.layers as { id?: unknown }[]).map((l) => (typeof l?.id === 'string' ? l.id : ''))
+    : [];
+  const draft = isObject(c.draft) && typeof c.draft.id === 'string' ? c.draft.id : 'draft';
+  return [...ids, draft];
+}
+
 /** Validate one layer config, for example before `editor.layers.add`. */
 export function validateLayerConfig(layer: unknown, path = 'layer'): asserts layer is LayerConfig {
   checkLayer(layer, path, { declaredProjections: new Set() });
@@ -823,10 +894,7 @@ export function validateConfig(config: unknown): asserts config is EditorConfig 
   if (c.units !== undefined) checkUnits(c.units, 'config.units');
   if (c.constraints !== undefined) checkConstraints(c.constraints, 'config.constraints');
   if (c.draft !== undefined) {
-    const layerIds = Array.isArray(c.layers)
-      ? (c.layers as { id?: unknown }[]).map((l) => (typeof l?.id === 'string' ? l.id : ''))
-      : [];
-    checkDraft(c.draft, 'config.draft', layerIds);
+    checkDraft(c.draft, 'config.draft', configuredLayerIds(c).slice(0, -1));
   }
   if (c.view !== undefined) checkView(c.view, 'config.view', ctx);
   if (c.basemaps !== undefined) {
@@ -838,5 +906,18 @@ export function validateConfig(config: unknown): asserts config is EditorConfig 
     if (!Array.isArray(c.layers)) throw new ConfigError('config.layers', 'expected an array');
     c.layers.forEach((l, i) => checkLayer(l, `config.layers[${i}]`, ctx));
     checkUniqueIds(c.layers, 'config.layers', 'layer');
+  }
+  if (c.overlays !== undefined) {
+    if (!Array.isArray(c.overlays)) throw new ConfigError('config.overlays', 'expected an array');
+    c.overlays.forEach((o, i) => checkOverlay(o, `config.overlays[${i}]`, ctx));
+    checkUniqueIds(c.overlays, 'config.overlays', 'overlay');
+    // Overlays share the drawing order and the style store with the layers: one id space.
+    const taken = new Set(configuredLayerIds(c));
+    c.overlays.forEach((o, i) => {
+      const id = isObject(o) ? o.id : undefined;
+      if (typeof id === 'string' && taken.has(id)) {
+        throw new ConfigError(`config.overlays[${i}].id`, `collides with the layer id "${id}"`);
+      }
+    });
   }
 }

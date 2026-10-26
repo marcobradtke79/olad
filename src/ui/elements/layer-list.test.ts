@@ -3,6 +3,7 @@ import Feature from 'ol/Feature';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor, EditorEvents } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
+import type { OverlayInfo } from '../../core/layers/overlays';
 import { Emitter } from '../../core/events';
 import { defineElements, type OlcadFeatureTable, type OlcadLayerList } from '../index';
 import { persistLocalLayers } from '../localLayerStorage';
@@ -31,6 +32,8 @@ function layerInfo(id: string, editable: boolean): LayerInfo {
 function fakeEditor(editMode = false) {
   const emitter = new Emitter<EditorEvents>();
   const infos = [layerInfo('a', true), layerInfo('b', false)];
+  const overlays: OverlayInfo[] = [];
+  const overlay = (id: string) => overlays.find((o) => o.id === id)!;
   let active: string | null = null;
   let selected: Feature[] = [];
   /** Feature → layer id; draft objects list the layers they fit. */
@@ -45,6 +48,20 @@ function fakeEditor(editMode = false) {
       emitter.emit('editmodechange', { editMode: on });
     }),
     basemaps: { list: () => [], setActive: vi.fn() },
+    overlays: {
+      list: () => overlays.map((o) => ({ ...o })),
+      get: (id: string) => ({ ...overlay(id) }),
+      has: (id: string) => overlays.some((o) => o.id === id),
+      setVisible: vi.fn((id: string, visible: boolean) => {
+        overlay(id).visible = visible;
+        emitter.emit('overlaychange', { id, type: 'visible' });
+      }),
+      setOpacity: vi.fn((id: string, opacity: number) => {
+        overlay(id).opacity = opacity;
+        emitter.emit('overlaychange', { id, type: 'style' });
+      }),
+      getLegendUrl: (id: string) => overlay(id).legendUrl,
+    },
     selection: {
       get: () => selected,
       set(features: Feature[]) {
@@ -89,6 +106,21 @@ function fakeEditor(editMode = false) {
         featureCount: 0,
       }),
     },
+    /** Add an overlay row. */
+    addOverlay(info: Partial<OverlayInfo> & { id: string }) {
+      overlays.push({
+        title: info.id.toUpperCase(),
+        type: 'wms',
+        visible: true,
+        opacity: 1,
+        ...info,
+      });
+      emitter.emit('overlaychange', { id: info.id, type: 'add' });
+    },
+    /** Report a failed overlay source. */
+    failOverlay(id: string, message: string) {
+      emitter.emit('overlayerror', { id, error: new Error(message) });
+    },
     /** Turn layer `b` into a local layer. */
     makeLocal() {
       find('b').local = true;
@@ -108,7 +140,10 @@ function fakeEditor(editMode = false) {
   } as unknown as Editor & {
     setEditMode: ReturnType<typeof vi.fn>;
     layers: { moveDrafts: ReturnType<typeof vi.fn> };
+    overlays: { setVisible: ReturnType<typeof vi.fn>; setOpacity: ReturnType<typeof vi.fn> };
     place(layer: string, targets?: string[]): Feature;
+    addOverlay(info: Partial<OverlayInfo> & { id: string }): void;
+    failOverlay(id: string, message: string): void;
     makeLocal(): void;
   };
   return editor;
@@ -396,5 +431,66 @@ describe('<olcad-layer-list> moving drafts', () => {
     expect(panel.hasAttribute('open')).toBe(true);
     editor.selection.set([]);
     expect(panel.hasAttribute('open')).toBe(true); // never closes it
+  });
+});
+
+describe('<olcad-layer-list> overlays', () => {
+  it('lists overlays before the layers with visibility, opacity, zoom range and legend', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    expect(el.querySelector('[data-overlay-id]')).toBeNull();
+    editor.addOverlay({
+      id: 'wms',
+      title: 'Parcels (WMS)',
+      opacity: 0.7,
+      minZoom: 8,
+      legendUrl: 'https://example.org/legend.png',
+      attribution: '&copy; <a href="https://example.org">Test</a>',
+    });
+    expect(
+      Array.from(el.querySelectorAll('.olcad-layer-list__heading'), (h) => h.textContent),
+    ).toEqual(['Overlays', 'Layers']);
+    const row = () => el.querySelector<HTMLElement>('[data-overlay-id="wms"]')!;
+    expect(row().querySelector('.olcad-layer-list__title')!.textContent).toBe('Parcels (WMS)');
+    expect(
+      Array.from(row().querySelectorAll('button'), (b) => b.getAttribute('aria-label')),
+    ).toEqual(['Visible: Parcels (WMS)', 'Details of Parcels (WMS)']);
+    row().querySelector<HTMLButtonElement>('[data-action="visible"]')!.click();
+    expect(editor.overlays.setVisible).toHaveBeenCalledWith('wms', false);
+    expect(row().classList.contains('olcad-layer-list__layer--hidden')).toBe(true);
+
+    row().querySelector<HTMLButtonElement>('[data-action="info"]')!.click();
+    const details = () => row().querySelector<HTMLElement>('.olcad-layer-list__details')!;
+    expect(details().hidden).toBe(false);
+    const text = (key: string) => details().querySelector(`[data-detail="${key}"] dd`)!.textContent;
+    expect(text('type')).toBe('wms');
+    expect(text('zoom')).toBe('from 8');
+    expect(text('attribution')).toBe('© Test');
+    expect(text('id')).toBe('wms');
+    expect(details().querySelector<HTMLImageElement>('.olcad-layer-list__legend')!.src).toContain(
+      'legend.png',
+    );
+    const slider = details().querySelector<HTMLInputElement>('[data-action="opacity"]')!;
+    expect(slider.value).toBe('0.7');
+    expect(details().querySelector('output')!.textContent).toBe('70 %');
+    slider.value = '0.4';
+    slider.dispatchEvent(new Event('input'));
+    expect(editor.overlays.setOpacity).toHaveBeenCalledWith('wms', 0.4);
+    expect(details().querySelector('output')!.textContent).toBe('40 %');
+    // The list was not rebuilt under the slider while it applied.
+    expect(details().querySelector('[data-action="opacity"]')).toBe(slider);
+  });
+
+  it('shows the last error of an overlay in its row and details', () => {
+    const editor = fakeEditor();
+    const el = mount(editor);
+    editor.addOverlay({ id: 'broken' });
+    editor.failOverlay('broken', 'GetCapabilities failed: 404 Not Found');
+    const row = el.querySelector<HTMLElement>('[data-overlay-id="broken"]')!;
+    expect(row.classList.contains('olcad-layer-list__layer--error')).toBe(true);
+    row.querySelector<HTMLButtonElement>('[data-action="info"]')!.click();
+    expect(
+      el.querySelector('[data-overlay-id="broken"] [data-detail="error"] dd')!.textContent,
+    ).toMatch(/404/);
   });
 });

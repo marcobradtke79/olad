@@ -155,6 +155,114 @@ export type BasemapConfig =
   | VectorTileBasemapConfig
   | GeoTiffBasemapConfig;
 
+interface OverlayBase {
+  /** Unique identifier used by the API and the UI. Shares the id space with `layers[]`. */
+  id: string;
+  /** Human readable name. Defaults to `id`. */
+  title?: string;
+  /** Shown at startup. Defaults to `true`; overlays are independent of each other and of the basemap. */
+  visible?: boolean;
+  /** Attribution text or HTML. */
+  attribution?: string;
+  /** Layer opacity, 0 … 1. Defaults to `1`. */
+  opacity?: number;
+  /** Hide the overlay below this view zoom. */
+  minZoom?: number;
+  /** Hide the overlay above this view zoom. */
+  maxZoom?: number;
+  /** URL of a legend image for the layer list. WMS overlays derive one from the service when it is not set. */
+  legendUrl?: string;
+}
+
+/** Slippy map tiles drawn over the basemap. */
+export interface XyzOverlayConfig extends OverlayBase {
+  type: 'xyz';
+  /** URL template with `{z}`, `{x}`, `{y}` and optional `{a-c}` placeholders. */
+  url: string;
+  /** Lowest zoom level the tile source offers. */
+  sourceMinZoom?: number;
+  /** Highest zoom level the tile source offers. */
+  sourceMaxZoom?: number;
+  /** Tile size in pixels. */
+  tileSize?: number;
+  /** `crossOrigin` attribute for tile images. */
+  crossOrigin?: string | null;
+}
+
+/** OGC WMS layers drawn over the basemap, tiled (default) or as one image per view. */
+export interface WmsOverlayConfig extends OverlayBase {
+  type: 'wms';
+  /** GetMap base URL. */
+  url: string;
+  /** WMS request parameters. `LAYERS` is required; `TRANSPARENT: true` keeps the basemap visible. */
+  params: Record<string, string | number | boolean>;
+  /** Request 256px tiles (`true`, default) or one image for the whole view (`false`). */
+  tiled?: boolean;
+  /** Vendor hint for high-DPI requests. */
+  serverType?: 'mapserver' | 'geoserver' | 'qgis' | 'carmentaserver';
+  /** Projection to request from the server. Defaults to the view projection. */
+  projection?: string;
+  /** `crossOrigin` attribute for images. */
+  crossOrigin?: string | null;
+}
+
+/** OGC WMTS layer drawn over the basemap, configured from a GetCapabilities document. */
+export interface WmtsOverlayConfig extends OverlayBase {
+  type: 'wmts';
+  /** URL of the WMTS GetCapabilities document. Loaded asynchronously. */
+  capabilitiesUrl: string;
+  /** Layer identifier from the capabilities. */
+  layer: string;
+  /** Tile matrix set identifier. Defaults to the first set matching the view projection. */
+  matrixSet?: string;
+  /** Image format. Defaults to the first format the layer offers. */
+  format?: string;
+  /** Style identifier. Defaults to the layer's default style. */
+  style?: string;
+  /** `crossOrigin` attribute for tile images. */
+  crossOrigin?: string | null;
+}
+
+/** Vector tiles drawn over the basemap. */
+export interface VectorTileOverlayConfig extends OverlayBase {
+  type: 'vector-tile';
+  /** URL template with `{z}`, `{x}`, `{y}` placeholders. */
+  url: string;
+  /** Tile encoding. */
+  format?: 'mvt' | 'geojson' | 'topojson';
+  /** Lowest zoom level the tile source offers. */
+  sourceMinZoom?: number;
+  /** Highest zoom level the tile source offers. */
+  sourceMaxZoom?: number;
+  /** Projection of the tile grid. Defaults to `EPSG:3857`. */
+  projection?: string;
+  /** OpenLayers flat style for rendering the tiles. */
+  style?: FlatStyleLike;
+}
+
+/** Cloud optimised GeoTIFF drawn over the basemap. */
+export interface GeoTiffOverlayConfig extends OverlayBase {
+  type: 'geotiff';
+  /** One or more files. Several files are combined band-wise. */
+  sources: GeoTiffSourceConfig[];
+  /** Scale values to 0..1 using `min` / `max` or the data type. */
+  normalize?: boolean;
+  /** Convert to RGB using the file's colour interpretation. */
+  convertToRGB?: boolean | 'auto';
+}
+
+/**
+ * A raster overlay: a server-rendered or tiled layer drawn between the basemap and the vector
+ * layers, switched on and off independently (`editor.overlays`). Read-only: never selected,
+ * snapped or edited.
+ */
+export type OverlayConfig =
+  | XyzOverlayConfig
+  | WmsOverlayConfig
+  | WmtsOverlayConfig
+  | VectorTileOverlayConfig
+  | GeoTiffOverlayConfig;
+
 /**
  * Geometry type of a layer. `'Any'` accepts every one of the other types in one layer (the
  * draft layer uses it); the draw tool then needs the type to draw (`ToolOptions.type`).
@@ -254,6 +362,10 @@ export interface LayerConfig {
   /** Shown at startup. */
   visible?: boolean;
   source: VectorSourceConfig;
+  /** Layer opacity, 0 … 1. Defaults to `1`; `resetStyle` returns to it. */
+  opacity?: number;
+  /** Attribution text or HTML, shown while the layer is visible. */
+  attribution?: string;
   /** Geometry type every feature of the layer must have. */
   geometryType: GeometryType;
   /** Property that holds the feature id when the format does not carry one. */
@@ -371,6 +483,8 @@ export interface EditorConfig {
   basemaps?: BasemapConfig[];
   /** Vector layers. Changeable at runtime through `editor.layers`. */
   layers?: LayerConfig[];
+  /** Raster overlays between the basemap and the vector layers. Changeable at runtime through `editor.overlays`. */
+  overlays?: OverlayConfig[];
   /** Start in edit mode. Switchable at runtime with `editor.setEditMode`. Default `false`. */
   editMode?: boolean;
   /** Edit-mode cursor: CAD crosshair with a pick box. */
@@ -551,6 +665,12 @@ export interface CursorConfig {
 
 export type ResolvedBasemapConfig = BasemapConfig & { title: string; visible: boolean };
 
+export type ResolvedOverlayConfig = OverlayConfig & {
+  title: string;
+  visible: boolean;
+  opacity: number;
+};
+
 export interface ResolvedEditableConfig {
   insert: boolean;
   update: boolean;
@@ -583,6 +703,7 @@ export interface ResolvedEditorConfig {
   proj4?: Proj4Instance;
   basemaps: ResolvedBasemapConfig[];
   layers: ResolvedLayerConfig[];
+  overlays: ResolvedOverlayConfig[];
   editMode: boolean;
   cursor: Required<CursorConfig>;
   changes: ResolvedChangesConfig;

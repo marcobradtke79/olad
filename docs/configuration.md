@@ -8,28 +8,29 @@ A test compares the tables below against the `EditorConfig` type. Every option m
 
 ## Root
 
-| Path             | Type                     | Default        | Description                                                                                                                                                                            |
-| ---------------- | ------------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `target`         | `string \| HTMLElement`  | –              | Element or element id to create the map in. Exactly one of `target` and `map` is required.                                                                                             |
-| `map`            | `ol/Map`                 | –              | Existing OpenLayers map to attach to. Exactly one of `target` and `map` is required. When attaching, basemap layers are inserted below the host's layers and vector layers above them. |
-| `view`           | object                   | see below      | Initial view. When attaching to an existing map and `view` is omitted, the host's view is kept. When present, the host's view is replaced.                                             |
-| `projections`    | array                    | `[]`           | proj4 definitions registered before anything else is built. Codes declared here may be used everywhere a projection is expected.                                                       |
-| `proj4`          | proj4 library            | global `proj4` | The proj4 module, required when `projections` is not empty. In a bundler, `import proj4 from 'proj4'` and pass it. With a script tag, loading proj4 before the editor is enough.       |
-| `basemaps`       | array                    | `[]`           | Background maps. The first one is shown unless another has `visible: true`.                                                                                                            |
-| `layers`         | array                    | `[]`           | Vector layers. One layer is one object class with one geometry type and one schema.                                                                                                    |
-| `editMode`       | `boolean`                | `false`        | Start in edit mode. Switchable at runtime with `editor.setEditMode`; see [api.md](api.md#edit-mode).                                                                                   |
-| `cursor`         | object                   | see below      | The edit-mode cursor: a CAD crosshair spanning the map with a pick box at its centre.                                                                                                  |
-| `changes`        | object                   | see below      | Change set export options, see [change-set.md](change-set.md).                                                                                                                         |
-| `locale`         | `'en' \| 'de'`           | `'en'`         | Language of validation messages.                                                                                                                                                       |
-| `messages`       | `Record<string, string>` | `{}`           | Overrides for validation messages by code, with `{param}` placeholders; see [api.md](api.md#validation).                                                                               |
-| `selection`      | object                   | see below      | Highlight of selected features (halo, stroke, vertex grips) and click selection outside edit mode.                                                                                     |
-| `layerHighlight` | object                   | see below      | Style of highlighted layers (`editor.layers.setHighlighted`): all objects of a layer drawn in a colour distinct from the selection.                                                    |
-| `snapping`       | object                   | see below      | Snapping of the pointer to existing geometry, see [tools.md](tools.md#snapping).                                                                                                       |
-| `grid`           | object                   | see below      | Grid snap: the pointer snaps to a grid aligned with the view projection, see [tools.md](tools.md#snapping).                                                                            |
-| `curves`         | object                   | see below      | Linearization of arcs and circles (chord tolerance in metres), see [tools.md](tools.md#circle).                                                                                        |
-| `units`          | object                   | see below      | Default length unit for typed input and displayed lengths and areas, see [`units`](#units).                                                                                            |
-| `constraints`    | object                   | see below      | Drawing constraints (angle lock), see [tools.md](tools.md#angle-lock).                                                                                                                 |
-| `draft`          | object                   | see below      | The draft layer: target of inserts while no layer is active, see [tools.md](tools.md#draw).                                                                                            |
+| Path             | Type                     | Default        | Description                                                                                                                                                                             |
+| ---------------- | ------------------------ | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target`         | `string \| HTMLElement`  | –              | Element or element id to create the map in. Exactly one of `target` and `map` is required.                                                                                              |
+| `map`            | `ol/Map`                 | –              | Existing OpenLayers map to attach to. Exactly one of `target` and `map` is required. When attaching, basemap layers are inserted below the host's layers and vector layers above them.  |
+| `view`           | object                   | see below      | Initial view. When attaching to an existing map and `view` is omitted, the host's view is kept. When present, the host's view is replaced.                                              |
+| `projections`    | array                    | `[]`           | proj4 definitions registered before anything else is built. Codes declared here may be used everywhere a projection is expected.                                                        |
+| `proj4`          | proj4 library            | global `proj4` | The proj4 module, required when `projections` is not empty. In a bundler, `import proj4 from 'proj4'` and pass it. With a script tag, loading proj4 before the editor is enough.        |
+| `basemaps`       | array                    | `[]`           | Background maps. The first one is shown unless another has `visible: true`.                                                                                                             |
+| `layers`         | array                    | `[]`           | Vector layers. One layer is one object class with one geometry type and one schema.                                                                                                     |
+| `overlays`       | array                    | `[]`           | Raster overlays (WMS, WMTS, XYZ, vector tiles, GeoTIFF) drawn between the basemap and the vector layers, each switched on and off on its own; read-only. See [`overlays[]`](#overlays). |
+| `editMode`       | `boolean`                | `false`        | Start in edit mode. Switchable at runtime with `editor.setEditMode`; see [api.md](api.md#edit-mode).                                                                                    |
+| `cursor`         | object                   | see below      | The edit-mode cursor: a CAD crosshair spanning the map with a pick box at its centre.                                                                                                   |
+| `changes`        | object                   | see below      | Change set export options, see [change-set.md](change-set.md).                                                                                                                          |
+| `locale`         | `'en' \| 'de'`           | `'en'`         | Language of validation messages.                                                                                                                                                        |
+| `messages`       | `Record<string, string>` | `{}`           | Overrides for validation messages by code, with `{param}` placeholders; see [api.md](api.md#validation).                                                                                |
+| `selection`      | object                   | see below      | Highlight of selected features (halo, stroke, vertex grips) and click selection outside edit mode.                                                                                      |
+| `layerHighlight` | object                   | see below      | Style of highlighted layers (`editor.layers.setHighlighted`): all objects of a layer drawn in a colour distinct from the selection.                                                     |
+| `snapping`       | object                   | see below      | Snapping of the pointer to existing geometry, see [tools.md](tools.md#snapping).                                                                                                        |
+| `grid`           | object                   | see below      | Grid snap: the pointer snaps to a grid aligned with the view projection, see [tools.md](tools.md#snapping).                                                                             |
+| `curves`         | object                   | see below      | Linearization of arcs and circles (chord tolerance in metres), see [tools.md](tools.md#circle).                                                                                         |
+| `units`          | object                   | see below      | Default length unit for typed input and displayed lengths and areas, see [`units`](#units).                                                                                             |
+| `constraints`    | object                   | see below      | Drawing constraints (angle lock), see [tools.md](tools.md#angle-lock).                                                                                                                  |
+| `draft`          | object                   | see below      | The draft layer: target of inserts while no layer is active, see [tools.md](tools.md#draw).                                                                                             |
 
 ```ts
 createEditor({
@@ -333,6 +334,85 @@ Rendered with WebGL. Several sources are combined band-wise. With the script-tag
 }
 ```
 
+## `overlays[]`
+
+Raster overlays are server-rendered or tiled layers drawn **between the active basemap and the vector layers**: an orthophoto, a cadastre the server renders from its own styles, a hillshade. Unlike basemaps they are not exclusive (any number can be visible, each switched on and off on its own, `editor.overlays`), and unlike vector layers they are read-only: never selected, snapped or edited, never in the change set. They share the drawing order and the user styles with the vector layers (`editor.layers.getOrder`, `setOrder`, `setStyle` with opacity and zoom range), so the layer-style dialog orders them together. Ids share one space with `layers[]` and the draft layer.
+
+| Path                     | Type                                                     | Default         | Description                                                                                                                                     |
+| ------------------------ | -------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `overlays[].id`          | `string`                                                 | required        | Unique id, used by `editor.overlays`, the shared drawing order and the UI. Must not collide with a layer id or the draft layer id.              |
+| `overlays[].type`        | `'xyz' \| 'wms' \| 'wmts' \| 'vector-tile' \| 'geotiff'` | required        | Overlay type; the source options are those of the basemap of the same type (see below). `osm` is no overlay type (opaque tiles).                |
+| `overlays[].title`       | `string`                                                 | the `id`        | Display name.                                                                                                                                   |
+| `overlays[].visible`     | `boolean`                                                | `true`          | Shown at startup. Independent of the other overlays and of the basemap.                                                                         |
+| `overlays[].attribution` | `string`                                                 | type default    | Attribution text or HTML.                                                                                                                       |
+| `overlays[].opacity`     | `number`                                                 | `1`             | Opacity from 0 to 1; changeable at runtime (`editor.overlays.setOpacity`, the layer list, the style dialog); `resetStyle` returns to it.        |
+| `overlays[].minZoom`     | `number`                                                 | unlimited       | Hide the overlay below this view zoom (the display range, like `layers[].minZoom`; the tile grid's range is `sourceMinZoom`).                   |
+| `overlays[].maxZoom`     | `number`                                                 | unlimited       | Hide the overlay above this view zoom. Must not be less than `minZoom`.                                                                         |
+| `overlays[].legendUrl`   | `string`                                                 | see description | URL of a legend image shown in the overlay's details in the layer list. A `wms` overlay without one shows the service's GetLegendGraphic image. |
+
+### `type: 'xyz'` and `type: 'vector-tile'`
+
+| Path                       | Type                   | Default         | Description                                                                                                                                        |
+| -------------------------- | ---------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `overlays[].url`           | `string`               | required        | URL template with `{z}`, `{x}`, `{y}` and optional `{a-c}` placeholders. For `wms`: the GetMap base URL.                                           |
+| `overlays[].sourceMinZoom` | `number`               | `0`             | Lowest zoom level the tile source offers (the tile grid, not the display range).                                                                   |
+| `overlays[].sourceMaxZoom` | `number`               | source default  | Highest zoom level the tile source offers.                                                                                                         |
+| `overlays[].tileSize`      | `number`               | `256`           | Tile size in pixels (`xyz`).                                                                                                                       |
+| `overlays[].crossOrigin`   | `string \| null`       | not set         | `crossOrigin` attribute for images (also `wms`, `wmts`).                                                                                           |
+| `overlays[].format`        | `string`               | see description | For `vector-tile`: the tile encoding `'mvt' \| 'geojson' \| 'topojson'`, default `'mvt'`. For `wmts`: the image format, default the layer's first. |
+| `overlays[].projection`    | `string`               | view projection | For `vector-tile`: the tile grid projection (default `EPSG:3857`). For `wms`: the projection requested from the server.                            |
+| `overlays[].style`         | flat style or `string` | not set         | For `vector-tile`: an OpenLayers flat style object or array. For `wmts`: the style identifier.                                                     |
+
+```json
+{
+  "id": "hillshade",
+  "type": "xyz",
+  "title": "Hillshade",
+  "url": "https://tiles.example.org/hillshade/{z}/{x}/{y}.png",
+  "sourceMaxZoom": 15,
+  "opacity": 0.6
+}
+```
+
+### `type: 'wms'`
+
+| Path                    | Type                                                       | Default  | Description                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `overlays[].params`     | object                                                     | required | WMS request parameters. `LAYERS` is required; set `TRANSPARENT: true` so the basemap stays visible between the drawn objects. |
+| `overlays[].tiled`      | `boolean`                                                  | `true`   | Request 256px tiles, or one image for the whole view (`false`).                                                               |
+| `overlays[].serverType` | `'mapserver' \| 'geoserver' \| 'qgis' \| 'carmentaserver'` | not set  | Enables correct high-DPI requests for that server.                                                                            |
+
+```json
+{
+  "id": "parcels-wms",
+  "type": "wms",
+  "title": "Parcels (server rendered)",
+  "url": "/geoserver/wms",
+  "params": { "LAYERS": "cadastre:parcels", "TRANSPARENT": true },
+  "serverType": "geoserver",
+  "opacity": 0.8,
+  "minZoom": 12
+}
+```
+
+### `type: 'wmts'` and `type: 'geotiff'`
+
+Built like the basemaps of these types (a WMTS source is attached asynchronously once its capabilities arrive; a failure emits `overlayerror`):
+
+| Path                          | Type                | Default                          | Description                                                 |
+| ----------------------------- | ------------------- | -------------------------------- | ----------------------------------------------------------- |
+| `overlays[].capabilitiesUrl`  | `string`            | required                         | URL of the WMTS GetCapabilities document.                   |
+| `overlays[].layer`            | `string`            | required                         | Layer identifier from the capabilities.                     |
+| `overlays[].matrixSet`        | `string`            | first set in the view projection | Tile matrix set identifier.                                 |
+| `overlays[].sources`          | array               | required, at least one           | GeoTIFF files, as `basemaps[].sources`.                     |
+| `overlays[].sources[].url`    | `string`            | required                         | URL of a (cloud optimised) GeoTIFF.                         |
+| `overlays[].sources[].bands`  | `number[]`          | all bands                        | 1-based band numbers to read.                               |
+| `overlays[].sources[].min`    | `number`            | from data type                   | Minimum source value for normalisation.                     |
+| `overlays[].sources[].max`    | `number`            | from data type                   | Maximum source value for normalisation.                     |
+| `overlays[].sources[].nodata` | `number`            | from file                        | Value that marks no data.                                   |
+| `overlays[].normalize`        | `boolean`           | `true`                           | Scale values to 0..1 using `min` / `max`.                   |
+| `overlays[].convertToRGB`     | `boolean \| 'auto'` | `false`                          | Convert to RGB using the file's photometric interpretation. |
+
 ## `layers[]`
 
 One entry per object class: where the data comes from, which operations are allowed and which attributes a feature carries (`schema`). The array is plain JSON, so a host may keep it in its own file and merge it into the configuration before calling `createEditor`; the test server does exactly that with `test-server/config/layers.json`.
@@ -351,6 +431,8 @@ One entry per object class: where the data comes from, which operations are allo
 | `layers[].schema`       | object                                                                                                 | not set           | Attribute schema, see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `layers[].minZoom`      | `number`                                                                                               | unlimited         | Hide the layer below this view zoom.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `layers[].maxZoom`      | `number`                                                                                               | unlimited         | Hide the layer above this view zoom.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `layers[].opacity`      | `number`                                                                                               | `1`               | Layer opacity from 0 to 1. The value `editor.layers.resetStyle` returns to.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `layers[].attribution`  | `string`                                                                                               | not set           | Attribution text or HTML, shown in the OpenLayers attribution control while the layer is visible.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `layers[].text`         | `boolean \| object`                                                                                    | off               | Makes the layer a **text layer**: point features with a text property are drawn as text, sized in metres on the ground and rotated by a property; the `text` tool inserts into it. `true` uses the defaults; an object changes them (see below). Needs `geometryType` `Point`, `MultiPoint` or `Any`. The draft layer is always a text layer with the defaults.                                                                                                                                                                                                                                           |
 | `layers[].dimension`    | `boolean \| object`                                                                                    | off               | Makes the layer a **dimension layer**: two-point line features are drawn as aligned dimensions (extension lines, dimension line at the `offset` property, terminators, value) after a drawing standard preset, with the GIS value in `computedColor` until a field value (`fieldValue` property, typed by clicking the value) is set. `true` uses the defaults; an object changes them (see below). Needs `geometryType` `LineString` or `Any`; a layer cannot be a text and a dimension layer. Objects are checked on insert and update (codes `dimension-type`, `dimension-points`, `dimension-value`). |
 

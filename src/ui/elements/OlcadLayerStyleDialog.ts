@@ -4,11 +4,11 @@ import { styleSections, type LayerStyle, type StrokeDash } from '../../core/laye
 import { setIconButton } from './controls';
 
 /**
- * `<olcad-layer-style-dialog>`: a modal dialog for the look of the layers. Left the layers in
- * drawing order (top of the list = drawn on top), reordered by drag and drop or the Up / Down
- * buttons (`editor.layers.moveLayer`); right the style of the selected layer — stroke, fill,
- * points, label, text colours, opacity, zoom range — applied live with
- * `editor.layers.setStyle`. Reset layer and Reset all return to the configured styles and
+ * `<olcad-layer-style-dialog>`: a modal dialog for the look of the layers. Left the overlays
+ * and layers in their shared drawing order (top of the list = drawn on top), reordered by drag
+ * and drop or the Up / Down buttons (`editor.layers.moveLayer`); right the style of the selected
+ * layer — stroke, fill, points, label, text colours, opacity, zoom range; opacity and zoom range
+ * only for an overlay — applied live with `editor.layers.setStyle`. Reset layer and Reset all return to the configured styles and
  * order. `open(layerId?)` shows it. Bind with `element.editor = editor`.
  */
 export class OlcadLayerStyleDialog extends HTMLElement {
@@ -41,6 +41,11 @@ export class OlcadLayerStyleDialog extends HTMLElement {
         if (type === 'style' && this.applying) return;
         this.render();
       }),
+      editor.on('overlaychange', ({ type }) => {
+        if (!this.isOpen) return;
+        if (type === 'style' && this.applying) return;
+        this.render();
+      }),
       editor.on('destroy', () => {
         this.editor = null;
       }),
@@ -60,7 +65,7 @@ export class OlcadLayerStyleDialog extends HTMLElement {
     const editor = this.boundEditor;
     if (!editor) return;
     if (!this.dialog) this.build();
-    const ids = editor.layers.list().map((l) => l.id);
+    const ids = editor.layers.getOrder();
     this.selected = layerId && ids.includes(layerId) ? layerId : (ids[ids.length - 1] ?? null);
     if (!this.dialog!.isConnected) this.append(this.dialog!);
     this.render();
@@ -148,14 +153,22 @@ export class OlcadLayerStyleDialog extends HTMLElement {
             action: focused.dataset.action,
           }
         : null;
-    // Top of the list is drawn on top: the reverse of the drawing order.
-    const layers = editor.layers.list().slice().reverse();
+    // Top of the list is drawn on top: the reverse of the shared drawing order.
+    const layers = editor.layers
+      .getOrder()
+      .slice()
+      .reverse()
+      .map((id) => {
+        const overlay = editor.overlays?.has(id) ? editor.overlays.get(id) : null;
+        return { id, title: overlay ? overlay.title : editor.layers.get(id).title, overlay };
+      });
     if (!layers.some((l) => l.id === this.selected)) this.selected = layers[0]?.id ?? null;
     this.list.replaceChildren(
       ...layers.map((layer, i) => {
         const item = document.createElement('li');
         item.className = 'olcad-layer-style-dialog__layer';
         item.dataset.layerId = layer.id;
+        item.dataset.kind = layer.overlay ? 'overlay' : 'layer';
         item.draggable = true;
         item.setAttribute('aria-selected', String(layer.id === this.selected));
         const grip = document.createElement('span');
@@ -226,7 +239,7 @@ export class OlcadLayerStyleDialog extends HTMLElement {
   private move(id: string, step: number): void {
     const editor = this.boundEditor;
     if (!editor) return;
-    const ids = editor.layers.list().map((l) => l.id);
+    const ids = editor.layers.getOrder();
     editor.layers.moveLayer(id, ids.indexOf(id) + step);
   }
 
@@ -234,10 +247,7 @@ export class OlcadLayerStyleDialog extends HTMLElement {
   private dropAbove(id: string, target: string): void {
     const editor = this.boundEditor;
     if (!editor) return;
-    const rest = editor.layers
-      .list()
-      .map((l) => l.id)
-      .filter((other) => other !== id);
+    const rest = editor.layers.getOrder().filter((other) => other !== id);
     editor.layers.moveLayer(id, rest.indexOf(target) + 1);
   }
 
@@ -247,6 +257,27 @@ export class OlcadLayerStyleDialog extends HTMLElement {
     this.error.hidden = true;
     if (!editor || !id) {
       this.form.replaceChildren();
+      return;
+    }
+    if (editor.overlays?.has(id)) {
+      // An overlay is drawn by its server: opacity and zoom range are all a user can change.
+      const style = editor.layers.getStyle(id);
+      const title = document.createElement('h3');
+      title.className = 'olcad-layer-style-dialog__title';
+      title.textContent = editor.overlays.get(id).title;
+      const note = document.createElement('p');
+      note.className = 'olcad-layer-style-dialog__note';
+      note.textContent = 'Overlay: the server draws it. Opacity and zoom range can be changed.';
+      const apply = () => this.apply(id);
+      this.form.replaceChildren(
+        title,
+        note,
+        section('Layer', [
+          field('Opacity', rangeInput('opacity', style.opacity, apply)),
+          field('From zoom', optionalNumberInput('min-zoom', style.minZoom, apply)),
+          field('To zoom', optionalNumberInput('max-zoom', style.maxZoom, apply)),
+        ]),
+      );
       return;
     }
     const info = editor.layers.get(id);
@@ -355,17 +386,18 @@ export class OlcadLayerStyleDialog extends HTMLElement {
     const number = (name: string) => Number(value(name));
     const current = editor.layers.getStyle(id);
     const style: LayerStyle = { opacity: number('opacity') };
-    if (value('stroke-color') !== undefined) {
+    const overlay = editor.overlays?.has(id) ?? false;
+    if (!overlay && value('stroke-color') !== undefined) {
       style.stroke = {
         color: value('stroke-color')!,
         width: number('stroke-width'),
         dash: value('stroke-dash') as StrokeDash,
       };
     }
-    if (value('fill-color') !== undefined) {
+    if (!overlay && value('fill-color') !== undefined) {
       style.fill = { color: value('fill-color')!, opacity: number('fill-opacity') };
     }
-    if (value('point-radius') !== undefined) {
+    if (!overlay && value('point-radius') !== undefined) {
       style.point = {
         radius: number('point-radius'),
         fill: value('point-fill')!,
@@ -373,16 +405,18 @@ export class OlcadLayerStyleDialog extends HTMLElement {
         strokeWidth: number('point-stroke-width'),
       };
     }
-    if (current.text) style.text = { color: value('text-color')!, halo: value('text-halo')! };
-    const labelField = value('label-field')?.trim();
-    style.label = labelField
-      ? {
-          field: labelField,
-          size: number('label-size'),
-          color: value('label-color')!,
-          halo: value('label-halo')!,
-        }
-      : null;
+    if (!overlay) {
+      if (current.text) style.text = { color: value('text-color')!, halo: value('text-halo')! };
+      const labelField = value('label-field')?.trim();
+      style.label = labelField
+        ? {
+            field: labelField,
+            size: number('label-size'),
+            color: value('label-color')!,
+            halo: value('label-halo')!,
+          }
+        : null;
+    }
     const minZoom = value('min-zoom');
     const maxZoom = value('max-zoom');
     if (minZoom) style.minZoom = Number(minZoom);

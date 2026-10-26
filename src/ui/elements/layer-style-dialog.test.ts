@@ -6,6 +6,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Editor, EditorEvents } from '../../core/Editor';
 import { Emitter } from '../../core/events';
 import { LayerManager } from '../../core/layers/LayerManager';
+import { OverlayManager } from '../../core/layers/overlays';
 import { defineElements, persistLayerStyles, type OlcadLayerStyleDialog } from '../index';
 
 beforeAll(() => defineElements());
@@ -21,10 +22,17 @@ function fakeEditor() {
     getLayers: () => collection,
   } as unknown as OlMap;
   const lm = new LayerManager(map, () => 'EPSG:3857', {
-    onChange: (event) => emitter.emit('layerchange', event),
+    onChange: (event) =>
+      event.raster
+        ? emitter.emit('overlaychange', { id: event.id, type: 'style' })
+        : emitter.emit('layerchange', { id: event.id, type: event.type }),
     onLoad: () => {},
     onError: () => {},
     onActiveChange: () => {},
+  });
+  const om = new OverlayManager(map, lm, () => 'EPSG:3857', {
+    onChange: (event) => emitter.emit('overlaychange', event),
+    onError: () => {},
   });
   lm.add({
     id: 'parcels',
@@ -38,6 +46,7 @@ function fakeEditor() {
   const editor = {
     layers: {
       list: () => lm.list(),
+      getOrder: () => lm.getOrder(),
       get: (id: string) => lm.info(id),
       getConfig: (id: string) => lm.getConfig(id),
       getStyle: (id: string) => lm.getStyle(id),
@@ -50,9 +59,10 @@ function fakeEditor() {
       exportStyles: () => lm.exportStyles(),
       importStyles: (json: unknown) => lm.importStyles(json),
     },
+    overlays: { has: (id: string) => om.has(id), get: (id: string) => om.info(id) },
     on: emitter.on.bind(emitter),
   } as unknown as Editor;
-  return { editor, lm };
+  return { editor, lm, om };
 }
 
 function mount(editor: Editor): OlcadLayerStyleDialog {
@@ -156,6 +166,42 @@ describe('<olcad-layer-style-dialog>', () => {
   });
 });
 
+describe('<olcad-layer-style-dialog> overlays', () => {
+  it('lists overlays in the shared order with the Layer section only and reorders them', () => {
+    const { editor, lm, om } = fakeEditor();
+    om.add({
+      id: 'ortho',
+      type: 'wms',
+      title: 'Ortho',
+      url: '/wms',
+      params: { LAYERS: 'o' },
+      opacity: 0.8,
+    });
+    const el = mount(editor);
+    el.open('ortho');
+    expect(names(el)).toEqual(['trees', 'roads', 'parcels', 'ortho']);
+    expect(row(el, 'ortho').dataset.kind).toBe('overlay');
+    expect(row(el, 'trees').dataset.kind).toBe('layer');
+    expect(Array.from(el.querySelectorAll('legend'), (l) => l.textContent)).toEqual(['Layer']);
+    expect(control<HTMLInputElement>(el, 'opacity').value).toBe('0.8');
+    set(el, 'opacity', '0.3');
+    expect(lm.getStyle('ortho')).toEqual({ opacity: 0.3 });
+    expect(om.getOlLayer('ortho').getOpacity()).toBe(0.3);
+    set(el, 'max-zoom', '15', 'change');
+    expect(lm.getStyle('ortho').maxZoom).toBe(15);
+    expect(
+      row(el, 'ortho').querySelector('.olcad-layer-style-dialog__name--custom'),
+    ).not.toBeNull();
+    row(el, 'ortho').querySelector<HTMLButtonElement>('[data-action="up"]')!.click();
+    expect(lm.getOrder()).toEqual(['parcels', 'ortho', 'roads', 'trees']);
+    expect(names(el)).toEqual(['trees', 'roads', 'ortho', 'parcels']);
+    el.querySelector<HTMLButtonElement>('[data-action="reset-all"]')!.click();
+    expect(lm.getOrder()).toEqual(['ortho', 'parcels', 'roads', 'trees']);
+    expect(lm.isStyleCustomized('ortho')).toBe(false);
+    expect(om.getOlLayer('ortho').getOpacity()).toBe(0.8);
+  });
+});
+
 describe('persistLayerStyles', () => {
   it('restores stored styles and saves every style or order change', () => {
     const store = new Map<string, string>();
@@ -177,5 +223,28 @@ describe('persistLayerStyles', () => {
     expect(second.lm.getStyle('roads').opacity).toBe(0.4);
     store.set('olcad-layer-styles', '{ broken');
     expect(() => persistLayerStyles(fakeEditor().editor, { storage })).not.toThrow();
+  });
+
+  it('saves overlay style changes and restores them', () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    const wms = { id: 'ortho', type: 'wms', url: '/wms', params: { LAYERS: 'o' } } as const;
+    const first = fakeEditor();
+    first.om.add(wms);
+    const stop = persistLayerStyles(first.editor, { storage });
+    first.lm.setStyle('ortho', { opacity: 0.5 });
+    expect(JSON.parse(store.get('olcad-layer-styles')!)).toMatchObject({
+      styles: { ortho: { opacity: 0.5 } },
+    });
+    stop();
+    first.lm.setStyle('ortho', { opacity: 0.9 });
+    expect(JSON.parse(store.get('olcad-layer-styles')!).styles.ortho.opacity).toBe(0.5);
+    const second = fakeEditor();
+    persistLayerStyles(second.editor, { storage });
+    second.om.add(wms);
+    expect(second.om.getOlLayer('ortho').getOpacity()).toBe(0.5);
   });
 });

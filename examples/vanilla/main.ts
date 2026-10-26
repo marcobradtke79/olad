@@ -45,6 +45,19 @@ const editor = createEditor({
       maxZoom: 17,
     },
   ],
+  // A server-rendered layer over the basemap: switched on its own, dimmed, never edited.
+  overlays: [
+    {
+      id: 'osm-labels',
+      type: 'wms',
+      title: 'OSM labels (WMS overlay)',
+      url: 'https://ows.terrestris.de/osm/service',
+      params: { LAYERS: 'OSM-Overlay-WMS', TRANSPARENT: true },
+      serverType: 'geoserver',
+      opacity: 0.9,
+      visible: false,
+    },
+  ],
   layers: [
     {
       id: 'notes',

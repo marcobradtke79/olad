@@ -288,6 +288,25 @@ describe('LayerManager styles and order', () => {
     expect(lm.getStyle('labels').text).toEqual({ color: '#ff0000', halo: '#000000' });
   });
 
+  it('draws a layer with its configured opacity and attribution and resets to them', () => {
+    const { lm } = manager();
+    lm.add({
+      id: 'a',
+      geometryType: 'Point',
+      source: { features: [] },
+      opacity: 0.6,
+      attribution: '&copy; test',
+    });
+    const layer = lm.getOlLayer('a');
+    expect(layer.getOpacity()).toBe(0.6);
+    expect(lm.getStyle('a').opacity).toBe(0.6);
+    expect(layer.getSource()!.getAttributions()).toBeTypeOf('function');
+    lm.setStyle('a', { ...lm.getStyle('a'), opacity: 0.2 });
+    expect(layer.getOpacity()).toBe(0.2);
+    lm.resetStyle('a');
+    expect(layer.getOpacity()).toBe(0.6);
+  });
+
   it('orders layers bottom first and sets their zIndex', () => {
     const { lm, events, olLayer } = setup();
     expect(lm.ids()).toEqual(['parcels', 'roads', 'labels', 'expr']);

@@ -1,17 +1,20 @@
 import type Feature from 'ol/Feature';
 import type { Editor } from '../../core/Editor';
 import type { LayerInfo } from '../../core/layers/LayerManager';
+import type { OverlayInfo } from '../../core/layers/overlays';
 import { setIconButton } from './controls';
 import { featureTablesOf, onFeatureTableChange } from './OlcadFeatureTable';
 import { isLocalLayerPersisted, onLocalLayerPersistenceChange } from '../localLayerStorage';
 import type { OlcadLayerEditor } from './OlcadLayerEditor';
 
 /** What a row control does; with the layer id it identifies the control across re-renders. */
-type RowAction = 'visible' | 'highlight' | 'table' | 'edit' | 'move-draft' | 'settings' | 'info';
+type RowAction =
+  'visible' | 'highlight' | 'table' | 'edit' | 'move-draft' | 'settings' | 'info' | 'opacity';
 
 /**
- * `<olcad-layer-list>`: basemaps as a radio group and one row per vector layer with its name
- * and icon buttons: visibility, highlight (`editor.layers.setHighlighted`), table (opens the layer
+ * `<olcad-layer-list>`: basemaps as a radio group, one row per raster overlay (visibility and
+ * details with an opacity slider, the zoom range and the legend; `editor.overlays`) and one row
+ * per vector layer with its name and icon buttons: visibility, highlight (`editor.layers.setHighlighted`), table (opens the layer
  * in the `<olcad-feature-table>` bound to the same editor, or closes it), edit (switches edit
  * mode on and makes the layer the active one; no tool is started), move (while draft objects
  * are selected, on the rows of the layers that take them: `editor.layers.moveDrafts`), settings
@@ -28,6 +31,10 @@ export class OlcadLayerList extends HTMLElement {
   private readonly expanded = new Set<string>();
   /** The dialog for New layer and Layer settings, created on first use; survives re-renders. */
   private layerEditor: OlcadLayerEditor | null = null;
+  /** The last error of each overlay (`overlayerror`), shown in its details until it is re-added. */
+  private readonly overlayErrors = new Map<string, Error>();
+  /** Set while an opacity slider applies its value, so the list is not rebuilt under the pointer. */
+  private applying = false;
 
   /** `reveal`: a selection holding draft objects opens the flyout panel the list sits in. */
   get reveal(): boolean {
@@ -49,6 +56,15 @@ export class OlcadLayerList extends HTMLElement {
       const rerender = () => this.render();
       this.unsubscribe.push(
         editor.on('basemapchange', rerender),
+        editor.on('overlaychange', ({ id, type }) => {
+          if (type === 'add' || type === 'remove') this.overlayErrors.delete(id);
+          if (type === 'style' && this.applying) return;
+          this.render();
+        }),
+        editor.on('overlayerror', ({ id, error }) => {
+          this.overlayErrors.set(id, error);
+          this.render();
+        }),
         editor.on('layerchange', rerender), // add, remove, visible, editable, snappable, highlight
         editor.on('layerload', rerender),
         editor.on('change', rerender), // feature counts follow commands, undo, redo, discard
@@ -93,23 +109,26 @@ export class OlcadLayerList extends HTMLElement {
   private render(): void {
     // A rebuild would drop the focus: remember the focused row control and restore it.
     const focused = this.ownerDocument.activeElement as HTMLElement | null;
+    const focusedRow = focused?.closest<HTMLElement>('[data-layer-id], [data-overlay-id]');
     const focus =
       focused && this.contains(focused) && focused.dataset.action
-        ? {
-            action: focused.dataset.action,
-            layer: focused.closest<HTMLElement>('[data-layer-id]')?.dataset.layerId,
-          }
+        ? { action: focused.dataset.action, row: rowId(focusedRow) }
         : null;
     // Everything but the layer dialog: removing an open <dialog> from the document closes it.
     for (const child of Array.from(this.children)) if (child !== this.layerEditor) child.remove();
     const editor = this.boundEditor;
     if (!editor) return;
+    const overlays = editor.overlays?.list() ?? [];
+    const layers = editor.layers.list();
+    const known = new Set([...overlays.map((o) => o.id), ...layers.map((l) => l.id)]);
+    for (const id of this.expanded) if (!known.has(id)) this.expanded.delete(id);
     this.renderBasemaps(editor);
-    this.renderLayers(editor);
-    if (focus?.layer) {
-      const row = Array.from(this.querySelectorAll<HTMLElement>('[data-layer-id]')).find(
-        (el) => el.dataset.layerId === focus.layer,
-      );
+    this.renderOverlays(editor, overlays);
+    this.renderLayers(editor, layers);
+    if (focus?.row) {
+      const row = Array.from(
+        this.querySelectorAll<HTMLElement>('[data-layer-id], [data-overlay-id]'),
+      ).find((el) => rowId(el) === focus.row);
       row?.querySelector<HTMLElement>(`[data-action="${focus.action}"]`)?.focus();
     }
   }
@@ -145,11 +164,113 @@ export class OlcadLayerList extends HTMLElement {
     this.append(group);
   }
 
-  private renderLayers(editor: Editor): void {
-    const layers = editor.layers.list();
-    for (const id of this.expanded) {
-      if (!layers.some((layer) => layer.id === id)) this.expanded.delete(id);
+  private renderOverlays(editor: Editor, overlays: OverlayInfo[]): void {
+    if (overlays.length === 0) return;
+    const heading = this.heading('Overlays', 'overlays');
+    this.append(heading);
+    const group = document.createElement('div');
+    group.className = 'olcad-layer-list__group';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-labelledby', heading.id);
+    for (const overlay of overlays) group.append(this.renderOverlay(editor, overlay));
+    this.append(group);
+  }
+
+  private renderOverlay(editor: Editor, overlay: OverlayInfo): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'olcad-layer-list__layer olcad-layer-list__overlay';
+    row.classList.toggle('olcad-layer-list__layer--hidden', !overlay.visible);
+    const error = this.overlayErrors.get(overlay.id);
+    row.classList.toggle('olcad-layer-list__layer--error', error !== undefined);
+    row.dataset.overlayId = overlay.id;
+
+    const visible = rowButton('visible', 'visible');
+    setIconButton(
+      visible,
+      overlay.visible ? 'eye' : 'eyeOff',
+      `Visible: ${overlay.title}`,
+      overlay.visible ? 'Hide this overlay' : 'Show this overlay',
+    );
+    visible.setAttribute('aria-pressed', String(overlay.visible));
+    visible.addEventListener('click', () =>
+      editor.overlays.setVisible(overlay.id, !overlay.visible),
+    );
+
+    const title = document.createElement('span');
+    title.className = 'olcad-layer-list__title';
+    title.textContent = overlay.title;
+    if (error) title.title = error.message;
+
+    const open = this.expanded.has(overlay.id);
+    const detailsId = `${this.sectionId()}-details-${overlay.id}`;
+    const info = rowButton('info', 'info-toggle');
+    setIconButton(
+      info,
+      'info',
+      `Details of ${overlay.title}`,
+      open ? 'Hide details' : 'Show details',
+    );
+    info.setAttribute('aria-expanded', String(open));
+    info.setAttribute('aria-controls', detailsId);
+    info.addEventListener('click', () => {
+      if (this.expanded.has(overlay.id)) this.expanded.delete(overlay.id);
+      else this.expanded.add(overlay.id);
+      this.render();
+    });
+
+    const details = document.createElement('dl');
+    details.className = 'olcad-layer-list__details';
+    details.id = detailsId;
+    details.hidden = !open;
+    addDetail(details, 'type', 'Type', overlay.type);
+    // Opacity: a slider applying live (`editor.overlays.setOpacity`) with its value beside it.
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.name = 'opacity';
+    slider.className = 'olcad-layer-list__opacity';
+    slider.min = '0';
+    slider.max = '1';
+    slider.step = '0.05';
+    slider.value = String(overlay.opacity);
+    slider.dataset.action = 'opacity';
+    slider.setAttribute('aria-label', `Opacity of ${overlay.title}`);
+    const output = document.createElement('output');
+    output.textContent = percent(overlay.opacity);
+    slider.addEventListener('input', () => {
+      output.textContent = percent(Number(slider.value));
+      this.applying = true;
+      try {
+        editor.overlays.setOpacity(overlay.id, Number(slider.value));
+      } finally {
+        this.applying = false;
+      }
+    });
+    const opacity = document.createElement('span');
+    opacity.className = 'olcad-layer-list__opacity-control';
+    opacity.append(slider, output);
+    addDetail(details, 'opacity', 'Opacity', opacity);
+    addDetail(details, 'zoom', 'Zoom range', zoomRange(overlay.minZoom, overlay.maxZoom));
+    const resolution = editor.map?.getView?.()?.getResolution?.();
+    const legendUrl = editor.overlays.getLegendUrl(overlay.id, resolution) ?? overlay.legendUrl;
+    if (legendUrl) {
+      const img = document.createElement('img');
+      img.className = 'olcad-layer-list__legend';
+      img.alt = `Legend of ${overlay.title}`;
+      img.loading = 'lazy';
+      img.src = legendUrl;
+      addDetail(details, 'legend', 'Legend', img);
     }
+    if (overlay.attribution) {
+      addDetail(details, 'attribution', 'Attribution', plainText(overlay.attribution));
+    }
+    addDetail(details, 'id', 'Id', overlay.id);
+    if (error) addDetail(details, 'error', 'Error', error.message);
+
+    row.append(visible, title, info, details);
+    return row;
+  }
+
+  private renderLayers(editor: Editor, layers: LayerInfo[]): void {
     const heading = this.heading('Layers', 'layers');
     const add = document.createElement('button');
     add.type = 'button';
@@ -179,14 +300,7 @@ export class OlcadLayerList extends HTMLElement {
     row.classList.toggle('olcad-layer-list__layer--hidden', !layer.visible);
     row.dataset.layerId = layer.id;
 
-    const button = (action: RowAction, className: string): HTMLButtonElement => {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = `olcad-layer-list__${className}`;
-      el.dataset.action = action;
-      return el;
-    };
-
+    const button = rowButton;
     const visible = button('visible', 'visible');
     setIconButton(
       visible,
@@ -286,17 +400,8 @@ export class OlcadLayerList extends HTMLElement {
     details.className = 'olcad-layer-list__details';
     details.id = detailsId;
     details.hidden = !open;
-    const detail = (key: string, label: string, value: string) => {
-      const item = document.createElement('div');
-      item.className = 'olcad-layer-list__detail';
-      item.dataset.detail = key;
-      const dt = document.createElement('dt');
-      dt.textContent = label;
-      const dd = document.createElement('dd');
-      dd.textContent = value;
-      item.append(dt, dd);
-      details.append(item);
-    };
+    const detail = (key: string, label: string, value: string) =>
+      addDetail(details, key, label, value);
     detail('geometry', 'Geometry', layer.geometryType);
     detail('editable', 'Editing', ops.length ? ops.join(' ') : 'read-only');
     detail('features', 'Objects', String(layer.featureCount));
@@ -374,4 +479,49 @@ export class OlcadLayerList extends HTMLElement {
 function isDraft(editor: Editor, feature: Feature): boolean {
   const draft = editor.layers.getDraft();
   return draft !== null && editor.layers.layerOf(feature) === draft;
+}
+
+/** A row's icon button; `action` plus the row id identify it across re-renders. */
+function rowButton(action: RowAction, className: string): HTMLButtonElement {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = `olcad-layer-list__${className}`;
+  el.dataset.action = action;
+  return el;
+}
+
+/** The layer or overlay id of a row element. */
+function rowId(row: HTMLElement | null | undefined): string | undefined {
+  return row?.dataset.layerId ?? row?.dataset.overlayId;
+}
+
+/** One `dt` / `dd` pair of a details list; `value` is text or an element. */
+function addDetail(details: HTMLDListElement, key: string, label: string, value: string | Node) {
+  const item = document.createElement('div');
+  item.className = 'olcad-layer-list__detail';
+  item.dataset.detail = key;
+  const dt = document.createElement('dt');
+  dt.textContent = label;
+  const dd = document.createElement('dd');
+  if (typeof value === 'string') dd.textContent = value;
+  else dd.append(value);
+  item.append(dt, dd);
+  details.append(item);
+}
+
+function percent(value: number): string {
+  return `${Math.round(value * 100)} %`;
+}
+
+/** `8 – 18`, `from 8`, `to 18` or `any`. */
+function zoomRange(minZoom: number | undefined, maxZoom: number | undefined): string {
+  if (minZoom !== undefined && maxZoom !== undefined) return `${minZoom} – ${maxZoom}`;
+  if (minZoom !== undefined) return `from ${minZoom}`;
+  if (maxZoom !== undefined) return `to ${maxZoom}`;
+  return 'any';
+}
+
+/** The text of an attribution that may contain HTML (parsed inert, nothing loads or runs). */
+function plainText(html: string): string {
+  return new DOMParser().parseFromString(html, 'text/html').body.textContent?.trim() ?? '';
 }

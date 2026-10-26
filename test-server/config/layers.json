@@ -3,6 +3,7 @@
     {
       "id": "parcels",
       "title": "Parcels",
+      "attribution": "Parcels &copy; ol-cad test data",
       "visible": true,
       "source": {
         "format": "geojson",
@@ -130,6 +131,7 @@
     {
       "id": "buildings",
       "title": "Buildings (TopoJSON)",
+      "opacity": 0.6,
       "source": {
         "format": "topojson",
         "url": "/data/buildings.topojson"

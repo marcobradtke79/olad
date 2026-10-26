@@ -3,11 +3,13 @@ import type {
   DimensionPreset,
   EditorConfig,
   LayerConfig,
+  OverlayConfig,
   ResolvedBasemapConfig,
   ResolvedDimensionConfig,
   ResolvedEditableConfig,
   ResolvedEditorConfig,
   ResolvedLayerConfig,
+  ResolvedOverlayConfig,
   ResolvedTextConfig,
 } from './types';
 
@@ -17,6 +19,15 @@ export const DEFAULT_ZOOM = 2;
 
 export function resolveBasemap(basemap: BasemapConfig): ResolvedBasemapConfig {
   return { ...basemap, title: basemap.title ?? basemap.id, visible: basemap.visible ?? false };
+}
+
+export function resolveOverlay(overlay: OverlayConfig): ResolvedOverlayConfig {
+  return {
+    ...overlay,
+    title: overlay.title ?? overlay.id,
+    visible: overlay.visible ?? true,
+    opacity: overlay.opacity ?? 1,
+  };
 }
 
 export function resolveEditable(editable: LayerConfig['editable']): ResolvedEditableConfig {
@@ -121,6 +132,7 @@ export function applyDefaults(config: EditorConfig): ResolvedEditorConfig {
     projections: (config.projections ?? []).map((p) => ({ ...p })),
     basemaps,
     layers: (config.layers ?? []).map(resolveLayer),
+    overlays: (config.overlays ?? []).map(resolveOverlay),
     editMode: config.editMode ?? false,
     cursor: {
       crosshair: true,

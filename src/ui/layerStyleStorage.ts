@@ -8,9 +8,10 @@ export interface PersistLayerStylesOptions {
 }
 
 /**
- * Keep the user's layer styles and drawing order (`editor.layers.exportStyles`) in browser
- * storage: restore them now, save after every `layerchange` of type `style` or `order`.
- * Unreadable or invalid stored data is ignored. Returns a function that stops saving.
+ * Keep the user's layer and overlay styles and the drawing order (`editor.layers.exportStyles`)
+ * in browser storage: restore them now, save after every `layerchange` of type `style` or
+ * `order` and every `overlaychange` of type `style`. Unreadable or invalid stored data is
+ * ignored. Returns a function that stops saving.
  */
 export function persistLayerStyles(
   editor: Editor,
@@ -37,13 +38,21 @@ export function persistLayerStyles(
   } finally {
     restoring = false;
   }
-  const off = editor.on('layerchange', ({ type }) => {
-    if (restoring || (type !== 'style' && type !== 'order')) return;
+  const save = () => {
     try {
       storage?.setItem(key, JSON.stringify(editor.layers.exportStyles()));
     } catch {
       // Storage full or unavailable: the styles stay for the session.
     }
+  };
+  const offLayers = editor.on('layerchange', ({ type }) => {
+    if (!restoring && (type === 'style' || type === 'order')) save();
   });
-  return off;
+  const offOverlays = editor.on('overlaychange', ({ type }) => {
+    if (!restoring && type === 'style') save();
+  });
+  return () => {
+    offLayers();
+    offOverlays();
+  };
 }

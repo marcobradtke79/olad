@@ -1183,6 +1183,32 @@
   overflow-wrap: anywhere;
 }
 
+/* Overlay rows: an opacity slider with its value and the legend image in the details. */
+.olcad-layer-list__opacity-control {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--olcad-spacing) / 2);
+  max-width: 100%;
+}
+
+.olcad-layer-list__opacity {
+  width: 8em;
+  max-width: 100%;
+  margin: 0;
+}
+
+.olcad-layer-list__legend {
+  display: block;
+  max-width: 100%;
+  padding: 2px;
+  background: #fff;
+  border-radius: 2px;
+}
+
+.olcad-layer-list__layer--error .olcad-layer-list__title {
+  color: var(--olcad-color-error, #f87171);
+}
+
 /* Template list: the Copy button and one row per template with insert, rename, remove. */
 
 .olcad-template-list {
@@ -2272,6 +2298,13 @@
 .olcad-layer-style-dialog__name--custom::after {
   content: ' •';
   color: var(--olcad-color-accent);
+}
+
+/* Overlays in the order list are marked after the name. */
+.olcad-layer-style-dialog__layer[data-kind='overlay'] .olcad-layer-style-dialog__name::after {
+  content: ' · overlay';
+  color: var(--olcad-color-muted);
+  font-size: 0.85em;
 }
 
 .olcad-layer-style-dialog__layer .olcad-icon-button svg {

@@ -42,12 +42,16 @@ function collectTypePaths(): Set<string> {
       return;
     }
     if (!(type.flags & ts.TypeFlags.Object) || !isLocal(type) || seen.has(type)) return;
+    // `seen` holds the types on the current path (a recursion guard), not every type visited:
+    // a type reused under several prefixes (GeoTIFF sources of basemaps and overlays) is
+    // documented under each of them.
     seen.add(type);
     for (const prop of checker.getPropertiesOfType(type)) {
       const path = prefix ? `${prefix}.${prop.name}` : prop.name;
       paths.add(path);
       walk(checker.getTypeOfSymbolAtLocation(prop, source), path, seen);
     }
+    seen.delete(type);
   };
   walk(rootType, '', new Set());
   return paths;

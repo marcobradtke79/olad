@@ -1,5 +1,6 @@
 import type Feature from 'ol/Feature';
 import type OlMap from 'ol/Map';
+import type BaseLayer from 'ol/layer/Base';
 import type VectorLayer from 'ol/layer/Vector';
 import type VectorSource from 'ol/source/Vector';
 import type {
@@ -72,7 +73,8 @@ export type LayerChangeType =
   | 'order';
 
 export interface LayerManagerEvents {
-  onChange(event: { id: string; type: LayerChangeType }): void;
+  /** `raster`: the change concerns an overlay registered with `attachRaster` (its style). */
+  onChange(event: { id: string; type: LayerChangeType; raster?: true }): void;
   onLoad(event: { id: string; features: Feature[] }): void;
   onError(event: { id: string; error: Error }): void;
   onActiveChange(event: { id: string | null }): void;
@@ -89,6 +91,14 @@ interface Entry {
   style?: LayerStyle;
 }
 
+/** A raster overlay in the shared drawing order; its user style is opacity and zoom range. */
+interface RasterEntry {
+  layer: BaseLayer;
+  /** The configured opacity and zoom range, restored by `resetStyle`. */
+  base: { opacity: number; minZoom?: number; maxZoom?: number };
+  style?: LayerStyle;
+}
+
 /** User styles and drawing order as plain JSON (`exportStyles` / `importStyles`). */
 export interface LayerStylesJson {
   version: 1;
@@ -98,13 +108,18 @@ export interface LayerStylesJson {
   styles: Record<string, LayerStyle>;
 }
 
-/** Vector layers are drawn with `zIndex` = this + their position: above basemaps, below overlays. */
+/**
+ * Overlays and vector layers are drawn with `zIndex` = this + their position in the shared
+ * drawing order: above the basemaps, below the layer highlight and the selection.
+ */
 export const LAYER_Z_INDEX_BASE = 1;
 
 /** Owns the vector layers: creation, runtime changes, editability rules and reprojection. */
 export class LayerManager {
   readonly originals = new OriginalStore();
   private readonly entries = new Map<string, Entry>();
+  /** Raster overlays (`attachRaster`), sharing `order` and the style store with the vector layers. */
+  private readonly raster = new Map<string, RasterEntry>();
   private activeId: string | null = null;
   /** Layers the user created in the client (`editor.localLayers`). */
   private readonly localIds = new Set<string>();
@@ -145,7 +160,7 @@ export class LayerManager {
 
   add(config: LayerConfig): void {
     validateLayerConfig(config);
-    if (this.entries.has(config.id)) throw new Error(`Layer "${config.id}" already exists`);
+    if (this.isKnown(config.id)) throw new Error(`Layer "${config.id}" already exists`);
     const resolved = resolveLayer(config);
     const layer = createVectorLayer(resolved, {
       getProjection: this.getProjection,
@@ -199,9 +214,46 @@ export class LayerManager {
     return this.entries.has(id);
   }
 
-  /** Layer ids in drawing order, bottom first (the config order until `setOrder`). */
+  /** Vector layer ids in drawing order, bottom first (the config order until `setOrder`). */
   ids(): string[] {
+    return this.order.filter((id) => this.entries.has(id));
+  }
+
+  /** Overlay and vector layer ids in drawing order, bottom first. */
+  getOrder(): string[] {
     return [...this.order];
+  }
+
+  // ---- raster overlays in the shared order ----
+
+  /**
+   * Put an overlay's layer into the drawing order: below the vector layers and above the other
+   * overlays, unless a stored order (`importStyles`) names it. Applies a stored style too.
+   */
+  attachRaster(id: string, layer: BaseLayer, base: RasterEntry['base']): void {
+    if (this.isKnown(id)) throw new Error(`Layer "${id}" already exists`);
+    this.raster.set(id, { layer, base: { ...base } });
+    const firstVector = this.order.findIndex((other) => this.entries.has(other));
+    this.order.splice(firstVector === -1 ? this.order.length : firstVector, 0, id);
+    const pending = this.pendingStyles.get(id);
+    if (pending) {
+      this.pendingStyles.delete(id);
+      this.setStyle(id, pending);
+    }
+    if (this.pendingOrder.includes(id)) this.setOrder(this.pendingOrder, true);
+    else this.applyZIndex();
+  }
+
+  /** Take an overlay out of the drawing order (the caller removes it from the map). */
+  detachRaster(id: string): void {
+    if (!this.raster.delete(id)) return;
+    this.order = this.order.filter((other) => other !== id);
+    this.applyZIndex();
+  }
+
+  /** Whether the id names an overlay registered with `attachRaster`. */
+  isRaster(id: string): boolean {
+    return this.raster.has(id);
   }
 
   // ---- drawing order ----
@@ -212,27 +264,42 @@ export class LayerManager {
    * Emits `layerchange` with type `order`.
    */
   setOrder(ids: string[], keepUnknown = false): void {
-    const known = ids.filter((id, i) => this.entries.has(id) && ids.indexOf(id) === i);
+    const known = ids.filter((id, i) => this.isKnown(id) && ids.indexOf(id) === i);
     this.pendingOrder = keepUnknown && known.length < ids.length ? [...ids] : [];
-    this.order = [...known, ...this.order.filter((id) => !known.includes(id))];
-    this.orderCustomized = this.order.join('\n') !== [...this.entries.keys()].join('\n');
+    const rest = this.order.filter((id) => !known.includes(id));
+    // Ids not given keep their relative order: overlays below the given ones, vector layers
+    // above them, so a stored vector-only order keeps the overlays underneath.
+    this.order = [
+      ...rest.filter((id) => this.raster.has(id)),
+      ...known,
+      ...rest.filter((id) => this.entries.has(id)),
+    ];
+    this.orderCustomized = this.order.join('\n') !== this.defaultOrder().join('\n');
     this.applyZIndex();
     this.events.onChange({ id: known[0] ?? '', type: 'order' });
   }
 
   /** Move one layer to position `index` of the drawing order (0 = bottom). */
   moveLayer(id: string, index: number): void {
-    this.require(id);
+    if (!this.isKnown(id)) throw new Error(`Unknown layer "${id}"`);
     const rest = this.order.filter((other) => other !== id);
     const at = Math.max(0, Math.min(rest.length, Math.round(index)));
     rest.splice(at, 0, id);
     this.setOrder(rest);
   }
 
-  /** Back to the configured order (layers added at runtime last). */
+  /** Back to the configured order: overlays below the layers, those added at runtime last. */
   resetOrder(): void {
     this.pendingOrder = [];
-    this.setOrder([...this.entries.keys()]);
+    this.setOrder(this.defaultOrder());
+  }
+
+  private defaultOrder(): string[] {
+    return [...this.raster.keys(), ...this.entries.keys()];
+  }
+
+  private isKnown(id: string): boolean {
+    return this.entries.has(id) || this.raster.has(id);
   }
 
   isOrderCustomized(): boolean {
@@ -240,13 +307,25 @@ export class LayerManager {
   }
 
   private applyZIndex(): void {
-    this.order.forEach((id, i) => this.entries.get(id)?.layer.setZIndex(LAYER_Z_INDEX_BASE + i));
+    this.order.forEach((id, i) => {
+      const layer = this.entries.get(id)?.layer ?? this.raster.get(id)?.layer;
+      layer?.setZIndex(LAYER_Z_INDEX_BASE + i);
+    });
   }
 
   // ---- user styles ----
 
-  /** The layer's current style: the user's, else the one read from its configured style. */
+  /**
+   * The layer's current style: the user's, else the one read from its configured style. For an
+   * overlay: its opacity and zoom range.
+   */
   getStyle(id: string): LayerStyle {
+    const raster = this.raster.get(id);
+    if (raster) {
+      return structuredClone(
+        raster.style ?? rasterStyle(raster.base.opacity, raster.base.minZoom, raster.base.maxZoom),
+      );
+    }
     const { config, layer, style } = this.require(id);
     if (style) return structuredClone(style);
     const base =
@@ -262,12 +341,13 @@ export class LayerManager {
 
   /** Whether the configured style uses expressions or rules, so a user style replaces it entirely. */
   hasExpressionStyle(id: string): boolean {
+    if (this.raster.has(id)) return false;
     const { config } = this.require(id);
     return config.style !== undefined && styleFromFlat(config.style, config.geometryType) === null;
   }
 
   isStyleCustomized(id: string): boolean {
-    return this.require(id).style !== undefined;
+    return (this.raster.get(id) ?? this.require(id)).style !== undefined;
   }
 
   /**
@@ -275,6 +355,25 @@ export class LayerManager {
    * range and, for text layers, the text colours. Emits `layerchange` with type `style`.
    */
   setStyle(id: string, style: LayerStyle): void {
+    const raster = this.raster.get(id);
+    if (raster) {
+      const clean = validateStyle(style);
+      const extra =
+        (['stroke', 'fill', 'point', 'text'] as const).find((key) => clean[key] !== undefined) ??
+        (clean.label ? 'label' : undefined);
+      if (extra) {
+        throw new StyleError(
+          `style.${extra}`,
+          'an overlay takes opacity, minZoom and maxZoom only',
+        );
+      }
+      raster.style = rasterStyle(clean.opacity, clean.minZoom, clean.maxZoom);
+      raster.layer.setOpacity(clean.opacity);
+      raster.layer.setMinZoom(clean.minZoom ?? raster.base.minZoom ?? -Infinity);
+      raster.layer.setMaxZoom(clean.maxZoom ?? raster.base.maxZoom ?? Infinity);
+      this.events.onChange({ id, type: 'style', raster: true });
+      return;
+    }
     const entry = this.require(id);
     const clean = validateStyle(style);
     entry.style = clean;
@@ -299,13 +398,23 @@ export class LayerManager {
 
   /** Back to the configured style, opacity and zoom range. */
   resetStyle(id: string): void {
-    const entry = this.require(id);
     this.pendingStyles.delete(id);
+    const raster = this.raster.get(id);
+    if (raster) {
+      if (!raster.style) return;
+      delete raster.style;
+      raster.layer.setOpacity(raster.base.opacity);
+      raster.layer.setMinZoom(raster.base.minZoom ?? -Infinity);
+      raster.layer.setMaxZoom(raster.base.maxZoom ?? Infinity);
+      this.events.onChange({ id, type: 'style', raster: true });
+      return;
+    }
+    const entry = this.require(id);
     if (!entry.style) return;
     delete entry.style;
     const { config, layer } = entry;
     layer.setStyle(vectorLayerStyle(config, this.getProjection, {}, this.locale, this.isStale));
-    layer.setOpacity(1);
+    layer.setOpacity(config.opacity ?? 1);
     layer.setMinZoom(config.minZoom ?? -Infinity);
     layer.setMaxZoom(config.maxZoom ?? Infinity);
     this.events.onChange({ id, type: 'style' });
@@ -314,6 +423,7 @@ export class LayerManager {
   /** User styles and order as JSON, including those kept for layers not added yet. */
   exportStyles(): LayerStylesJson {
     const styles: Record<string, LayerStyle> = Object.fromEntries(this.pendingStyles);
+    for (const [id, entry] of this.raster) if (entry.style) styles[id] = entry.style;
     for (const [id, entry] of this.entries) if (entry.style) styles[id] = entry.style;
     let order: string[] = this.orderCustomized ? [...this.order] : [];
     if (this.pendingOrder.length) order = mergeOrder(this.order, this.pendingOrder);
@@ -341,7 +451,7 @@ export class LayerManager {
       ([id, style]) => [id, validateStyle(style, `styles.styles.${id}`)] as const,
     );
     for (const [id, style] of clean) {
-      if (this.entries.has(id)) this.setStyle(id, style);
+      if (this.isKnown(id)) this.setStyle(id, style);
       else this.pendingStyles.set(id, style);
     }
     if (order.length) this.setOrder(order as string[], true);
@@ -546,13 +656,30 @@ export class LayerManager {
       if (highlight) this.map.removeLayer(highlight);
     }
     this.entries.clear();
+    this.raster.clear();
+    this.order = [];
   }
 
   private require(id: string): Entry {
     const entry = this.entries.get(id);
-    if (!entry) throw new Error(`Unknown layer "${id}"`);
+    if (!entry) {
+      throw new Error(
+        this.raster.has(id)
+          ? `"${id}" is an overlay, not a vector layer (see editor.overlays)`
+          : `Unknown layer "${id}"`,
+      );
+    }
     return entry;
   }
+}
+
+/** The opacity and zoom range of an overlay as a `LayerStyle`. */
+function rasterStyle(opacity: number, minZoom?: number, maxZoom?: number): LayerStyle {
+  return {
+    opacity,
+    ...(minZoom !== undefined ? { minZoom } : {}),
+    ...(maxZoom !== undefined ? { maxZoom } : {}),
+  };
 }
 
 /** `#rrggbb` of a CSS colour (black when unreadable). */

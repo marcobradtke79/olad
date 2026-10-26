@@ -5,6 +5,7 @@
  *   GET  /config          test configuration (test-config.json merged with layers.json)
  *   GET  /data/:layer     current data of a GeoJSON layer; other files in data/ are served as is
  *   GET  /wfs             WFS GetFeature emulation (outputFormat=application/json, srsName, bbox)
+ *   GET  /wms             WMS emulation: GetCapabilities (1.3.0), GetMap (hatched PNG per layer), GetLegendGraphic
  *   POST /changes[?fail=1] apply a change set, answer { idMap }; fail=1 answers 500
  *   GET  /changes/log     every change set received since start / reset
  *   POST /reset           restore the seed data
@@ -17,6 +18,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import proj4 from 'proj4';
+import { hatchTile, legendImage, type Rgb } from './png.ts';
 
 proj4.defs(
   'EPSG:25832',
@@ -189,6 +191,8 @@ const MIME: Record<string, string> = {
   '.gpx': 'application/gpx+xml; charset=utf-8',
   '.gml': 'application/gml+xml; charset=utf-8',
   '.topojson': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.xml': 'text/xml; charset=utf-8',
 };
 
 function send(res: ServerResponse, status: number, body: unknown, type = MIME['.json']): void {
@@ -199,6 +203,191 @@ function send(res: ServerResponse, status: number, body: unknown, type = MIME['.
     'access-control-allow-methods': 'GET,POST,OPTIONS',
   });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body, null, 2));
+}
+
+// ---- WMS emulation --------------------------------------------------------------------------
+// Three layers over the seed data, enough for overlays, legends, GetFeatureInfo and discovery:
+// `test:parcels` (queryable, legend), `test:roads` (legend, scale range) and `test:hillshade`.
+
+/** Colours of the emulated layers, used for GetMap tiles and legends. */
+const WMS_COLORS: Record<string, Rgb> = {
+  'test:parcels': [37, 99, 235],
+  'test:roads': [220, 38, 38],
+  'test:hillshade': [107, 114, 128],
+  xyz: [16, 185, 129],
+};
+const WMS_DEFAULT_COLOR: Rgb = [168, 85, 247];
+const pngCache = new Map<string, Buffer>();
+
+/** Lon/lat bounding box of a collection. */
+function bboxOf(collections: FeatureCollection[]): [number, number, number, number] {
+  const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  const visit = (c: unknown): void => {
+    if (!Array.isArray(c)) return;
+    if (typeof c[0] === 'number') {
+      box[0] = Math.min(box[0], c[0] as number);
+      box[1] = Math.min(box[1], c[1] as number);
+      box[2] = Math.max(box[2], c[0] as number);
+      box[3] = Math.max(box[3], c[1] as number);
+    } else c.forEach(visit);
+  };
+  for (const collection of collections) {
+    for (const feature of collection.features) visit(feature.geometry?.coordinates);
+  }
+  return box;
+}
+
+function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+interface WmsLayer {
+  name: string;
+  title: string;
+  abstract: string;
+  bbox: [number, number, number, number];
+  queryable: boolean;
+  legend: boolean;
+  minScale?: number;
+  maxScale?: number;
+}
+
+function wmsLayerXml(layer: WmsLayer, base: string): string {
+  const [west, south, east, north] = layer.bbox;
+  const [minX, minY] = proj4('EPSG:4326', 'EPSG:3857', [west, south]);
+  const [maxX, maxY] = proj4('EPSG:4326', 'EPSG:3857', [east, north]);
+  const legend = layer.legend
+    ? `      <Style><Name>default</Name><Title>Default</Title>
+        <LegendURL width="96" height="20"><Format>image/png</Format>
+          <OnlineResource xlink:type="simple" xlink:href="${escapeXml(`${base}/wms?SERVICE=WMS&REQUEST=GetLegendGraphic&FORMAT=image/png&LAYER=${layer.name}`)}"/>
+        </LegendURL></Style>\n`
+    : '';
+  const scale =
+    layer.minScale !== undefined && layer.maxScale !== undefined
+      ? `      <MinScaleDenominator>${layer.minScale}</MinScaleDenominator>\n      <MaxScaleDenominator>${layer.maxScale}</MaxScaleDenominator>\n`
+      : '';
+  return `    <Layer queryable="${layer.queryable ? 1 : 0}">
+      <Name>${escapeXml(layer.name)}</Name>
+      <Title>${escapeXml(layer.title)}</Title>
+      <Abstract>${escapeXml(layer.abstract)}</Abstract>
+      <EX_GeographicBoundingBox>
+        <westBoundLongitude>${west}</westBoundLongitude><eastBoundLongitude>${east}</eastBoundLongitude>
+        <southBoundLatitude>${south}</southBoundLatitude><northBoundLatitude>${north}</northBoundLatitude>
+      </EX_GeographicBoundingBox>
+      <BoundingBox CRS="CRS:84" minx="${west}" miny="${south}" maxx="${east}" maxy="${north}"/>
+      <BoundingBox CRS="EPSG:4326" minx="${south}" miny="${west}" maxx="${north}" maxy="${east}"/>
+      <BoundingBox CRS="EPSG:3857" minx="${minX}" miny="${minY}" maxx="${maxX}" maxy="${maxY}"/>
+${scale}${legend}    </Layer>
+`;
+}
+
+/** The layers of the WMS emulation, with bounding boxes from the current seed data. */
+function wmsLayers(): WmsLayer[] {
+  const parcels = data.get('parcels') ? [data.get('parcels')!] : [];
+  const roads = data.get('roads') ? [data.get('roads')!] : [];
+  return [
+    {
+      name: 'test:parcels',
+      title: 'Parcels',
+      abstract: 'The parcels of the seed data; answers GetFeatureInfo.',
+      bbox: bboxOf(parcels),
+      queryable: true,
+      legend: true,
+    },
+    {
+      name: 'test:roads',
+      title: 'Roads',
+      abstract: 'The roads of the seed data, shown between the scales 1:1000 and 1:500000.',
+      bbox: bboxOf(roads),
+      queryable: false,
+      legend: true,
+      minScale: 1000,
+      maxScale: 500000,
+    },
+    {
+      name: 'test:hillshade',
+      title: 'Hillshade',
+      abstract: 'A raster without legend that does not answer GetFeatureInfo.',
+      bbox: bboxOf([...parcels, ...roads]),
+      queryable: false,
+      legend: false,
+    },
+  ];
+}
+
+function wmsCapabilities(base: string): string {
+  const layers = wmsLayers();
+  const [west, south, east, north] = bboxOf([...data.values()]);
+  const dcp = `<DCPType><HTTP><Get><OnlineResource xlink:type="simple" xlink:href="${escapeXml(`${base}/wms?`)}"/></Get></HTTP></DCPType>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <Service>
+    <Name>WMS</Name>
+    <Title>ol-cad test server</Title>
+    <Abstract>WMS emulation over the seed data for the Playwright tests.</Abstract>
+  </Service>
+  <Capability>
+    <Request>
+      <GetCapabilities><Format>text/xml</Format>${dcp}</GetCapabilities>
+      <GetMap><Format>image/png</Format>${dcp}</GetMap>
+      <GetFeatureInfo><Format>application/json</Format>${dcp}</GetFeatureInfo>
+    </Request>
+    <Exception><Format>XML</Format></Exception>
+    <Layer>
+      <Title>ol-cad test server</Title>
+      <CRS>EPSG:3857</CRS><CRS>EPSG:4326</CRS><CRS>CRS:84</CRS>
+      <EX_GeographicBoundingBox>
+        <westBoundLongitude>${west}</westBoundLongitude><eastBoundLongitude>${east}</eastBoundLongitude>
+        <southBoundLatitude>${south}</southBoundLatitude><northBoundLatitude>${north}</northBoundLatitude>
+      </EX_GeographicBoundingBox>
+      <Layer>
+        <Title>Test</Title>
+        <Abstract>The layers of the test server.</Abstract>
+${layers.map((layer) => wmsLayerXml(layer, base)).join('')}      </Layer>
+    </Layer>
+  </Capability>
+</WMS_Capabilities>
+`;
+}
+
+function handleWms(url: URL, res: ServerResponse): void {
+  const params = new Map<string, string>();
+  for (const [key, value] of url.searchParams) params.set(key.toLowerCase(), value);
+  const request = (params.get('request') ?? '').toLowerCase();
+  const size = (key: string) =>
+    Math.max(1, Math.min(2048, Math.round(Number(params.get(key))) || 256));
+  const png = (key: string, make: () => Buffer): Buffer => {
+    let image = pngCache.get(key);
+    if (!image) {
+      image = make();
+      pngCache.set(key, image);
+    }
+    return image;
+  };
+  switch (request) {
+    case 'getcapabilities':
+      return send(res, 200, wmsCapabilities(`http://localhost:${PORT}`), MIME['.xml']);
+    case 'getmap': {
+      const layer = (params.get('layers') ?? '').split(',')[0] ?? '';
+      const color = WMS_COLORS[layer] ?? WMS_DEFAULT_COLOR;
+      const width = size('width');
+      const height = size('height');
+      const image = png(`map:${layer}:${width}x${height}`, () => hatchTile(width, height, color));
+      return send(res, 200, image, MIME['.png']);
+    }
+    case 'getlegendgraphic': {
+      const layer = params.get('layer') ?? '';
+      const color = WMS_COLORS[layer] ?? WMS_DEFAULT_COLOR;
+      return send(
+        res,
+        200,
+        png(`legend:${layer}`, () => legendImage(color)),
+        MIME['.png'],
+      );
+    }
+    default:
+      return send(res, 400, { error: `unsupported WMS request "${params.get('request') ?? ''}"` });
+  }
 }
 
 async function sendFile(res: ServerResponse, base: string, rel: string): Promise<void> {
@@ -259,6 +448,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       );
     return send(res, 200, { type: 'FeatureCollection', features }, MIME['.geojson']);
   }
+  if (method === 'GET' && pathname === '/wms') return handleWms(url, res);
   if (method === 'GET' && pathname === '/changes/log') return send(res, 200, log);
   if (method === 'POST' && pathname === '/changes') {
     if (url.searchParams.get('fail') === '1') {

@@ -267,6 +267,7 @@ export function createVectorLayer(
 ): VectorLayer<VectorSource<Feature>> {
   const format = createFormat(layer.source);
   const vectorSource = new VectorSource<Feature>({
+    attributions: layer.attribution,
     strategy: layer.source.strategy === 'bbox' ? bbox : all,
     loader: (extent, resolution, _projection, success, failure) => {
       const viewProjection = ctx.getProjection();
@@ -302,6 +303,7 @@ export function createVectorLayer(
       ctx.isDimensionStale ? ctx.isDimensionStale(f) : false,
     ),
     visible: layer.visible,
+    opacity: layer.opacity,
     minZoom: layer.minZoom,
     maxZoom: layer.maxZoom,
   });

@@ -295,6 +295,9 @@
           editor.on('basemaperror', ({ id, error }) =>
             setStatus('Basemap ' + id + ' failed: ' + error.message, 'error'),
           );
+          editor.on('overlayerror', ({ id, error }) =>
+            setStatus('Overlay ' + id + ' failed: ' + error.message, 'error'),
+          );
 
           editor.on('projectionchange', ({ to }) => setStatus('Projection: ' + to));
 

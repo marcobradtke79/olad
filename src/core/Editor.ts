@@ -45,6 +45,8 @@ import Style from 'ol/style/Style';
 import { nearestSegment, normalizeAngle, screenAngle, type Segment } from './geometry/segments';
 import { Emitter } from './events';
 import { BASEMAP_ID_PROPERTY, createBasemapLayer } from './layers/basemaps';
+import { OverlayManager, type OverlayChangeType, type OverlayInfo } from './layers/overlays';
+import type { OverlayConfig, ResolvedOverlayConfig } from './config/types';
 import { LAYER_ID_PROPERTY } from './layers/vector';
 import {
   canInsertTemplate,
@@ -147,6 +149,10 @@ export interface EditorEvents extends Record<string, unknown> {
   basemapchange: { id: string; type: 'activate' | 'add' | 'remove' };
   /** A basemap's asynchronous source (WMTS capabilities) failed to load. */
   basemaperror: { id: string; error: Error };
+  /** An overlay was added or removed, or its visibility, opacity or zoom range (`style`) changed. */
+  overlaychange: { id: string; type: OverlayChangeType };
+  /** An overlay's source could not be built or its WMTS capabilities failed to load. */
+  overlayerror: { id: string; error: Error };
   /** A layer was added or removed, or its visibility, editability, snappability, highlight, title or schema changed. */
   layerchange: {
     id: string;
@@ -261,9 +267,43 @@ export interface BasemapsApi {
   remove(id: string): void;
 }
 
+/**
+ * Raster overlays (`overlays[]`): server-rendered or tiled layers drawn between the basemap and
+ * the vector layers, each switched on and off on its own. Read-only: never selected, snapped or
+ * edited. They share the drawing order and the style store with the vector layers, so
+ * `layers.setOrder`, `moveLayer`, `getStyle`, `setStyle` (opacity and zoom range only),
+ * `resetStyle`, `exportStyles` and `importStyles` take overlay ids too.
+ */
+export interface OverlaysApi {
+  /** All overlays in drawing order, bottom first. */
+  list(): OverlayInfo[];
+  /** Info for one overlay. Throws for an unknown id. */
+  get(id: string): OverlayInfo;
+  has(id: string): boolean;
+  /** The resolved configuration of an overlay. */
+  getConfig(id: string): ResolvedOverlayConfig;
+  /** Add an overlay at runtime, validated like `overlays[]`; drawn below the vector layers. Emits `overlaychange` (`add`). */
+  add(config: OverlayConfig): void;
+  /** Remove an overlay. Emits `overlaychange` (`remove`). */
+  remove(id: string): void;
+  /** Show or hide an overlay. Emits `overlaychange` (`visible`) when it changed. */
+  setVisible(id: string, visible: boolean): void;
+  /** Set the opacity (0 … 1) through `layers.setStyle`. Emits `overlaychange` (`style`). */
+  setOpacity(id: string, opacity: number): void;
+  /** Set the display zoom range (`undefined`: unlimited) through `layers.setStyle`. Emits `overlaychange` (`style`). */
+  setZoomRange(id: string, minZoom?: number, maxZoom?: number): void;
+  /**
+   * The configured legend image URL, else for WMS overlays the service's GetLegendGraphic URL
+   * (for `resolution` when given), else `undefined`.
+   */
+  getLegendUrl(id: string, resolution?: number): string | undefined;
+}
+
 export interface LayersApi {
-  /** All layers in config order. */
+  /** All vector layers in drawing order, bottom first. */
   list(): LayerInfo[];
+  /** Overlay and vector layer ids in drawing order, bottom first (`setOrder` takes both kinds). */
+  getOrder(): string[];
   /** Info for one layer. Throws for an unknown id. */
   get(id: string): LayerInfo;
   /** The resolved configuration of a layer. */
@@ -690,6 +730,7 @@ export interface Editor {
   /** Validated configuration with defaults applied. */
   readonly config: ResolvedEditorConfig;
   readonly basemaps: BasemapsApi;
+  readonly overlays: OverlaysApi;
   readonly layers: LayersApi;
   readonly straightedge: StraightedgeApi;
   readonly changes: ChangesApi;
@@ -751,6 +792,7 @@ class EditorImpl implements Editor {
   readonly map: OlMap;
   readonly config: ResolvedEditorConfig;
   readonly basemaps: BasemapsApi;
+  readonly overlays: OverlaysApi;
   readonly layers: LayersApi;
   readonly straightedge: StraightedgeApi;
   readonly changes: ChangesApi;
@@ -792,6 +834,7 @@ class EditorImpl implements Editor {
   private readonly ownsMap: boolean;
   private readonly basemapLayers = new Map<string, BaseLayer>();
   private readonly layerManager: LayerManager;
+  private readonly overlayManager: OverlayManager;
   private crosshair: Crosshair | null = null;
   private gridLayer: GridLayer | null = null;
   private pickHandler: ((event: MapBrowserEvent) => void) | null = null;
@@ -837,7 +880,10 @@ class EditorImpl implements Editor {
       this.map,
       () => this.getProjection(),
       {
-        onChange: (event) => this.emitter.emit('layerchange', event),
+        onChange: (event) =>
+          event.raster
+            ? this.emitter.emit('overlaychange', { id: event.id, type: 'style' })
+            : this.emitter.emit('layerchange', { id: event.id, type: event.type }),
         onLoad: (event) => this.emitter.emit('layerload', event),
         onError: (event) => this.emitter.emit('layererror', event),
         onActiveChange: (event) => this.emitter.emit('activelayerchange', event),
@@ -846,6 +892,20 @@ class EditorImpl implements Editor {
       config.layerHighlight,
       config.locale,
     );
+    this.overlayManager = new OverlayManager(
+      this.map,
+      this.layerManager,
+      () => this.getProjection(),
+      {
+        onChange: (event) => this.emitter.emit('overlaychange', event),
+        onError: (event) => this.emitter.emit('overlayerror', event),
+      },
+    );
+    // The manager's resolved configs replace the ones from applyDefaults, so `config.overlays`
+    // follows runtime changes (visibility) like the manager does.
+    const configuredOverlays = config.overlays.splice(0, config.overlays.length);
+    for (const overlay of configuredOverlays)
+      config.overlays.push(this.overlayManager.add(overlay));
     this.selectionManager = new Selection(this.map, config.selection, (features) =>
       this.emitter.emit('selectionchange', { features }),
     );
@@ -1247,6 +1307,7 @@ class EditorImpl implements Editor {
     const lm = this.layerManager;
     this.layers = {
       list: () => lm.list(),
+      getOrder: () => lm.getOrder(),
       get: (id) => lm.info(id),
       getConfig: (id) => lm.getConfig(id),
       getActive: () => lm.getActive(),
@@ -1298,6 +1359,42 @@ class EditorImpl implements Editor {
         return move.features;
       },
       moveDraft: (feature, layerId) => this.layers.moveDrafts([feature], layerId)[0] ?? null,
+    };
+
+    const om = this.overlayManager;
+    const requireOverlay = (id: string) => {
+      if (!om.has(id)) throw new Error(`Unknown overlay "${id}"`);
+    };
+    this.overlays = {
+      list: () => om.list(),
+      get: (id) => om.info(id),
+      has: (id) => om.has(id),
+      getConfig: (id) => om.getConfig(id),
+      add: (overlayConfig) => {
+        config.overlays.push(om.add(overlayConfig));
+      },
+      remove: (id) => {
+        om.remove(id);
+        const index = config.overlays.findIndex((o) => o.id === id);
+        if (index >= 0) config.overlays.splice(index, 1);
+      },
+      setVisible: (id, visible) => om.setVisible(id, visible),
+      setOpacity: (id, opacity) => {
+        requireOverlay(id);
+        lm.setStyle(id, { ...lm.getStyle(id), opacity });
+      },
+      setZoomRange: (id, minZoom, maxZoom) => {
+        requireOverlay(id);
+        const style = lm.getStyle(id);
+        delete style.minZoom;
+        delete style.maxZoom;
+        lm.setStyle(id, {
+          ...style,
+          ...(minZoom !== undefined ? { minZoom } : {}),
+          ...(maxZoom !== undefined ? { maxZoom } : {}),
+        });
+      },
+      getLegendUrl: (id, resolution) => om.getLegendUrl(id, resolution),
     };
 
     const local = new LocalLayers({
@@ -2095,6 +2192,7 @@ class EditorImpl implements Editor {
     this.map.removeLayer(this.measurementStore.liveLayer);
     this.emitter.clear();
     this.reflectEditMode(false);
+    this.overlayManager.destroy();
     this.layerManager.destroy();
     for (const layer of this.basemapLayers.values()) this.map.removeLayer(layer);
     this.basemapLayers.clear();
