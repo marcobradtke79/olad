@@ -11,7 +11,7 @@ import TopoJSON from 'ol/format/TopoJSON';
 import type Geometry from 'ol/geom/Geometry';
 import type SimpleGeometry from 'ol/geom/SimpleGeometry';
 import { get as getProjection } from 'ol/proj';
-import { parse } from 'ol/xml';
+import { children, firstChild, parseXml as parseXmlDocument } from '../xml';
 import type { FieldConfig, FieldType } from '../config/types';
 import { validateGeometry } from '../geometry/validity';
 import type { LocalGeometryType } from '../layers/local';
@@ -377,19 +377,11 @@ function registered(name: string): string {
 }
 
 function parseXml(text: string): Document {
-  const doc = parse(text);
-  if (!doc.documentElement || doc.getElementsByTagName('parsererror').length > 0) {
+  try {
+    return parseXmlDocument(text);
+  } catch {
     throw new ImportError('The file is not valid XML');
   }
-  return doc;
-}
-
-function children(parent: Element, name: string): Element[] {
-  return Array.from(parent.children).filter((c) => c.localName === name);
-}
-
-function firstChild(parent: Element, name: string): Element | undefined {
-  return children(parent, name)[0];
 }
 
 function wrapErrors<T>(read: () => T): T {

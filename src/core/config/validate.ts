@@ -1,5 +1,11 @@
 import { get as getProjection } from 'ol/proj';
-import type { BasemapConfig, EditorConfig, LayerConfig, OverlayConfig } from './types';
+import type {
+  BasemapConfig,
+  DiscoverConfig,
+  EditorConfig,
+  LayerConfig,
+  OverlayConfig,
+} from './types';
 import { isLengthUnit, LENGTH_UNITS } from '../units';
 
 /** Thrown by `createEditor` when the configuration is invalid. `path` names the offending option. */
@@ -694,6 +700,95 @@ function checkGroup(group: unknown, path: string): void {
 }
 
 // ---------------------------------------------------------------------------
+// discover
+
+const DISCOVER_COMMON_KEYS = ['type', 'url', 'version', 'include', 'exclude', 'defaults', 'fetch'];
+const DISCOVER_KEYS: Record<string, readonly string[]> = {
+  wfs: [...DISCOVER_COMMON_KEYS, 'outputFormat'],
+  wms: [...DISCOVER_COMMON_KEYS, 'as'],
+};
+const WFS_DISCOVER_DEFAULT_KEYS = [
+  'visible',
+  'editable',
+  'snappable',
+  'style',
+  'minZoom',
+  'maxZoom',
+  'group',
+] as const;
+const WMS_DISCOVER_DEFAULT_KEYS = [
+  'visible',
+  'opacity',
+  'minZoom',
+  'maxZoom',
+  'tiled',
+  'serverType',
+  'crossOrigin',
+  'params',
+  'attribution',
+  'group',
+] as const;
+
+function checkDiscover(value: unknown, path: string): void {
+  object(value, path);
+  const d = value as Record<string, unknown>;
+  const type = typeof d.type === 'string' ? d.type : '';
+  const keys = DISCOVER_KEYS[type];
+  if (!keys) throw new ConfigError(`${path}.type`, `expected one of wfs, wms`);
+  checkKeys(d, path, keys);
+  string(d.url, `${path}.url`);
+  optional(arrayOf(string))(d.include, `${path}.include`);
+  optional(arrayOf(string))(d.exclude, `${path}.exclude`);
+  optional(checkFetch)(d.fetch, `${path}.fetch`);
+  const defaultsPath = `${path}.defaults`;
+  if (d.defaults !== undefined) object(d.defaults, defaultsPath);
+  const defaults = (d.defaults ?? {}) as Record<string, unknown>;
+  optional(boolean)(defaults.visible, `${defaultsPath}.visible`);
+  optional(number)(defaults.minZoom, `${defaultsPath}.minZoom`);
+  optional(number)(defaults.maxZoom, `${defaultsPath}.maxZoom`);
+  optional(groupId)(defaults.group, `${defaultsPath}.group`);
+  if (type === 'wfs') {
+    optional(oneOf(['1.0.0', '1.1.0', '2.0.0']))(d.version, `${path}.version`);
+    optional(string)(d.outputFormat, `${path}.outputFormat`);
+    checkKeys(defaults, defaultsPath, WFS_DISCOVER_DEFAULT_KEYS);
+    optional(checkEditable)(defaults.editable, `${defaultsPath}.editable`);
+    optional(boolean)(defaults.snappable, `${defaultsPath}.snappable`);
+    optional(styleLike)(defaults.style, `${defaultsPath}.style`);
+  } else {
+    optional(oneOf(['1.1.1', '1.3.0']))(d.version, `${path}.version`);
+    optional(oneOf(['overlay']))(d.as, `${path}.as`);
+    checkKeys(defaults, defaultsPath, WMS_DISCOVER_DEFAULT_KEYS);
+    optional(unitInterval)(defaults.opacity, `${defaultsPath}.opacity`);
+    optional(boolean)(defaults.tiled, `${defaultsPath}.tiled`);
+    optional(oneOf(['mapserver', 'geoserver', 'qgis', 'carmentaserver']))(
+      defaults.serverType,
+      `${defaultsPath}.serverType`,
+    );
+    optional(nullableString)(defaults.crossOrigin, `${defaultsPath}.crossOrigin`);
+    optional(string)(defaults.attribution, `${defaultsPath}.attribution`);
+    if (defaults.params !== undefined) {
+      object(defaults.params, `${defaultsPath}.params`);
+      for (const [key, v] of Object.entries(defaults.params as Record<string, unknown>)) {
+        if (!['string', 'number', 'boolean'].includes(typeof v)) {
+          throw new ConfigError(
+            `${defaultsPath}.params.${key}`,
+            'expected a string, number or boolean',
+          );
+        }
+      }
+    }
+  }
+}
+
+/** Validate one discovery source, for example before `editor.discovery.run`. */
+export function validateDiscoverConfig(
+  source: unknown,
+  path = 'discover',
+): asserts source is DiscoverConfig {
+  checkDiscover(source, path);
+}
+
+// ---------------------------------------------------------------------------
 // root
 
 const ROOT_KEYS = [
@@ -706,6 +801,7 @@ const ROOT_KEYS = [
   'layers',
   'overlays',
   'groups',
+  'discover',
   'editMode',
   'cursor',
   'changes',
@@ -1017,6 +1113,10 @@ export function validateConfig(config: unknown): asserts config is EditorConfig 
     if (!Array.isArray(c.layers)) throw new ConfigError('config.layers', 'expected an array');
     c.layers.forEach((l, i) => checkLayer(l, `config.layers[${i}]`, ctx));
     checkUniqueIds(c.layers, 'config.layers', 'layer');
+  }
+  if (c.discover !== undefined) {
+    if (!Array.isArray(c.discover)) throw new ConfigError('config.discover', 'expected an array');
+    c.discover.forEach((d, i) => checkDiscover(d, `config.discover[${i}]`));
   }
   if (c.groups !== undefined) {
     if (!Array.isArray(c.groups)) throw new ConfigError('config.groups', 'expected an array');

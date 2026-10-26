@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WFS_Capabilities version="1.0.0" xmlns="http://www.opengis.net/wfs">
+  <Service><Name>WFS</Name><Title>Old WFS</Title></Service>
+  <Capability><Request><GetFeature><ResultFormat><GML2/><JSON/></ResultFormat></GetFeature></Request></Capability>
+  <FeatureTypeList>
+    <FeatureType>
+      <Name>rivers</Name>
+      <SRS>EPSG:4326</SRS>
+      <LatLongBoundingBox minx="5" miny="45" maxx="15" maxy="55"/>
+    </FeatureType>
+  </FeatureTypeList>
+</WFS_Capabilities>

@@ -230,7 +230,11 @@
             document.querySelector('olcad-dock'),
           );
           const editor = olcad.createEditor({ ...config, target: 'map' });
-          window.editor = editor; // for Playwright and console use
+          // For Playwright and console use, once the discovered layers and overlays are in, so
+          // tests that wait for window.editor see the full layer list.
+          editor.discovery.ready.then(() => {
+            window.editor = editor;
+          });
           document.querySelector('olcad-layer-list').editor = editor;
           document.querySelector('olcad-feature-table').editor = editor;
           document.querySelector('olcad-template-list').editor = editor;

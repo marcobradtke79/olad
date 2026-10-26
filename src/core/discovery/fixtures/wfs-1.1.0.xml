@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wfs:WFS_Capabilities version="1.1.0" xmlns:wfs="http://www.opengis.net/wfs" xmlns:ows="http://www.opengis.net/ows" xmlns:topp="http://www.openplans.org/topp" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <ows:ServiceIdentification>
+    <ows:Title>GeoServer Web Feature Service</ows:Title>
+    <ows:ServiceType>WFS</ows:ServiceType>
+  </ows:ServiceIdentification>
+  <ows:OperationsMetadata>
+    <ows:Operation name="GetCapabilities"/>
+    <ows:Operation name="GetFeature">
+      <ows:Parameter name="resultType"><ows:Value>results</ows:Value><ows:Value>hits</ows:Value></ows:Parameter>
+      <ows:Parameter name="outputFormat">
+        <ows:Value>text/xml; subtype=gml/3.1.1</ows:Value>
+        <ows:Value>GML2</ows:Value>
+        <ows:Value>application/json</ows:Value>
+        <ows:Value>json</ows:Value>
+      </ows:Parameter>
+    </ows:Operation>
+  </ows:OperationsMetadata>
+  <FeatureTypeList>
+    <Operations><Operation>Query</Operation></Operations>
+    <FeatureType>
+      <Name>topp:parcels</Name>
+      <Title>Parcels</Title>
+      <Abstract>Cadastral parcels</Abstract>
+      <DefaultSRS>urn:x-ogc:def:crs:EPSG:25832</DefaultSRS>
+      <OtherSRS>urn:x-ogc:def:crs:EPSG:4326</OtherSRS>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>9.9 53.5</ows:LowerCorner>
+        <ows:UpperCorner>10.1 53.6</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+    </FeatureType>
+    <FeatureType>
+      <Name>topp:points</Name>
+      <Title>Points</Title>
+      <DefaultSRS>urn:x-ogc:def:crs:EPSG:4326</DefaultSRS>
+      <ows:WGS84BoundingBox>
+        <ows:LowerCorner>9 53</ows:LowerCorner>
+        <ows:UpperCorner>10 54</ows:UpperCorner>
+      </ows:WGS84BoundingBox>
+    </FeatureType>
+    <FeatureType>
+      <Name>topp:tables</Name>
+      <Title>A table without geometry</Title>
+      <DefaultSRS>urn:x-ogc:def:crs:EPSG:4326</DefaultSRS>
+    </FeatureType>
+    <FeatureType>
+      <Name>other:roads</Name>
+      <DefaultSRS>EPSG:3857</DefaultSRS>
+    </FeatureType>
+  </FeatureTypeList>
+</wfs:WFS_Capabilities>

@@ -14,7 +14,7 @@ test.describe('layers and projections', () => {
     await waitForEditor(page);
     await expect(page.locator('#map canvas')).toBeVisible();
     const rows = page.locator('olcad-layer-list [data-layer-id]');
-    await expect(rows).toHaveCount(12); // the configured layers and the draft layer
+    await expect(rows).toHaveCount(14); // the configured, discovered and draft layers
 
     const expected: Record<string, number> = {
       parcels: 2,
@@ -29,6 +29,8 @@ test.describe('layers and projections', () => {
       labels: 2,
       dimensions: 4,
       draft: 0,
+      'test:lamps': 0, // discovered, hidden at start
+      'test:points': 0,
     };
     await expect
       .poll(() =>
@@ -321,6 +323,21 @@ test.describe('layer groups', () => {
         collapsed: false,
         layers: ['roads', 'hydrants', 'lamps'],
         overlays: ['roads-wms'],
+      },
+      // Implicit groups of the discovered entries, overlays first (drawing order).
+      {
+        id: 'Test',
+        title: 'Test',
+        collapsed: false,
+        layers: [],
+        overlays: ['test:parcels', 'test:roads'],
+      },
+      {
+        id: 'Discovered',
+        title: 'Discovered',
+        collapsed: false,
+        layers: ['test:lamps', 'test:points'],
+        overlays: [],
       },
     ]);
     const head = page.locator(

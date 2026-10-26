@@ -19,6 +19,7 @@ A test compares the tables below against the `EditorConfig` type. Every option m
 | `layers`         | array                    | `[]`           | Vector layers. One layer is one object class with one geometry type and one schema.                                                                                                     |
 | `overlays`       | array                    | `[]`           | Raster overlays (WMS, WMTS, XYZ, vector tiles, GeoTIFF) drawn between the basemap and the vector layers, each switched on and off on its own; read-only. See [`overlays[]`](#overlays). |
 | `groups`         | array                    | `[]`           | Groups the layer list shows layers and overlays under, each with one visibility toggle; see [`groups[]`](#groups).                                                                      |
+| `discover`       | array                    | `[]`           | Services whose capabilities add read-only WFS layers and WMS overlays after the editor starts; see [`discover[]`](#discover).                                                           |
 | `editMode`       | `boolean`                | `false`        | Start in edit mode. Switchable at runtime with `editor.setEditMode`; see [api.md](api.md#edit-mode).                                                                                    |
 | `cursor`         | object                   | see below      | The edit-mode cursor: a CAD crosshair spanning the map with a pick box at its centre.                                                                                                   |
 | `changes`        | object                   | see below      | Change set export options, see [change-set.md](change-set.md).                                                                                                                          |
@@ -447,6 +448,60 @@ Groups collect layers and overlays under one heading in `<olcad-layer-list>`, wi
   "groups": [{ "id": "infrastructure", "title": "Infrastructure" }],
   "layers": [{ "id": "roads", "group": "infrastructure", "...": "..." }],
   "overlays": [{ "id": "roads-wms", "group": "infrastructure", "...": "..." }]
+}
+```
+
+## `discover[]`
+
+Each entry names a WFS or WMS whose GetCapabilities document adds layers or overlays **after** `createEditor` returns (the editor is usable at once; `editor.discovery.ready` settles when every source is read, see [api.md](api.md#editordiscovery)). A WFS adds one read-only vector layer per feature type: id and `source.typeName` = the qualified name (`topp:roads`), title from the capabilities, geometry type and `schema.fields` from DescribeFeatureType (XML Schema types: integers, decimals, booleans, dates, enumerations; other types as strings; `nillable="false"` without `minOccurs="0"` is required), `source.strategy: 'bbox'`, `extent` from the WGS 84 bounding box, `source.dataProjection` from the default CRS when it is registered, `group` from the workspace prefix. Types without a geometry property are skipped. A WMS adds one overlay per named leaf layer: tiled and transparent on the configured URL (never the GetMap URL the capabilities advertise), `queryable`, `legendUrl` from the first style, `extent`, `attribution` and the zoom range from `Min/MaxScaleDenominator` (0.28 mm pixels on the projection's default tile grid: exact for Web Mercator, approximate elsewhere), `group` from the nearest titled parent layer, else the workspace prefix. The layer is requested in the view projection when offered, else in EPSG:3857 or EPSG:4326. Names that are already a layer or overlay id are skipped. Ids contain a colon; escape it in CSS selectors (`[data-layer-id="topp:roads"]` works as is).
+
+| Path                                     | Type                                                              | Default                                   | Description                                                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `discover[].type`                        | `'wfs' \| 'wms'`                                                  | required                                  | The kind of service.                                                                                                           |
+| `discover[].url`                         | `string`                                                          | required                                  | Service base URL; may carry its own query parameters (`/geoserver/ows?map=x`).                                                 |
+| `discover[].version`                     | `'1.0.0' \| '1.1.0' \| '2.0.0'` (WFS), `'1.1.1' \| '1.3.0'` (WMS) | `'1.1.0'` / `'1.3.0'`                     | Version of the requests.                                                                                                       |
+| `discover[].include`                     | `string[]`                                                        | every name                                | Names to take: `*` any run of characters (the `:` included, so `topp:*` takes a workspace), `?` one character, case-sensitive. |
+| `discover[].exclude`                     | `string[]`                                                        | none                                      | Names to leave out, applied after `include`.                                                                                   |
+| `discover[].fetch`                       | object                                                            | not set                                   | Options of the capabilities and schema requests; WFS layers also get it as `source.fetch`.                                     |
+| `discover[].fetch.credentials`           | `'include' \| 'same-origin' \| 'omit'`                            | browser default                           | Credentials mode.                                                                                                              |
+| `discover[].fetch.headers`               | `Record<string, string>`                                          | not set                                   | Request headers.                                                                                                               |
+| `discover[].outputFormat`                | `string`                                                          | `application/json` when offered, else GML | WFS only: `source.outputFormat` of the layers.                                                                                 |
+| `discover[].as`                          | `'overlay'`                                                       | `'overlay'`                               | WMS only: what the layers become.                                                                                              |
+| `discover[].defaults`                    | object                                                            | not set                                   | Options every discovered entry gets; they never replace the id, source, geometry type or schema.                               |
+| `discover[].defaults.visible`            | `boolean`                                                         | `true`                                    | Shown at startup.                                                                                                              |
+| `discover[].defaults.minZoom`            | `number`                                                          | WMS: from the scale range                 | Hide below this view zoom.                                                                                                     |
+| `discover[].defaults.maxZoom`            | `number`                                                          | WMS: from the scale range                 | Hide above this view zoom.                                                                                                     |
+| `discover[].defaults.group`              | `string`                                                          | see above                                 | Group of every entry ([`groups[]`](#groups)).                                                                                  |
+| `discover[].defaults.editable`           | `boolean \| object`                                               | `false`                                   | WFS only: like [`layers[].editable`](#layerseditable-object-form).                                                             |
+| `discover[].defaults.editable.insert`    | `boolean`                                                         | `false`                                   | WFS only.                                                                                                                      |
+| `discover[].defaults.editable.update`    | `boolean`                                                         | `false`                                   | WFS only.                                                                                                                      |
+| `discover[].defaults.editable.delete`    | `boolean`                                                         | `false`                                   | WFS only.                                                                                                                      |
+| `discover[].defaults.editable.predicate` | function                                                          | not set                                   | WFS only: per-feature rule, as for layers.                                                                                     |
+| `discover[].defaults.snappable`          | `boolean`                                                         | `true`                                    | WFS only.                                                                                                                      |
+| `discover[].defaults.style`              | flat style                                                        | per geometry type                         | WFS only.                                                                                                                      |
+| `discover[].defaults.opacity`            | `number`                                                          | `1`                                       | WMS only.                                                                                                                      |
+| `discover[].defaults.tiled`              | `boolean`                                                         | `true`                                    | WMS only: tiles or one image per view.                                                                                         |
+| `discover[].defaults.serverType`         | `'mapserver' \| 'geoserver' \| 'qgis' \| 'carmentaserver'`        | not set                                   | WMS only.                                                                                                                      |
+| `discover[].defaults.crossOrigin`        | `string \| null`                                                  | not set                                   | WMS only.                                                                                                                      |
+| `discover[].defaults.params`             | `Record<string, string \| number \| boolean>`                     | not set                                   | WMS only: extra GetMap parameters; `LAYERS`, `TRANSPARENT` and `VERSION` are set per layer.                                    |
+| `discover[].defaults.attribution`        | `string`                                                          | from the capabilities                     | WMS only.                                                                                                                      |
+
+```json
+{
+  "discover": [
+    {
+      "type": "wfs",
+      "url": "/geoserver/wfs",
+      "include": ["topp:*"],
+      "defaults": { "visible": false }
+    },
+    {
+      "type": "wms",
+      "url": "/geoserver/wms",
+      "exclude": ["*:hillshade"],
+      "defaults": { "opacity": 0.8 }
+    }
+  ]
 }
 ```
 

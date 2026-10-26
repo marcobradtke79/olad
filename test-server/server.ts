@@ -4,9 +4,12 @@
  *
  *   GET  /config          test configuration (test-config.json merged with layers.json)
  *   GET  /data/:layer     current data of a GeoJSON layer; other files in data/ are served as is
- *   GET  /wfs             WFS GetFeature emulation (outputFormat=application/json, srsName, bbox,
+ *   GET  /wfs             WFS emulation. GetFeature (outputFormat=application/json, srsName, bbox,
  *                         count / maxFeatures + startIndex paging with numberMatched; ?fail=1 answers
- *                         500, ?auth=1 needs an Authorization header, ?failonce=<token> fails once per token)
+ *                         500, ?auth=1 needs an Authorization header, ?failonce=<token> fails once per token;
+ *                         typeName with or without the "test:" prefix), GetCapabilities (1.1.0, or 2.0.0
+ *                         for VERSION=2.0.0: one feature type test:<layer> per seeded GeoJSON layer) and
+ *                         DescribeFeatureType (an XML Schema from layers.json)
  *   GET  /wms             WMS emulation: GetCapabilities (1.3.0), GetMap (hatched PNG per layer), GetLegendGraphic,
  *                         GetFeatureInfo (JSON: one record per queryable QUERY_LAYERS entry)
  *   POST /changes[?fail=1] apply a change set, answer { idMap }; fail=1 answers 500
@@ -355,6 +358,143 @@ ${layers.map((layer) => wmsLayerXml(layer, base)).join('')}      </Layer>
 `;
 }
 
+/** One entry of config/layers.json, as far as the WFS emulation reads it. */
+interface ConfiguredLayer {
+  id: string;
+  title?: string;
+  geometryType?: string;
+  source?: { typeName?: string };
+  schema?: { fields?: { name: string; type: string; required?: boolean; values?: unknown[] }[] };
+}
+
+type FieldOf<L extends ConfiguredLayer> = NonNullable<NonNullable<L['schema']>['fields']>[number];
+
+async function configuredLayers(): Promise<ConfiguredLayer[]> {
+  const { layers } = JSON.parse(await readFile(join(ROOT, 'config/layers.json'), 'utf8'));
+  return Array.isArray(layers) ? (layers as ConfiguredLayer[]) : [];
+}
+
+/** The layer configured under the seed name, as a layer id or as a WFS typeName. */
+function configuredFor(layers: ConfiguredLayer[], name: string): ConfiguredLayer | undefined {
+  return layers.find((l) => l.id === name) ?? layers.find((l) => l.source?.typeName === name);
+}
+
+/** WFS GetCapabilities over the seeded GeoJSON layers, 1.1.0 or 2.0.0 shaped. */
+async function wfsCapabilities(base: string, version: string): Promise<string> {
+  const layers = await configuredLayers();
+  const two = version === '2.0.0';
+  const ns = two ? 'http://www.opengis.net/wfs/2.0' : 'http://www.opengis.net/wfs';
+  const ows = two ? 'http://www.opengis.net/ows/1.1' : 'http://www.opengis.net/ows';
+  const crs = (code: string) =>
+    two ? `urn:ogc:def:crs:EPSG::${code}` : `urn:x-ogc:def:crs:EPSG:${code}`;
+  const [def, other] = two ? ['DefaultCRS', 'OtherCRS'] : ['DefaultSRS', 'OtherSRS'];
+  const types = [...data.keys()].sort().map((name) => {
+    const [west, south, east, north] = bboxOf([data.get(name)!]);
+    const title = layers.find((l) => l.id === name)?.title ?? name;
+    return `    <FeatureType>
+      <Name>test:${escapeXml(name)}</Name>
+      <Title>${escapeXml(title)}</Title>
+      <Abstract>Seed data of ${escapeXml(name)}</Abstract>
+      <${def}>${crs('4326')}</${def}>
+      <${other}>${crs('3857')}</${other}>
+      <ows:WGS84BoundingBox><ows:LowerCorner>${west} ${south}</ows:LowerCorner><ows:UpperCorner>${east} ${north}</ows:UpperCorner></ows:WGS84BoundingBox>
+    </FeatureType>`;
+  });
+  const values = ['application/json', 'GML2', 'text/xml; subtype=gml/3.1.1']
+    .map((v) => `<ows:Value>${escapeXml(v)}</ows:Value>`)
+    .join('');
+  const formats = two ? `<ows:AllowedValues>${values}</ows:AllowedValues>` : values;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<WFS_Capabilities version="${version}" xmlns="${ns}" xmlns:ows="${ows}" xmlns:test="${base}/test">
+  <ows:ServiceIdentification><ows:Title>ol-cad test server</ows:Title><ows:ServiceType>WFS</ows:ServiceType></ows:ServiceIdentification>
+  <ows:OperationsMetadata>
+    <ows:Operation name="GetCapabilities"/>
+    <ows:Operation name="DescribeFeatureType"/>
+    <ows:Operation name="GetFeature"><ows:Parameter name="outputFormat">${formats}</ows:Parameter></ows:Operation>
+  </ows:OperationsMetadata>
+  <FeatureTypeList>
+${types.join('\n')}
+  </FeatureTypeList>
+</WFS_Capabilities>
+`;
+}
+
+const GML_PROPERTY_TYPES: Record<string, string> = {
+  Point: 'PointPropertyType',
+  MultiPoint: 'MultiPointPropertyType',
+  LineString: 'LineStringPropertyType',
+  MultiLineString: 'MultiLineStringPropertyType',
+  Polygon: 'PolygonPropertyType',
+  MultiPolygon: 'MultiPolygonPropertyType',
+};
+
+const XSD_TYPES: Record<string, string> = {
+  string: 'xsd:string',
+  number: 'xsd:double',
+  integer: 'xsd:int',
+  boolean: 'xsd:boolean',
+  date: 'xsd:date',
+};
+
+/** Fields of a seed layer without a configured schema, typed from its first feature's values. */
+function inferredFields(name: string): FieldOf<ConfiguredLayer>[] {
+  const properties = data.get(name)?.features[0]?.properties ?? {};
+  return Object.entries(properties).map(([key, value]) => ({
+    name: key,
+    type:
+      typeof value === 'boolean'
+        ? 'boolean'
+        : typeof value === 'number'
+          ? Number.isInteger(value)
+            ? 'integer'
+            : 'number'
+          : 'string',
+  }));
+}
+
+/**
+ * DescribeFeatureType: the geometry element typed from the configured layer of the same id
+ * (a type without one, like test:points, advertises a generic gml:GeometryPropertyType) and
+ * one element per schema field of the layer configured under that id or typeName (else per
+ * property of the first seed feature).
+ */
+async function describeFeatureType(base: string, name: string): Promise<string | undefined> {
+  if (!data.has(name)) return undefined;
+  const layers = await configuredLayers();
+  const geometryType = layers.find((l) => l.id === name)?.geometryType;
+  const geometry = `gml:${GML_PROPERTY_TYPES[geometryType ?? ''] ?? 'GeometryPropertyType'}`;
+  const fields = (configuredFor(layers, name)?.schema?.fields ?? inferredFields(name)).map(
+    (field) => {
+      const occurs = field.required
+        ? 'minOccurs="1" nillable="false"'
+        : 'minOccurs="0" nillable="true"';
+      if (field.type === 'enum') {
+        const numeric = (field.values ?? []).every((v) => typeof v === 'number');
+        const values = (field.values ?? [])
+          .map((v) => `<xsd:enumeration value="${escapeXml(String(v))}"/>`)
+          .join('');
+        return `          <xsd:element name="${escapeXml(field.name)}" maxOccurs="1" ${occurs}><xsd:simpleType><xsd:restriction base="${numeric ? 'xsd:int' : 'xsd:string'}">${values}</xsd:restriction></xsd:simpleType></xsd:element>`;
+      }
+      return `          <xsd:element name="${escapeXml(field.name)}" maxOccurs="1" ${occurs} type="${XSD_TYPES[field.type] ?? 'xsd:string'}"/>`;
+    },
+  );
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:gml="http://www.opengis.net/gml" xmlns:test="${base}/test" targetNamespace="${base}/test" elementFormDefault="qualified">
+  <xsd:complexType name="${escapeXml(name)}Type">
+    <xsd:complexContent>
+      <xsd:extension base="gml:AbstractFeatureType">
+        <xsd:sequence>
+          <xsd:element name="geometry" maxOccurs="1" minOccurs="0" nillable="true" type="${geometry}"/>
+${fields.join('\n')}
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:element name="${escapeXml(name)}" type="test:${escapeXml(name)}Type" substitutionGroup="gml:_Feature"/>
+</xsd:schema>
+`;
+}
+
 function handleWms(url: URL, res: ServerResponse): void {
   const params = new Map<string, string>();
   for (const [key, value] of url.searchParams) params.set(key.toLowerCase(), value);
@@ -466,15 +606,29 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return send(res, 404, { error: `unknown layer "${layer}"` });
   }
   if (method === 'GET' && pathname === '/wfs') {
-    const typeName =
-      url.searchParams.get('typeName') ??
-      url.searchParams.get('typeNames') ??
-      url.searchParams.get('TYPENAME');
+    const params = new Map<string, string>();
+    for (const [key, value] of url.searchParams) params.set(key.toLowerCase(), value);
+    // Feature types are advertised as test:<layer>; the seed data is keyed by <layer>.
+    const typeName = (params.get('typename') ?? params.get('typenames'))?.replace(/^test:/, '');
+    const request = params.get('request')?.toLowerCase() ?? 'getfeature';
     if (url.searchParams.get('fail') === '1') {
       return send(res, 500, { error: 'simulated WFS failure (fail=1)' });
     }
     if (url.searchParams.get('auth') === '1' && !req.headers.authorization) {
       return send(res, 401, { error: 'Authorization header required (auth=1)' });
+    }
+    const base = `http://${req.headers.host ?? `localhost:${PORT}`}`;
+    if (request === 'getcapabilities') {
+      const xml = await wfsCapabilities(
+        base,
+        params.get('version') === '2.0.0' ? '2.0.0' : '1.1.0',
+      );
+      return send(res, 200, xml, 'text/xml; charset=utf-8');
+    }
+    if (request === 'describefeaturetype') {
+      const xsd = typeName ? await describeFeatureType(base, typeName) : undefined;
+      if (!xsd) return send(res, 400, { error: `unknown typeName "${typeName}"` });
+      return send(res, 200, xsd, 'text/xml; charset=utf-8');
     }
     const once = url.searchParams.get('failonce');
     if (once && typeName && !failedOnce.has(`${typeName}:${once}`)) {

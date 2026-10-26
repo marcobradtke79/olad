@@ -125,6 +125,8 @@ export type {
   BasemapsApi,
   OverlaysApi,
   GroupsApi,
+  DiscoveryApi,
+  DiscoveryStatus,
   FitOptions,
   LayersApi,
   StraightedgeApi,
@@ -167,6 +169,32 @@ export { LAYER_Z_INDEX_BASE } from './core/layers/LayerManager';
 export { OVERLAY_ID_PROPERTY } from './core/layers/overlays';
 export type { OverlayInfo, OverlayChangeType } from './core/layers/overlays';
 export { listGroups, type GroupInfo } from './core/layers/groups';
+export {
+  discover,
+  type DiscoveryHost,
+  type DiscoveryResult,
+  type DiscoverySkip,
+  type DiscoverySkipReason,
+} from './core/discovery/discover';
+export {
+  readWfsCapabilities,
+  type WfsCapabilities,
+  type WfsFeatureType,
+} from './core/discovery/wfsCapabilities';
+export {
+  readDescribeFeatureType,
+  geometryTypeOf,
+  fieldTypeOf,
+  type DescribedFeatureType,
+} from './core/discovery/describeFeatureType';
+export {
+  readWmsCapabilities,
+  zoomForScaleDenominator,
+  type WmsCapabilities,
+  type WmsLayerInfo,
+} from './core/discovery/wmsCapabilities';
+export { buildWfsLayerConfig, buildWmsOverlayConfig } from './core/discovery/build';
+export { compileGlob, nameFilter } from './core/discovery/glob';
 export { DEFAULT_INFO_FORMAT, featureInfoUrl, readFeatureInfo } from './core/layers/featureInfo';
 export type { FeatureInfoResult } from './core/layers/featureInfo';
 export { createRasterLayer } from './core/layers/raster';
@@ -234,6 +262,7 @@ export {
   validateBasemapConfig,
   validateLayerConfig,
   validateOverlayConfig,
+  validateDiscoverConfig,
   resolveOverlay,
 } from './core/config';
 export type {
@@ -248,6 +277,11 @@ export type {
   ResolvedOverlayConfig,
   GroupConfig,
   ResolvedGroupConfig,
+  DiscoverConfig,
+  WfsDiscoverConfig,
+  WmsDiscoverConfig,
+  WfsDiscoverDefaults,
+  WmsDiscoverDefaults,
   CursorConfig,
   ChangesConfig,
   ResolvedChangesConfig,

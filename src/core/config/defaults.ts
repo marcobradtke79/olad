@@ -141,6 +141,7 @@ export function applyDefaults(config: EditorConfig): ResolvedEditorConfig {
     layers: (config.layers ?? []).map(resolveLayer),
     overlays: (config.overlays ?? []).map(resolveOverlay),
     groups: (config.groups ?? []).map(resolveGroup),
+    discover: (config.discover ?? []).map((d) => ({ ...d })),
     editMode: config.editMode ?? false,
     cursor: {
       crosshair: true,

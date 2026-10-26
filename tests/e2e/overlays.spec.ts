@@ -31,6 +31,8 @@ const CONFIGURED = [
   'versatiles-overlay',
   's2-overlay',
 ];
+/** Overlays the test configuration's `discover` adds from the WMS (after the configured ones). */
+const DISCOVERED = ['test:parcels', 'test:roads'];
 
 test.describe('overlays', () => {
   test('lists the configured overlays, switches, dims and reorders them', async ({ page }) => {
@@ -49,11 +51,15 @@ test.describe('overlays', () => {
       ['topplus-overlay', false, 1],
       ['versatiles-overlay', false, 1],
       ['s2-overlay', false, 1],
+      ['test:parcels', false, 0.8],
+      ['test:roads', false, 0.8],
     ]);
     // Drawn above the basemaps and below every vector layer, in one shared order.
     const order = await page.evaluate(() => window.editor.layers.getOrder());
     expect(order.slice(0, CONFIGURED.length)).toEqual(CONFIGURED);
-    expect(order.slice(CONFIGURED.length)).toEqual(
+    const overlayCount = CONFIGURED.length + DISCOVERED.length;
+    expect(order.slice(CONFIGURED.length, overlayCount)).toEqual(DISCOVERED);
+    expect(order.slice(overlayCount)).toEqual(
       await page.evaluate(() => window.editor.layers.list().map((l) => l.id)),
     );
     expect((await overlayLayer(page, 'parcels-wms')).zIndex).toBe(1);
@@ -69,8 +75,8 @@ test.describe('overlays', () => {
     ).toBe(true);
 
     await openFlyout(page, 'layers');
-    await expect(page.locator('olcad-layer-list [data-overlay-id]')).toHaveCount(6);
-    await expect(page.locator('olcad-layer-list [data-layer-id]')).toHaveCount(12);
+    await expect(page.locator('olcad-layer-list [data-overlay-id]')).toHaveCount(8);
+    await expect(page.locator('olcad-layer-list [data-layer-id]')).toHaveCount(14);
 
     // Switching the hidden single-image WMS on sends a GetMap to the test server.
     const getMap = page.waitForRequest(
@@ -168,7 +174,8 @@ test.describe('overlays', () => {
       };
     });
     expect(result.events).toEqual(['add:extra', 'style:extra', 'remove:extra']);
-    expect(result.position).toBe(CONFIGURED.length); // above the overlays, below the layers
+    // above the overlays, below the layers
+    expect(result.position).toBe(CONFIGURED.length + DISCOVERED.length);
     expect(result.opacity).toBe(0.2);
     expect(result.listed).toBe(false);
     expect(result.inConfig).toBe(false);

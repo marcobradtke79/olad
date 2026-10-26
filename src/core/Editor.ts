@@ -3,7 +3,13 @@ import OlMap from 'ol/Map';
 import View from 'ol/View';
 import type BaseLayer from 'ol/layer/Base';
 import { get as getProjection, transformExtent, transform } from 'ol/proj';
-import { applyDefaults, resolveBasemap, validateBasemapConfig, validateConfig } from './config';
+import {
+  applyDefaults,
+  resolveBasemap,
+  validateBasemapConfig,
+  validateConfig,
+  validateDiscoverConfig,
+} from './config';
 import type {
   FieldConfig,
   BasemapConfig,
@@ -47,11 +53,13 @@ import { Emitter } from './events';
 import { BASEMAP_ID_PROPERTY, createBasemapLayer } from './layers/basemaps';
 import { OverlayManager, type OverlayChangeType, type OverlayInfo } from './layers/overlays';
 import { listGroups, type GroupInfo } from './layers/groups';
+import { discover, type DiscoveryResult, type DiscoverySkip } from './discovery/discover';
+import { fetchText as fetchServiceText } from './net/fetch';
 import type { FeatureInfoResult } from './layers/featureInfo';
 import { isEditorLayer } from './tools/layerFilter';
 import type { Extent } from 'ol/extent';
 import { fitView, unionExtents, type ExtentIn, type FitViewOptions } from './view/fit';
-import type { OverlayConfig, ResolvedOverlayConfig } from './config/types';
+import type { DiscoverConfig, OverlayConfig, ResolvedOverlayConfig } from './config/types';
 import { LAYER_ID_PROPERTY } from './layers/vector';
 import {
   canInsertTemplate,
@@ -169,6 +177,10 @@ export interface EditorEvents extends Record<string, unknown> {
     results: FeatureInfoResult[];
     pending: boolean;
   };
+  /** A discovery source was read: what it added and what it skipped. */
+  discovery: DiscoveryResult;
+  /** A discovery source's capabilities could not be fetched or read; nothing was added from it. */
+  discoveryerror: { source: DiscoveryResult['source']; error: Error };
   /** A layer was added or removed, or its visibility, editability, snappability, highlight, title or schema changed. */
   layerchange: {
     id: string;
@@ -329,6 +341,34 @@ export interface OverlaysApi {
    * drawn at the current zoom: one result per overlay, a failed request as `error`.
    */
   featureInfo(coordinate: Coordinate): Promise<FeatureInfoResult[]>;
+}
+
+/** State of one discovery source (`discover[]` or `discovery.run`). */
+export interface DiscoveryStatus {
+  state: 'pending' | 'done' | 'failed';
+  source: DiscoveryResult['source'];
+  /** Ids added so far (set when done). */
+  added: string[];
+  skipped: DiscoverySkip[];
+  /** The message of a failed capabilities request or document. */
+  error?: string;
+}
+
+/**
+ * Layers and overlays added from service capabilities (`discover[]`): WFS feature types become
+ * read-only vector layers, WMS layers raster overlays. Discovery runs after `createEditor`
+ * returns; the added entries emit `layerchange` / `overlaychange` (`add`) as usual.
+ */
+export interface DiscoveryApi {
+  /** Settles when every configured source is done or failed; never rejects. */
+  readonly ready: Promise<DiscoveryStatus[]>;
+  /** One entry per source, configured ones first, then those of `run`. */
+  status(): DiscoveryStatus[];
+  /**
+   * Discover one more source (validated like `discover[]`). Rejects, after a `discoveryerror`
+   * event, when the capabilities cannot be read.
+   */
+  run(source: DiscoverConfig): Promise<DiscoveryResult>;
 }
 
 /**
@@ -783,6 +823,7 @@ export interface Editor {
   readonly basemaps: BasemapsApi;
   readonly overlays: OverlaysApi;
   readonly groups: GroupsApi;
+  readonly discovery: DiscoveryApi;
   readonly layers: LayersApi;
   readonly straightedge: StraightedgeApi;
   readonly changes: ChangesApi;
@@ -851,6 +892,7 @@ class EditorImpl implements Editor {
   readonly basemaps: BasemapsApi;
   readonly overlays: OverlaysApi;
   readonly groups: GroupsApi;
+  readonly discovery: DiscoveryApi;
   readonly layers: LayersApi;
   readonly straightedge: StraightedgeApi;
   readonly changes: ChangesApi;
@@ -916,6 +958,8 @@ class EditorImpl implements Editor {
   /** Unmanaged layer showing the segment a reference pick would take. */
   private pickHighlight: VectorLayer<VectorSource<Feature>> | null = null;
   private destroyed = false;
+  /** Aborts discovery requests in flight on `destroy`. */
+  private readonly discoveryAbort = new AbortController();
 
   constructor(config: ResolvedEditorConfig, options: { explicitView: boolean }) {
     this.config = config;
@@ -1614,6 +1658,68 @@ class EditorImpl implements Editor {
         return result;
       },
     };
+    this.discovery = this.createDiscovery();
+  }
+
+  /** `editor.discovery`; starts the configured sources. */
+  private createDiscovery(): DiscoveryApi {
+    const lm = this.layerManager;
+    const om = this.overlayManager;
+    const host = {
+      hasId: (id: string) => lm.has(id) || om.has(id),
+      addLayer: (layerConfig: LayerConfig) => this.layers.add(layerConfig),
+      addOverlay: (overlayConfig: OverlayConfig) => this.overlays.add(overlayConfig),
+      getProjection: () => this.getProjection(),
+      fetchText: fetchServiceText,
+    };
+    const statuses: DiscoveryStatus[] = [];
+    const run = (source: DiscoverConfig): Promise<DiscoveryResult> => {
+      const status: DiscoveryStatus = {
+        state: 'pending',
+        source: { type: source.type, url: source.url },
+        added: [],
+        skipped: [],
+      };
+      statuses.push(status);
+      return discover(source, host, this.discoveryAbort.signal).then(
+        (result) => {
+          Object.assign(status, { state: 'done', added: result.added, skipped: result.skipped });
+          if (!this.destroyed) this.emitter.emit('discovery', result);
+          return result;
+        },
+        (reason: unknown) => {
+          const error = reason instanceof Error ? reason : new Error(String(reason));
+          status.state = 'failed';
+          status.error = error.message;
+          if (!this.destroyed)
+            this.emitter.emit('discoveryerror', { source: status.source, error });
+          throw error;
+        },
+      );
+    };
+    const copy = (s: DiscoveryStatus): DiscoveryStatus => ({
+      ...s,
+      source: { ...s.source },
+      added: [...s.added],
+      skipped: s.skipped.map((k) => ({ ...k })),
+    });
+    const configured = this.config.discover.map((source) => run(source).catch(() => undefined));
+    const ready = Promise.all(configured).then(() => {
+      // The configured fit of layers includes the discovered extents.
+      if (!this.destroyed && this.config.discover.length > 0 && this.config.view.fit?.layers) {
+        this.applyConfiguredFit();
+      }
+      return statuses.slice(0, this.config.discover.length).map(copy);
+    });
+    return {
+      ready,
+      status: () => statuses.map(copy),
+      run: (source) => {
+        validateDiscoverConfig(source);
+        if (this.destroyed) return Promise.reject(new Error('The editor is destroyed'));
+        return run({ ...source });
+      },
+    };
   }
 
   execute(command: Command): boolean {
@@ -2289,6 +2395,7 @@ class EditorImpl implements Editor {
     this.map.removeLayer(this.measurementStore.liveLayer);
     this.emitter.clear();
     this.reflectEditMode(false);
+    this.discoveryAbort.abort();
     this.overlayManager.destroy();
     this.layerManager.destroy();
     for (const layer of this.basemapLayers.values()) this.map.removeLayer(layer);

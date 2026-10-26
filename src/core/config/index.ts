@@ -5,6 +5,7 @@ export {
   validateBasemapConfig,
   validateLayerConfig,
   validateOverlayConfig,
+  validateDiscoverConfig,
 } from './validate';
 export {
   applyDefaults,

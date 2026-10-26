@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<WMS_Capabilities version="1.3.0" xmlns="http://www.opengis.net/wms" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <Service><Name>WMS</Name><Title>GeoServer WMS</Title></Service>
+  <Capability>
+    <Request>
+      <GetCapabilities><Format>text/xml</Format></GetCapabilities>
+      <GetMap><Format>image/png</Format><Format>image/jpeg</Format>
+        <DCPType><HTTP><Get><OnlineResource xlink:href="http://proxy.internal/geoserver/wms?"/></Get></HTTP></DCPType>
+      </GetMap>
+      <GetFeatureInfo><Format>application/json</Format><Format>text/html</Format></GetFeatureInfo>
+    </Request>
+    <Layer>
+      <Title>GeoServer Web Map Service</Title>
+      <CRS>EPSG:4326</CRS><CRS>EPSG:3857</CRS>
+      <EX_GeographicBoundingBox>
+        <westBoundLongitude>-180</westBoundLongitude><eastBoundLongitude>180</eastBoundLongitude>
+        <southBoundLatitude>-90</southBoundLatitude><northBoundLatitude>90</northBoundLatitude>
+      </EX_GeographicBoundingBox>
+      <Layer queryable="1">
+        <Name>topp:base</Name>
+        <Title>Base group</Title>
+        <Attribution><Title>Topp &amp; friends</Title><OnlineResource xlink:href="https://topp.example/"/></Attribution>
+        <MinScaleDenominator>1000</MinScaleDenominator>
+        <MaxScaleDenominator>500000</MaxScaleDenominator>
+        <Layer queryable="1">
+          <Name>topp:roads</Name>
+          <Title>Roads</Title>
+          <Abstract>Road network</Abstract>
+          <CRS>EPSG:25832</CRS>
+          <EX_GeographicBoundingBox>
+            <westBoundLongitude>9</westBoundLongitude><eastBoundLongitude>11</eastBoundLongitude>
+            <southBoundLatitude>53</southBoundLatitude><northBoundLatitude>54</northBoundLatitude>
+          </EX_GeographicBoundingBox>
+          <Style><Name>default</Name><LegendURL width="20" height="20"><Format>image/png</Format>
+            <OnlineResource xlink:type="simple" xlink:href="http://proxy.internal/legend?layer=topp:roads"/></LegendURL></Style>
+        </Layer>
+        <Layer queryable="0">
+          <Name>topp:hillshade</Name>
+          <Title>Hillshade</Title>
+          <MaxScaleDenominator>100000</MaxScaleDenominator>
+        </Layer>
+      </Layer>
+      <Layer>
+        <Title>Untitled-free</Title>
+        <Layer>
+          <Name>other:ortho</Name>
+          <Title>Orthophoto</Title>
+        </Layer>
+      </Layer>
+      <Layer>
+        <Name>loose</Name>
+        <Title>Loose layer</Title>
+      </Layer>
+    </Layer>
+  </Capability>
+</WMS_Capabilities>

@@ -13,7 +13,7 @@ import WKT from 'ol/format/WKT';
 import type Geometry from 'ol/geom/Geometry';
 import VectorLayer from 'ol/layer/Vector';
 import { all, bbox } from 'ol/loadingstrategy';
-import { get as getProjection } from 'ol/proj';
+import { get as getProjection, transformExtent } from 'ol/proj';
 import VectorSource from 'ol/source/Vector';
 import type { FlatStyleLike } from 'ol/style/flat';
 import type { StyleFunction } from 'ol/style/Style';
@@ -146,6 +146,15 @@ export function wfsUrl(
   });
 }
 
+/**
+ * The bbox of a GetFeature request in `srsName` (the data projection, when set): the loader's
+ * extent is in the view projection and is transformed when they differ.
+ */
+export function wfsBboxExtent(extent: number[], viewProjection: string, srsName: string): number[] {
+  if (srsName === viewProjection || !extent.every(Number.isFinite)) return extent;
+  return transformExtent(extent, viewProjection, srsName);
+}
+
 /** `numberReturned` / `numberMatched` of a WFS response (GeoJSON object or GML text). */
 function pageCounts(page: string | Record<string, unknown>): {
   returned?: number;
@@ -267,7 +276,8 @@ async function* fetchPages(
     return;
   }
   const srsName = source.dataProjection ?? projection;
-  const bboxExtent = source.strategy === 'bbox' ? extent : undefined;
+  const bboxExtent =
+    source.strategy === 'bbox' ? wfsBboxExtent(extent, projection, srsName) : undefined;
   const pageSize = source.pageSize;
   if (!pageSize) {
     yield await fetchText(wfsUrl(source, bboxExtent, srsName), source.fetch);

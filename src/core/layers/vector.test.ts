@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveLayer } from '../config/defaults';
 import type { LayerConfig } from '../config/types';
 import { OriginalStore } from './originals';
-import { createFormat, normalizeCode, readFeatures, wfsUrl } from './vector';
+import { createFormat, normalizeCode, readFeatures, wfsBboxExtent, wfsUrl } from './vector';
 
 proj4.defs(
   'EPSG:25832',
@@ -189,6 +189,17 @@ describe('normalizeCode', () => {
     expect(normalizeCode('http://www.opengis.net/gml/srs/epsg.xml#4326')).toBe('EPSG:4326');
     expect(normalizeCode('EPSG:3857')).toBe('EPSG:3857');
     expect(normalizeCode('EPSG:999999')).toBeUndefined();
+  });
+});
+
+describe('wfsBboxExtent', () => {
+  it('transforms the view extent into the requested srsName', () => {
+    const [x0, y0] = fromLonLat([8, 49]);
+    const [x1, y1] = fromLonLat([9, 50]);
+    const box = wfsBboxExtent([x0!, y0!, x1!, y1!], 'EPSG:3857', 'EPSG:4326');
+    expect(box.map((v) => Math.round(v * 1e6) / 1e6)).toEqual([8, 49, 9, 50]);
+    const same = [1, 2, 3, 4];
+    expect(wfsBboxExtent(same, 'EPSG:3857', 'EPSG:3857')).toBe(same);
   });
 });
 

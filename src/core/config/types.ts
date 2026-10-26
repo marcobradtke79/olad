@@ -560,6 +560,11 @@ export interface EditorConfig {
   overlays?: OverlayConfig[];
   /** Groups the layer list shows layers and overlays under (`layers[].group`, `overlays[].group`). */
   groups?: GroupConfig[];
+  /**
+   * Services whose capabilities add layers (WFS) and overlays (WMS) after the editor starts;
+   * `editor.discovery.ready` settles when all are read.
+   */
+  discover?: DiscoverConfig[];
   /** Start in edit mode. Switchable at runtime with `editor.setEditMode`. Default `false`. */
   editMode?: boolean;
   /** Edit-mode cursor: CAD crosshair with a pick box. */
@@ -602,6 +607,71 @@ export interface GroupConfig {
 }
 
 export type ResolvedGroupConfig = Required<GroupConfig>;
+
+interface DiscoverBase {
+  /** Service base URL; the GetCapabilities, DescribeFeatureType and data requests use it. */
+  url: string;
+  /** Names to take (`*` any run of characters, `?` one character). Default: every name. */
+  include?: string[];
+  /** Names to leave out, applied after `include`. */
+  exclude?: string[];
+  /** Options of the capabilities and schema requests (and, for WFS, of the discovered layers). */
+  fetch?: FetchConfig;
+}
+
+/** Options every layer discovered from a WFS gets (the id, source, geometry type and schema come from the service). */
+export interface WfsDiscoverDefaults {
+  visible?: boolean;
+  /** Default `false`: discovered layers are read-only unless this says otherwise. */
+  editable?: boolean | EditableConfig;
+  snappable?: boolean;
+  style?: LayerConfig['style'];
+  minZoom?: number;
+  maxZoom?: number;
+  /** Group of every discovered layer. Default: the workspace prefix of the name (`topp:roads` → `topp`). */
+  group?: string;
+}
+
+/** A WFS whose feature types become vector layers (`layers[]`, read-only by default). */
+export interface WfsDiscoverConfig extends DiscoverBase {
+  type: 'wfs';
+  /** WFS version of the requests. Default `'1.1.0'`. */
+  version?: '1.0.0' | '1.1.0' | '2.0.0';
+  /** `outputFormat` of GetFeature. Default: `application/json` when the service offers it, else GML. */
+  outputFormat?: string;
+  defaults?: WfsDiscoverDefaults;
+}
+
+/** Options every overlay discovered from a WMS gets. */
+export interface WmsDiscoverDefaults {
+  visible?: boolean;
+  opacity?: number;
+  /** Replaces the zoom range derived from the layer's scale denominators. */
+  minZoom?: number;
+  maxZoom?: number;
+  /** Default `true`. */
+  tiled?: boolean;
+  serverType?: WmsOverlayConfig['serverType'];
+  crossOrigin?: string | null;
+  /** Extra GetMap parameters; `LAYERS`, `TRANSPARENT` and `VERSION` are set per layer. */
+  params?: Record<string, string | number | boolean>;
+  /** Replaces the attribution from the capabilities. */
+  attribution?: string;
+  /** Group of every discovered overlay. Default: the nearest titled parent layer, else the workspace prefix. */
+  group?: string;
+}
+
+/** A WMS whose named leaf layers become raster overlays (`overlays[]`). */
+export interface WmsDiscoverConfig extends DiscoverBase {
+  type: 'wms';
+  /** WMS version of the requests. Default `'1.3.0'`. */
+  version?: '1.1.1' | '1.3.0';
+  /** What the layers become. Only `'overlay'` (the default) so far. */
+  as?: 'overlay';
+  defaults?: WmsDiscoverDefaults;
+}
+
+export type DiscoverConfig = WfsDiscoverConfig | WmsDiscoverConfig;
 
 /**
  * The draft layer takes new objects while no layer is active. It accepts every geometry type,
@@ -796,6 +866,7 @@ export interface ResolvedEditorConfig {
   layers: ResolvedLayerConfig[];
   overlays: ResolvedOverlayConfig[];
   groups: ResolvedGroupConfig[];
+  discover: DiscoverConfig[];
   editMode: boolean;
   cursor: Required<CursorConfig>;
   changes: ResolvedChangesConfig;

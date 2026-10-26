@@ -333,5 +333,25 @@
       "visible": false
     }
   ],
-  "groups": [{ "id": "infrastructure", "title": "Infrastructure" }]
+  "groups": [{ "id": "infrastructure", "title": "Infrastructure" }],
+  "discover": [
+    {
+      "type": "wfs",
+      "url": "/wfs",
+      "version": "1.1.0",
+      "outputFormat": "application/json",
+      "include": ["test:lamps", "test:points"],
+      "exclude": ["test:dim*"],
+      "defaults": { "visible": false, "minZoom": 10, "group": "Discovered" },
+      "fetch": { "credentials": "same-origin" }
+    },
+    {
+      "type": "wms",
+      "url": "/wms",
+      "include": ["test:*"],
+      "exclude": ["test:hillshade"],
+      "as": "overlay",
+      "defaults": { "visible": false, "opacity": 0.8 }
+    }
+  ]
 }
