@@ -2,14 +2,24 @@
 
 CAD-style drawing and editing tools for [OpenLayers](https://openlayers.org/). Framework-agnostic: configure it with one JSON-compatible object, receive every edit as a JSON change set, send it to your backend however you like.
 
+**[Try the live demo](http://olad.bradtke.eu)**: every tool, snapping, dimensions, measuring, templates, the table view, projection switch, import and export, in your browser, no install needed. **[Watch the demo video](https://youtu.be/oHBkhbzZNSs)** for a quick tour.
+
 > Status: pre-release (0.x), released on GitHub (see [Install](#install)). Snapping, numeric input, constraints and most construction and modify tools are available (draw, rectangle, circle, ellipse, curve, text, move, rotate, scale, mirror, offset, parallel, trim, extend, templates), as are measuring, local layers, import / export and the table view. Arcs, fillet, chamfer, split, merge, tracing and attribute validation in the core are still to come. See [CHANGELOG.md](CHANGELOG.md) and [docs/tools.md](docs/tools.md).
+
+## Demo
+
+The [live demo](http://olad.bradtke.eu) is a static page with the script-tag build: all toolbars (draw, modify, trim / extend, dimensions, measure), snapping and the drawing aids, the command line, the attribute form and table view, templates, the projection switch, the layer list with basemaps and layer styles, import and export. Edits live only in your browser tab and are lost on reload; File → Export downloads them, File → Reset demo data starts over.
+
+[![ol-cad demo video](https://img.youtube.com/vi/oHBkhbzZNSs/maxresdefault.jpg)](https://youtu.be/oHBkhbzZNSs)
+
+To try the full edit-and-save cycle against a backend, run the local test server with `pnpm start:test` (see [Development](#development)).
 
 ## Install
 
 ol-cad is released on GitHub, not on npm. Each [release](https://github.com/marcobradtke79/olad/releases) has the package file attached; install it by URL:
 
 ```sh
-pnpm add https://github.com/marcobradtke79/olad/releases/download/v0.1.1/ol-cad-0.1.1.tgz ol
+pnpm add https://github.com/marcobradtke79/olad/releases/download/v0.3.0/ol-cad-0.3.0.tgz ol
 # optional, for custom projections
 pnpm add proj4
 ```

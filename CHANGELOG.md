@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- README links the live demo (http://olad.bradtke.eu) and the demo video (https://youtu.be/oHBkhbzZNSs); the install example uses v0.3.0.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added
