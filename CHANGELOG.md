@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- README links the live demo (http://olad.bradtke.eu) and the demo video (https://youtu.be/oHBkhbzZNSs); the install example uses v0.3.0.
+- README links the live demo (http://olad.bradtke.eu) and the demo videos (quick tour https://youtu.be/oHBkhbzZNSs, advanced editing https://youtu.be/ReYf2jo1uVU); the install example uses v0.3.0.
 
 ## [0.3.0] - 2026-10-29
 
