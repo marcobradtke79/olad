@@ -31,6 +31,46 @@ test.describe('test page', () => {
     await expect(items.nth(0)).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('shows and hides all basemaps with one click', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => Boolean(window.editor));
+    await openFlyout(page, 'layers');
+    const toggle = page.locator(
+      'olcad-layer-list [data-section-heading="basemaps"] [data-action="all-visible"]',
+    );
+    const items = page.locator('olcad-layer-list [role="radio"]');
+    const visible = () =>
+      page.evaluate(() =>
+        window.editor.basemaps
+          .list()
+          .filter((b) => b.active)
+          .map((b) => b.id),
+      );
+    await expect(toggle).toHaveAttribute('aria-pressed', 'mixed'); // one of seven
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toBeFocused(); // the re-render keeps the keyboard focus
+    const ids = await page.evaluate(() => window.editor.basemaps.list().map((b) => b.id));
+    expect(await visible()).toEqual(ids);
+    await expect(items.nth(0)).toHaveAttribute('aria-checked', 'true');
+    // The last basemap is drawn on top.
+    expect(await page.evaluate(() => window.editor.basemaps.getActive())).toBe(ids.at(-1));
+
+    // Removing a visible basemap while others stay visible activates nothing else.
+    await page.evaluate((id) => window.editor.basemaps.remove(id), ids.at(-1)!);
+    expect(await visible()).toEqual(ids.slice(0, -1));
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(await visible()).toEqual([]);
+    expect(await page.evaluate(() => window.editor.basemaps.getActive())).toBeNull();
+
+    // A single click on a basemap shows that one only.
+    await items.nth(2).click();
+    expect(await visible()).toEqual([ids[2]]);
+    await expect(toggle).toHaveAttribute('aria-pressed', 'mixed');
+  });
+
   test('fits the initial view to the configured extent and zooms to layers', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => Boolean(window.editor));

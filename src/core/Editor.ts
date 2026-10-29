@@ -158,8 +158,8 @@ export const EDIT_MODE_CLASS = 'olcad-edit-mode';
 
 /** Events emitted by the editor. The payload type is the handler argument. */
 export interface EditorEvents extends Record<string, unknown> {
-  /** A basemap was activated, added or removed. */
-  basemapchange: { id: string; type: 'activate' | 'add' | 'remove' };
+  /** A basemap was activated, added or removed, or shown or hidden by `setAllVisible` (`visible`). */
+  basemapchange: { id: string; type: 'activate' | 'add' | 'remove' | 'visible' };
   /** A basemap's asynchronous source (WMTS capabilities) failed to load. */
   basemaperror: { id: string; error: Error };
   /** An overlay was added or removed, or its visibility, opacity or zoom range (`style`) changed. */
@@ -292,13 +292,18 @@ export type FitOptions = (ExtentIn | { layers: true | string[] }) & FitViewOptio
 export interface BasemapsApi {
   /** All configured basemaps in config order. */
   list(): BasemapInfo[];
-  /** Id of the visible basemap, or `null` when none is configured. */
+  /** Id of the topmost visible basemap, or `null` when none is visible. */
   getActive(): string | null;
   /** Show the basemap with the given id and hide the others. */
   setActive(id: string): void;
+  /**
+   * Show every basemap (stacked, the last one on top) or hide them all. Emits `basemapchange`
+   * (`visible`) for each basemap that changed.
+   */
+  setAllVisible(visible: boolean): void;
   /** Add a basemap at runtime. It becomes active when `visible` is `true`. */
   add(config: BasemapConfig): void;
-  /** Remove a basemap. If it was active, the first remaining basemap becomes active. */
+  /** Remove a basemap. If it was the only visible one, the first remaining basemap becomes active. */
   remove(id: string): void;
 }
 
@@ -323,6 +328,8 @@ export interface OverlaysApi {
   remove(id: string): void;
   /** Show or hide an overlay. Emits `overlaychange` (`visible`) when it changed. */
   setVisible(id: string, visible: boolean): void;
+  /** Show or hide every overlay. Emits `overlaychange` (`visible`) for each one that changed. */
+  setAllVisible(visible: boolean): void;
   /** Set the opacity (0 … 1) through `layers.setStyle`. Emits `overlaychange` (`style`). */
   setOpacity(id: string, opacity: number): void;
   /** Set the display zoom range (`undefined`: unlimited) through `layers.setStyle`. Emits `overlaychange` (`style`). */
@@ -409,6 +416,11 @@ export interface LayersApi {
   add(config: LayerConfig): void;
   remove(id: string): void;
   setVisible(id: string, visible: boolean): void;
+  /**
+   * Show or hide every vector layer, the draft and local layers included (overlays have
+   * `overlays.setAllVisible`). Emits `layerchange` (`visible`) for each layer that changed.
+   */
+  setAllVisible(visible: boolean): void;
   /** Replace the layer's editability. Same values as `layers[].editable` in the config. */
   setEditable(id: string, editable: boolean | EditableConfig): void;
   setSnappable(id: string, snappable: boolean): void;
@@ -1353,12 +1365,25 @@ class EditorImpl implements Editor {
           title: b.title,
           active: this.basemapLayers.get(b.id)?.getVisible() ?? false,
         })),
-      getActive: () => this.basemaps.list().find((b) => b.active)?.id ?? null,
+      // Later basemaps are drawn above earlier ones, so the last visible one is on top.
+      getActive: () =>
+        this.basemaps
+          .list()
+          .filter((b) => b.active)
+          .at(-1)?.id ?? null,
       setActive: (id) => {
         if (!this.basemapLayers.has(id)) throw new Error(`Unknown basemap "${id}"`);
-        if (this.basemaps.getActive() === id) return;
+        const visible = this.basemaps.list().filter((b) => b.active);
+        if (visible.length === 1 && visible[0]!.id === id) return;
         for (const [otherId, layer] of this.basemapLayers) layer.setVisible(otherId === id);
         this.emitter.emit('basemapchange', { id, type: 'activate' });
+      },
+      setAllVisible: (visible) => {
+        for (const [id, layer] of this.basemapLayers) {
+          if (layer.getVisible() === visible) continue;
+          layer.setVisible(visible);
+          this.emitter.emit('basemapchange', { id, type: 'visible' });
+        }
       },
       add: (basemapConfig) => {
         validateBasemapConfig(basemapConfig);
@@ -1385,7 +1410,8 @@ class EditorImpl implements Editor {
         );
         this.emitter.emit('basemapchange', { id, type: 'remove' });
         const next = config.basemaps[0];
-        if (wasActive && next) this.basemaps.setActive(next.id);
+        if (wasActive && next && this.basemaps.getActive() === null)
+          this.basemaps.setActive(next.id);
       },
     };
 
@@ -1434,6 +1460,9 @@ class EditorImpl implements Editor {
         if (index >= 0) config.layers.splice(index, 1); // the draft layer is not in config.layers
       },
       setVisible: (id, visible) => lm.setVisible(id, visible),
+      setAllVisible: (visible) => {
+        for (const id of lm.ids()) lm.setVisible(id, visible);
+      },
       setEditable: (id, editable) => lm.setEditable(id, editable),
       setSnappable: (id, snappable) => lm.setSnappable(id, snappable),
       setHighlighted: (id, highlighted) => lm.setHighlighted(id, highlighted),
@@ -1487,6 +1516,9 @@ class EditorImpl implements Editor {
         if (index >= 0) config.overlays.splice(index, 1);
       },
       setVisible: (id, visible) => om.setVisible(id, visible),
+      setAllVisible: (visible) => {
+        for (const id of om.ids()) om.setVisible(id, visible);
+      },
       setOpacity: (id, opacity) => {
         requireOverlay(id);
         lm.setStyle(id, { ...lm.getStyle(id), opacity });

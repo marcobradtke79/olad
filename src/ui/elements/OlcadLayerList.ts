@@ -21,13 +21,14 @@ type RowAction =
   | 'opacity'
   | 'zoom'
   | 'group-toggle'
-  | 'group-visible';
+  | 'group-visible'
+  | 'all-visible';
 
 /** The two sections of the list that show groups. */
 type Section = 'overlays' | 'layers';
 
 /**
- * `<olcad-layer-list>`: basemaps as a radio group, one row per raster overlay (visibility and
+ * `<olcad-layer-list>`: basemaps as a radio group (one click shows only that basemap), one row per raster overlay (visibility and
  * details with an opacity slider, the zoom range, the legend and a Zoom button;
  * `editor.overlays`) and one row per vector layer with its name and icon buttons: visibility,
  * highlight (`editor.layers.setHighlighted`), table (opens the layer in the
@@ -38,7 +39,9 @@ type Section = 'overlays' | 'layers';
  * below the row, with a Zoom button that fits the view to the layer's extent). Members of a group
  * (`editor.groups`) are listed under a group row with a disclosure button and a visibility toggle
  * for all members (`aria-pressed="mixed"` while only some are visible), in both sections when the
- * group has layers and overlays; ungrouped rows follow. A New layer button above the layers creates a local layer
+ * group has layers and overlays; ungrouped rows follow. Each section heading has a visibility
+ * toggle for the whole section (`basemaps`, `overlays`, `layers.setAllVisible`; `mixed` while
+ * only some are visible; all basemaps shown means stacked). A New layer button above the layers creates a local layer
  * (`editor.localLayers`) in the same dialog. With the `reveal` attribute, selecting draft objects opens the
  * flyout panel the list sits in. Bind with `element.editor = editor`. Renders into light DOM
  * so the theme and host styles apply.
@@ -166,11 +169,49 @@ export class OlcadLayerList extends HTMLElement {
     return heading;
   }
 
+  /**
+   * A section heading with a toggle that shows or hides everything in the section (eye on when
+   * all are visible, `mixed` while only some are). The toggle sits beside the heading, not in
+   * it: the heading labels the group.
+   */
+  private headingRow(
+    text: string,
+    suffix: string,
+    visible: boolean[],
+    setAllVisible: (visible: boolean) => void,
+  ): { row: HTMLElement; heading: HTMLElement } {
+    const heading = this.heading(text, suffix);
+    const shown = visible.filter(Boolean).length;
+    const state = shown === 0 ? 'false' : shown === visible.length ? 'true' : 'mixed';
+    const toggle = rowButton('all-visible', 'visible');
+    toggle.classList.add('olcad-layer-list__all-visible');
+    const what = text.toLowerCase();
+    setIconButton(
+      toggle,
+      state === 'false' ? 'eyeOff' : 'eye',
+      `Visible: all ${what}`,
+      state === 'true' ? `Hide all ${what}` : `Show all ${what}`,
+    );
+    toggle.setAttribute('aria-pressed', state);
+    toggle.disabled = visible.length === 0;
+    toggle.addEventListener('click', () => setAllVisible(state !== 'true'));
+    const row = document.createElement('div');
+    row.className = 'olcad-layer-list__heading-row';
+    row.dataset.sectionHeading = suffix;
+    row.append(toggle, heading);
+    return { row, heading };
+  }
+
   private renderBasemaps(editor: Editor): void {
     const basemaps = editor.basemaps.list();
     if (basemaps.length === 0) return;
-    const heading = this.heading('Basemaps', 'basemaps');
-    this.append(heading);
+    const { row, heading } = this.headingRow(
+      'Basemaps',
+      'basemaps',
+      basemaps.map((b) => b.active),
+      (visible) => editor.basemaps.setAllVisible(visible),
+    );
+    this.append(row);
     const group = document.createElement('div');
     group.className = 'olcad-layer-list__group';
     group.setAttribute('role', 'radiogroup');
@@ -191,8 +232,13 @@ export class OlcadLayerList extends HTMLElement {
 
   private renderOverlays(editor: Editor, overlays: OverlayInfo[], grouping: Grouping): void {
     if (overlays.length === 0) return;
-    const heading = this.heading('Overlays', 'overlays');
-    this.append(heading);
+    const { row, heading } = this.headingRow(
+      'Overlays',
+      'overlays',
+      overlays.map((o) => o.visible),
+      (visible) => editor.overlays.setAllVisible(visible),
+    );
+    this.append(row);
     const group = document.createElement('div');
     group.className = 'olcad-layer-list__group';
     group.setAttribute('role', 'group');
@@ -301,17 +347,19 @@ export class OlcadLayerList extends HTMLElement {
   }
 
   private renderLayers(editor: Editor, layers: LayerInfo[], grouping: Grouping): void {
-    const heading = this.heading('Layers', 'layers');
+    const { row: headingRow, heading } = this.headingRow(
+      'Layers',
+      'layers',
+      layers.map((l) => l.visible),
+      (visible) => editor.layers.setAllVisible(visible),
+    );
     const add = document.createElement('button');
     add.type = 'button';
     add.className = 'olcad-layer-list__new';
     add.dataset.action = 'new-layer';
     setIconButton(add, 'addLayer', 'New layer', 'Create a local layer');
     add.addEventListener('click', () => this.openLayerEditor(editor, null));
-    // The button sits beside the heading, not in it: the heading labels the group.
-    const headingRow = document.createElement('div');
-    headingRow.className = 'olcad-layer-list__heading-row';
-    headingRow.append(heading, add);
+    headingRow.append(add);
     this.append(headingRow);
     if (layers.length === 0) return;
     const group = document.createElement('div');
@@ -655,13 +703,17 @@ interface Grouping {
 }
 
 /** Rows whose focused control is restored after a re-render. */
-const ROW_SELECTOR = '[data-layer-id], [data-overlay-id], [data-group-id]';
+const ROW_SELECTOR = '[data-layer-id], [data-overlay-id], [data-group-id], [data-section-heading]';
 
-/** The layer or overlay id of a row element, or `group:<section>:<id>` for a group row. */
+/**
+ * The layer or overlay id of a row element, `group:<section>:<id>` for a group row or
+ * `section:<section>` for a section heading.
+ */
 function rowId(row: HTMLElement | null | undefined): string | undefined {
   if (row?.dataset.groupId !== undefined) {
     return `group:${row.dataset.section}:${row.dataset.groupId}`;
   }
+  if (row?.dataset.sectionHeading !== undefined) return `section:${row.dataset.sectionHeading}`;
   return row?.dataset.layerId ?? row?.dataset.overlayId;
 }
 

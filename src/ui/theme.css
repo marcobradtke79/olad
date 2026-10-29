@@ -1106,7 +1106,8 @@
 }
 
 .olcad-layer-list__heading + .olcad-layer-list__group + .olcad-layer-list__heading,
-.olcad-layer-list__heading + .olcad-layer-list__group + .olcad-layer-list__heading-row {
+.olcad-layer-list__heading + .olcad-layer-list__group + .olcad-layer-list__heading-row,
+.olcad-layer-list__heading-row + .olcad-layer-list__group + .olcad-layer-list__heading-row {
   margin-top: var(--olcad-spacing);
 }
 
@@ -1119,7 +1120,21 @@
 }
 
 .olcad-layer-list__heading-row .olcad-layer-list__heading {
+  flex: 1;
   margin-bottom: 0;
+}
+
+/* The section's visibility toggle lines up with the rows' eyes below it. */
+.olcad-layer-list__all-visible {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  margin-left: calc(var(--olcad-spacing) / 2);
+}
+
+.olcad-layer-list__all-visible svg {
+  width: 16px;
+  height: 16px;
 }
 
 .olcad-layer-list__new svg {

@@ -21,7 +21,9 @@ Open the **Layers** panel on the right of the map.
 
 <img src="images/layer-list.png" width="320" alt="The layer list">
 
-**Basemaps** at the top: click one to show it as the background. Only one basemap is shown at a time.
+**Basemaps** at the top: click one to show it as the background; that hides the others.
+
+The eye before each heading (**Basemaps**, **Overlays**, **Layers**) shows or hides the whole section with one click: all basemaps at once (stacked, the last one in the list on top), all overlays, or all layers. It is half-tone while only some are visible; a click then shows all.
 
 **Layers** below: each row is one layer, for example Parcels or Roads. A layer holds one kind of object with one geometry type (points, lines or polygons) and its own attributes. The buttons on each row:
 

@@ -119,6 +119,40 @@ test.describe('layers and projections', () => {
     expect(await page.evaluate(() => window.editor.layers.canEdit('tracks', 'delete'))).toBe(false);
   });
 
+  test('shows and hides all layers and all overlays with one click', async ({ page }) => {
+    await page.goto('/');
+    await waitForEditor(page);
+    await openFlyout(page, 'layers');
+    const list = page.locator('olcad-layer-list');
+    const layersToggle = list.locator(
+      '[data-section-heading="layers"] [data-action="all-visible"]',
+    );
+    const visibleLayers = () =>
+      page.evaluate(() => window.editor.layers.list().filter((l) => l.visible).length);
+    await expect(layersToggle).toHaveAttribute('aria-pressed', 'mixed'); // some start hidden
+    await layersToggle.click();
+    await expect(layersToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(await visibleLayers()).toBe(14);
+    await layersToggle.click();
+    await expect(layersToggle).toHaveAttribute('aria-pressed', 'false');
+    await expect(layersToggle).toBeFocused();
+    expect(await visibleLayers()).toBe(0);
+    await expect(list.locator('[data-layer-id].olcad-layer-list__layer--hidden')).toHaveCount(14);
+    await list.locator('[data-layer-id="roads"] [data-action="visible"]').click();
+    await expect(layersToggle).toHaveAttribute('aria-pressed', 'mixed');
+    const overlaysToggle = list.locator(
+      '[data-section-heading="overlays"] [data-action="all-visible"]',
+    );
+    await page.evaluate(() => window.editor.overlays.setAllVisible(true));
+    await expect(overlaysToggle).toHaveAttribute('aria-pressed', 'true');
+    await overlaysToggle.click();
+    await expect(overlaysToggle).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      await page.evaluate(() => window.editor.overlays.list().filter((o) => o.visible).length),
+    ).toBe(0);
+    expect(await visibleLayers()).toBe(1); // layers untouched
+  });
+
   test('highlights all objects of a layer in its own style', async ({ page }) => {
     await page.goto('/');
     await waitForEditor(page);
