@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29
+
 ### Added
 
 - Show or hide everything with one click: `editor.basemaps.setAllVisible(visible)` (all basemaps visible at once, stacked, the last one on top; `basemapchange` gains the type `visible`), `editor.layers.setAllVisible(visible)` (every vector layer, draft and local layers included) and `editor.overlays.setAllVisible(visible)`. `<olcad-layer-list>` puts a visibility toggle before each section heading (Basemaps, Overlays, Layers; `data-action="all-visible"`, `aria-pressed` `true` / `false` / `mixed`).
@@ -217,7 +219,8 @@ First public release, on GitHub (package file attached to the release; not on np
 - Local test server (`pnpm serve:test`) with `/config`, `/data/:layer`, `/changes` (with `?fail=1`), `/changes/log`, `/reset` and a reference test page.
 - Test that fails when `docs/configuration.md` and the `EditorConfig` type disagree.
 
-[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/marcobradtke79/olad/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/marcobradtke79/olad/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/marcobradtke79/olad/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/marcobradtke79/olad/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/marcobradtke79/olad/releases/tag/v0.1.0
